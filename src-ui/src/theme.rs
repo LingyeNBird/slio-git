@@ -565,12 +565,12 @@ pub fn scrollable_style() -> impl Fn(&Theme, scrollable::Status) -> scrollable::
             scrollable::Status::Hovered { .. } => (
                 Background::Color(Color::TRANSPARENT),
                 Color::TRANSPARENT,
-                mix(darcula::TEXT_DISABLED, darcula::ACCENT, 0.16).scale_alpha(0.42),
+                mix(darcula::TEXT_DISABLED, darcula::ACCENT, 0.12).scale_alpha(0.28),
             ),
             scrollable::Status::Dragged { .. } => (
                 Background::Color(Color::TRANSPARENT),
                 Color::TRANSPARENT,
-                darcula::ACCENT.scale_alpha(0.72),
+                darcula::ACCENT.scale_alpha(0.52),
             ),
         };
 
@@ -581,14 +581,14 @@ pub fn scrollable_style() -> impl Fn(&Theme, scrollable::Status) -> scrollable::
                 border: Border {
                     width: 0.0,
                     color: rail_border,
-                    radius: radius::LG.into(),
+                    radius: radius::MD.into(),
                 },
                 scroller: scrollable::Scroller {
                     background: Background::Color(scroller_color),
                     border: Border {
                         width: 0.0,
                         color: rail_border,
-                        radius: radius::LG.into(),
+                        radius: radius::MD.into(),
                     },
                 },
             },
@@ -597,26 +597,26 @@ pub fn scrollable_style() -> impl Fn(&Theme, scrollable::Status) -> scrollable::
                 border: Border {
                     width: 0.0,
                     color: rail_border,
-                    radius: radius::LG.into(),
+                    radius: radius::MD.into(),
                 },
                 scroller: scrollable::Scroller {
                     background: Background::Color(scroller_color),
                     border: Border {
                         width: 0.0,
                         color: rail_border,
-                        radius: radius::LG.into(),
+                        radius: radius::MD.into(),
                     },
                 },
             },
             gap: None,
             auto_scroll: scrollable::AutoScroll {
-                background: Background::Color(mix(darcula::BG_MAIN, darcula::ACCENT_WEAK, 0.62)),
+                background: Background::Color(mix(darcula::BG_MAIN, darcula::ACCENT_WEAK, 0.52)),
                 border: Border {
                     width: 1.0,
-                    color: darcula::ACCENT.scale_alpha(0.18),
-                    radius: radius::LG.into(),
+                    color: darcula::ACCENT.scale_alpha(0.14),
+                    radius: radius::MD.into(),
                 },
-                shadow: soft_shadow(0.04, 4.0, 12.0),
+                shadow: soft_shadow(0.03, 3.0, 8.0),
                 icon: darcula::TEXT_SECONDARY,
             },
         }
