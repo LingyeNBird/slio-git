@@ -98,9 +98,8 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
         }
 
         let summary = Container::new(
-            Row::new()
-                .spacing(theme::spacing::XS)
-                .align_y(Alignment::Center)
+            Column::new()
+                .spacing(2)
                 .push(
                     Text::new(format!(
                         "{} 工作区修改 · {} 新文件 · {} 待提交",
@@ -109,14 +108,19 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
                         self.staged.len(),
                     ))
                     .size(10)
+                    .width(Length::Fill)
+                    .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY),
                 )
                 .push_maybe(self.selected_path.map(|path| {
                     Text::new(format!("当前查看：{path}"))
                         .size(10)
+                        .width(Length::Fill)
+                        .wrapping(text::Wrapping::WordOrGlyph)
                         .color(theme::darcula::TEXT_SECONDARY)
                 })),
         )
+        .width(Length::Fill)
         .padding([6, 0]);
 
         let mut sections = Column::new().spacing(theme::spacing::SM).push(summary);
@@ -223,6 +227,8 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
                         .push(
                             Text::new(meta_line)
                                 .size(10)
+                                .width(Length::Fill)
+                                .wrapping(text::Wrapping::WordOrGlyph)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         ),
                 ),

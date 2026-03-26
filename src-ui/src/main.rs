@@ -3351,11 +3351,15 @@ fn build_commit_footer<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element
             .align_y(Alignment::Center)
             .push(Text::new("提交准备").size(11))
             .push(
-                Text::new(status_text)
-                    .size(10)
-                    .color(theme::darcula::TEXT_SECONDARY),
+                Container::new(
+                    Text::new(status_text)
+                        .size(10)
+                        .width(Length::Fill)
+                        .wrapping(text::Wrapping::WordOrGlyph)
+                        .color(theme::darcula::TEXT_SECONDARY),
+                )
+                .width(Length::Fill),
             )
-            .push(Space::new().width(Length::Fill))
             .push(button::primary(
                 i18n.commit,
                 can_commit.then_some(Message::Commit),
