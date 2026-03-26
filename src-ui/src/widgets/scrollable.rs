@@ -40,6 +40,14 @@ fn build_scrollbar(role: ScrollbarRole) -> scrollable::Scrollbar {
         .margin(u32::from(metrics.margin))
 }
 
+fn horizontal_direction(role: ScrollbarRole) -> scrollable::Direction {
+    scrollable::Direction::Horizontal(build_scrollbar(role))
+}
+
+fn editor_horizontal_direction() -> scrollable::Direction {
+    horizontal_direction(ScrollbarRole::Inline)
+}
+
 pub fn styled<'a, Message: 'a>(
     content: impl Into<Element<'a, Message>>,
 ) -> Scrollable<'a, Message> {
@@ -54,9 +62,7 @@ pub fn styled_horizontal<'a, Message: 'a>(
     content: impl Into<Element<'a, Message>>,
 ) -> Scrollable<'a, Message> {
     Scrollable::new(content)
-        .direction(scrollable::Direction::Horizontal(build_scrollbar(
-            ScrollbarRole::Pane,
-        )))
+        .direction(horizontal_direction(ScrollbarRole::Pane))
         .style(theme::scrollable_style())
 }
 
@@ -64,9 +70,15 @@ pub fn styled_inline_horizontal<'a, Message: 'a>(
     content: impl Into<Element<'a, Message>>,
 ) -> Scrollable<'a, Message> {
     Scrollable::new(content)
-        .direction(scrollable::Direction::Horizontal(build_scrollbar(
-            ScrollbarRole::Inline,
-        )))
+        .direction(horizontal_direction(ScrollbarRole::Inline))
+        .style(theme::scrollable_style())
+}
+
+pub fn styled_editor_horizontal<'a, Message: 'a>(
+    content: impl Into<Element<'a, Message>>,
+) -> Scrollable<'a, Message> {
+    Scrollable::new(content)
+        .direction(editor_horizontal_direction())
         .style(theme::scrollable_style())
 }
 
@@ -92,5 +104,11 @@ mod tests {
 
         assert!(inline.width < pane.width);
         assert!(inline.scroller_width <= pane.scroller_width);
+    }
+
+    #[test]
+    fn editor_horizontal_scrollbars_match_inline_scrollbars() {
+        assert_eq!(editor_horizontal_direction(), horizontal_direction(ScrollbarRole::Inline));
+        assert_ne!(editor_horizontal_direction(), horizontal_direction(ScrollbarRole::Pane));
     }
 }

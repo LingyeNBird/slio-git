@@ -92,7 +92,7 @@ fn render_editor_surface<'a, Message: Clone + 'static>(
     }
 
     Container::new(
-        scrollable::styled_horizontal(Container::new(editor_lines).width(Length::Shrink))
+        scrollable::styled_editor_horizontal(Container::new(editor_lines).width(Length::Shrink))
             .width(Length::Fill),
     )
     .width(Length::Fill)
