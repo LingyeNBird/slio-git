@@ -27,20 +27,20 @@ fn metrics(role: ButtonRole) -> ButtonMetrics {
     match role {
         ButtonRole::Standard => ButtonMetrics {
             text_size: 11,
-            padding: [6, 12],
-            height: 32,
+            padding: theme::density::TOOLBAR_PADDING,
+            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
             width: None,
         },
         ButtonRole::Compact => ButtonMetrics {
             text_size: 10,
             padding: [4, 8],
-            height: 28,
+            height: theme::density::COMPACT_CONTROL_HEIGHT as u16,
             width: None,
         },
         ButtonRole::Tab => ButtonMetrics {
             text_size: 11,
             padding: [5, 10],
-            height: 32,
+            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
             width: None,
         },
         ButtonRole::Rail => ButtonMetrics {
@@ -57,14 +57,14 @@ fn metrics(role: ButtonRole) -> ButtonMetrics {
         },
         ButtonRole::ToolbarSplitMain => ButtonMetrics {
             text_size: 11,
-            padding: [6, 12],
-            height: 32,
+            padding: theme::density::TOOLBAR_PADDING,
+            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
             width: None,
         },
         ButtonRole::ToolbarSplitChevron => ButtonMetrics {
             text_size: 10,
             padding: [6, 0],
-            height: 32,
+            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
             width: Some(22.0),
         },
     }
@@ -247,15 +247,7 @@ pub fn warning<'a, Message: Clone + 'a>(
     label: impl Into<String>,
     on_press: Option<Message>,
 ) -> Button<'a, Message> {
-    let button = Button::new(Text::new(label.into()).size(12))
-        .padding([8, 14])
-        .style(theme::button_style(ButtonTone::Warning));
-
-    if let Some(message) = on_press {
-        button.on_press(message)
-    } else {
-        button
-    }
+    build_button(label, ButtonTone::Warning, ButtonRole::Standard, on_press)
 }
 
 #[cfg(test)]
@@ -269,14 +261,14 @@ mod tests {
 
         assert_eq!(main.padding[0], chevron.padding[0]);
         assert_eq!(main.height, chevron.height);
-        assert_eq!(main.height, 32);
+        assert_eq!(main.height, theme::density::STANDARD_CONTROL_HEIGHT as u16);
     }
 
     #[test]
     fn tabs_share_the_standard_control_height() {
         assert_eq!(
             metrics(ButtonRole::Tab).height,
-            metrics(ButtonRole::Standard).height
+            theme::density::STANDARD_CONTROL_HEIGHT as u16
         );
     }
 }
