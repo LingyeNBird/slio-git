@@ -25,7 +25,7 @@ use crate::views::{
     tag_dialog::{self, TagDialogMessage},
 };
 use crate::widgets::conflict_resolver::{ConflictResolverMessage, ResolutionOption};
-use crate::widgets::{button, file_picker, scrollable, OptionalPush};
+use crate::widgets::{button, diff_file_header, file_picker, scrollable, OptionalPush};
 use git_core::index::Change;
 use git_core::{
     diff::{ConflictHunk, ConflictHunkType, ConflictLineType, ConflictResolution, ThreeWayDiff},
@@ -3396,16 +3396,50 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
             .map(|file| file.hunks.len())
             .sum::<usize>()
     });
+    let single_file_summary = state.current_diff.as_ref().and_then(|diff| {
+        (diff.files.len() == 1)
+            .then(|| diff_file_header::DiffFileToolbarSummary::from_file_diff(&diff.files[0]))
+    });
+    let context_hint = single_file_summary
+        .as_ref()
+        .and_then(|summary| {
+            summary
+                .meta
+                .rename_hint
+                .clone()
+                .or(summary.meta.parent_path.clone())
+        })
+        .or(path_hint);
+    let context_slot: Element<'a, Message> = if let Some(hint) = context_hint {
+        Container::new(
+            Text::new(hint)
+                .size(10)
+                .wrapping(text::Wrapping::WordOrGlyph)
+                .color(theme::darcula::TEXT_SECONDARY),
+        )
+        .width(Length::Fill)
+        .into()
+    } else {
+        Space::new().width(Length::Fill).into()
+    };
 
     Container::new(
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
             .push(button::tab(title, true, None::<Message>))
-            .push_maybe(path_hint.map(|hint| {
-                Text::new(hint)
-                    .size(10)
-                    .color(theme::darcula::TEXT_SECONDARY)
+            .push(context_slot)
+            .push_maybe(single_file_summary.as_ref().map(|summary| {
+                widgets::compact_chip::<Message>(
+                    summary.meta.status_label,
+                    summary.meta.status_tone,
+                )
+            }))
+            .push_maybe(single_file_summary.as_ref().map(|summary| {
+                widgets::compact_chip::<Message>(summary.change_summary.clone(), BadgeTone::Neutral)
+            }))
+            .push_maybe(total_hunks.map(|count| {
+                widgets::compact_chip::<Message>(format!("{} 区块", count), BadgeTone::Accent)
             }))
             .push_maybe(state.current_diff.as_ref().map(|diff| {
                 widgets::compact_chip::<Message>(
@@ -3413,10 +3447,6 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
                     BadgeTone::Neutral,
                 )
             }))
-            .push_maybe(total_hunks.map(|count| {
-                widgets::compact_chip::<Message>(format!("{} 区块", count), BadgeTone::Accent)
-            }))
-            .push(Space::new().width(Length::Fill))
             .push(button::tab(
                 "统一",
                 state.diff_presentation == DiffPresentation::Unified,

@@ -14,6 +14,12 @@ pub struct DiffFileHeaderMeta {
     pub status_tone: BadgeTone,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiffFileToolbarSummary {
+    pub meta: DiffFileHeaderMeta,
+    pub change_summary: String,
+}
+
 impl PartialEq for DiffFileHeaderMeta {
     fn eq(&self, other: &Self) -> bool {
         self.file_name == other.file_name
@@ -62,6 +68,15 @@ impl DiffFileHeaderMeta {
 
     pub fn from_file_diff(file_diff: &FileDiff) -> Self {
         Self::describe(file_diff.old_path.as_deref(), file_diff.new_path.as_deref())
+    }
+}
+
+impl DiffFileToolbarSummary {
+    pub fn from_file_diff(file_diff: &FileDiff) -> Self {
+        Self {
+            meta: DiffFileHeaderMeta::from_file_diff(file_diff),
+            change_summary: format!("+{} / -{}", file_diff.additions, file_diff.deletions),
+        }
     }
 }
 
@@ -142,5 +157,24 @@ mod tests {
         assert_eq!(meta.rename_hint, None);
         assert_eq!(meta.status_label, "新文件");
         assert!(matches!(meta.status_tone, BadgeTone::Success));
+    }
+
+    #[test]
+    fn toolbar_summary_preserves_single_file_status_and_totals() {
+        let file_diff = FileDiff {
+            old_path: None,
+            new_path: Some("src/new.rs".to_string()),
+            hunks: Vec::new(),
+            additions: 7,
+            deletions: 0,
+        };
+
+        let summary = DiffFileToolbarSummary::from_file_diff(&file_diff);
+
+        assert_eq!(summary.meta.file_name, "new.rs");
+        assert_eq!(summary.meta.parent_path.as_deref(), Some("src"));
+        assert_eq!(summary.meta.status_label, "新文件");
+        assert!(matches!(summary.meta.status_tone, BadgeTone::Success));
+        assert_eq!(summary.change_summary, "+7 / -0");
     }
 }
