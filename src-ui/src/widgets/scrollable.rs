@@ -108,7 +108,13 @@ mod tests {
 
     #[test]
     fn editor_horizontal_scrollbars_match_inline_scrollbars() {
-        assert_eq!(editor_horizontal_direction(), horizontal_direction(ScrollbarRole::Inline));
-        assert_ne!(editor_horizontal_direction(), horizontal_direction(ScrollbarRole::Pane));
+        assert_eq!(
+            editor_horizontal_direction(),
+            horizontal_direction(ScrollbarRole::Inline)
+        );
+        assert_ne!(
+            editor_horizontal_direction(),
+            horizontal_direction(ScrollbarRole::Pane)
+        );
     }
 }

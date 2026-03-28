@@ -10,7 +10,7 @@ use crate::theme::{self, BadgeTone, ButtonTone, Surface};
 use crate::views;
 use crate::widgets::{self, button, scrollable, OptionalPush};
 use git_core::remote::RemoteInfo;
-use iced::widget::{stack, text, Button, Column, Container, Row, Space, Text};
+use iced::widget::{rule, stack, text, Button, Column, Container, Row, Space, Text};
 use iced::{Alignment, Element, Length};
 use std::path::PathBuf;
 
@@ -203,9 +203,9 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                     &on_show_stashes,
                     &on_show_rebase,
                 ))
-                .push(iced::widget::rule::horizontal(1))
+                .push(rule::horizontal(1).style(theme::separator_rule_style()))
                 .push(workspace)
-                .push(iced::widget::rule::horizontal(1))
+                .push(rule::horizontal(1).style(theme::separator_rule_style()))
                 .push(Self::status_bar(i18n, state))
         } else {
             Column::new()
@@ -215,7 +215,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                         .width(Length::Fill)
                         .height(Length::Fill),
                 )
-                .push(iced::widget::rule::horizontal(1))
+                .push(rule::horizontal(1).style(theme::separator_rule_style()))
                 .push(Self::welcome_status_bar(
                     i18n,
                     state,
@@ -395,7 +395,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                     .as_ref()
                     .is_some_and(|menu| menu.action == ToolbarRemoteAction::Push),
             ))
-            .push(button::secondary(
+            .push(button::primary(
                 i18n.commit,
                 state
                     .shell
@@ -502,10 +502,13 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         } else {
             ButtonTone::Ghost
         };
-        let label_color = if menu_open || emphasized {
-            theme::darcula::TEXT_PRIMARY
-        } else {
-            theme::darcula::TEXT_SECONDARY
+        let label_color = match tone {
+            ButtonTone::Primary
+            | ButtonTone::Success
+            | ButtonTone::Warning
+            | ButtonTone::Danger => iced::Color::WHITE,
+            ButtonTone::Ghost => theme::darcula::TEXT_SECONDARY,
+            _ => theme::darcula::TEXT_PRIMARY,
         };
 
         let main_button = {
@@ -542,7 +545,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         };
 
         Row::new()
-            .spacing(1)
+            .spacing(0)
             .align_y(Alignment::Center)
             .push(main_button)
             .push(chevron_button)
@@ -890,15 +893,13 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                         ShellSection::Welcome => None,
                     };
 
-                    let cell: Element<'a, Message> = Container::new(
-                        button::rail_icon(
-                            Self::rail_icon(icon, state.shell.active_section == item.section, 14.0),
-                            state.shell.active_section == item.section,
-                            message,
-                        )
-                        .width(Length::Fill),
-                    )
+                    let cell: Element<'a, Message> = Container::new(button::rail_icon(
+                        Self::rail_icon(icon, state.shell.active_section == item.section, 14.0),
+                        state.shell.active_section == item.section,
+                        message,
+                    ))
                     .width(Length::Fill)
+                    .center_x(Length::Fill)
                     .into();
 
                     column.push(cell)
@@ -944,11 +945,13 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         active: bool,
         on_press: Option<Message>,
     ) -> Element<'a, Message> {
-        Container::new(
-            button::rail(Self::project_monogram(&project.name), active, on_press)
-                .width(Length::Fill),
-        )
+        Container::new(button::rail(
+            Self::project_monogram(&project.name),
+            active,
+            on_press,
+        ))
         .width(Length::Fill)
+        .center_x(Length::Fill)
         .into()
     }
 
@@ -957,9 +960,14 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         active: bool,
         on_press: Option<Message>,
     ) -> Element<'a, Message> {
-        button::rail_icon(Self::rail_icon(icon, active, 14.0), active, on_press)
-            .width(Length::Fill)
-            .into()
+        Container::new(button::rail_icon(
+            Self::rail_icon(icon, active, 14.0),
+            active,
+            on_press,
+        ))
+        .width(Length::Fill)
+        .center_x(Length::Fill)
+        .into()
     }
 
     fn rail_label(section: ShellSection) -> RailIcon {
@@ -1059,8 +1067,8 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use git_core::index::{Change, ChangeStatus};
     use crate::state::LightweightStatusSurface;
+    use git_core::index::{Change, ChangeStatus};
 
     #[test]
     fn chrome_context_widths_leave_room_for_actions() {
@@ -1146,8 +1154,7 @@ mod tests {
     #[test]
     fn status_bar_content_keeps_long_detail_for_widget_truncation() {
         let mut state = AppState::default();
-        let long_detail =
-            "origin/main 比本地领先 12 次提交，建议先拉取后再继续推送。".to_string();
+        let long_detail = "origin/main 比本地领先 12 次提交，建议先拉取后再继续推送。".to_string();
         state.shell.status_surface = LightweightStatusSurface {
             message: Some("远程状态".to_string()),
             detail: Some(long_detail.clone()),

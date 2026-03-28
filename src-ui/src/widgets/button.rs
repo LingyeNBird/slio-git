@@ -1,6 +1,6 @@
 //! Styled button helpers shared across the Darcula shell.
 
-use crate::theme::{self, ButtonTone};
+use crate::theme::{self, ButtonChrome, ButtonTone};
 use iced::widget::{Button, Container, Text};
 use iced::{Element, Length};
 
@@ -27,46 +27,57 @@ fn metrics(role: ButtonRole) -> ButtonMetrics {
     match role {
         ButtonRole::Standard => ButtonMetrics {
             text_size: 11,
-            padding: theme::density::TOOLBAR_PADDING,
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
+            padding: [6, 14],
+            height: 30,
             width: None,
         },
         ButtonRole::Compact => ButtonMetrics {
             text_size: 10,
-            padding: [4, 8],
-            height: theme::density::COMPACT_CONTROL_HEIGHT as u16,
+            padding: [4, 10],
+            height: 26,
             width: None,
         },
         ButtonRole::Tab => ButtonMetrics {
             text_size: 11,
-            padding: [5, 10],
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
-            width: None,
-        },
-        ButtonRole::Rail => ButtonMetrics {
-            text_size: 11,
-            padding: [6, 0],
+            padding: [5, 12],
             height: 30,
             width: None,
         },
+        ButtonRole::Rail => ButtonMetrics {
+            text_size: 12,
+            padding: [7, 0],
+            height: 40,
+            width: Some(40.0),
+        },
         ButtonRole::ToolbarIcon => ButtonMetrics {
             text_size: 13,
-            padding: [4, 0],
-            height: 28,
-            width: Some(24.0),
+            padding: [0, 0],
+            height: 30,
+            width: Some(30.0),
         },
         ButtonRole::ToolbarSplitMain => ButtonMetrics {
             text_size: 11,
-            padding: theme::density::TOOLBAR_PADDING,
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
+            padding: [6, 14],
+            height: 30,
             width: None,
         },
         ButtonRole::ToolbarSplitChevron => ButtonMetrics {
             text_size: 10,
             padding: [6, 0],
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
-            width: Some(22.0),
+            height: 30,
+            width: Some(26.0),
         },
+    }
+}
+
+fn chrome(role: ButtonRole) -> ButtonChrome {
+    match role {
+        ButtonRole::Standard | ButtonRole::Compact => ButtonChrome::Standard,
+        ButtonRole::Tab => ButtonChrome::Tab,
+        ButtonRole::Rail => ButtonChrome::Rail,
+        ButtonRole::ToolbarIcon => ButtonChrome::ToolbarIcon,
+        ButtonRole::ToolbarSplitMain => ButtonChrome::SplitLeft,
+        ButtonRole::ToolbarSplitChevron => ButtonChrome::SplitRight,
     }
 }
 
@@ -77,10 +88,12 @@ fn build_button<'a, Message: Clone + 'a>(
     on_press: Option<Message>,
 ) -> Button<'a, Message> {
     let metrics = metrics(role);
-    let mut button = Button::new(Text::new(label.into()).size(u32::from(metrics.text_size)))
+    let content = Container::new(Text::new(label.into()).size(u32::from(metrics.text_size)))
+        .center_y(Length::Fill);
+    let mut button = Button::new(content)
         .padding(metrics.padding)
         .height(Length::Fixed(metrics.height as f32))
-        .style(theme::button_style(tone));
+        .style(theme::button_style_for(tone, chrome(role)));
 
     if let Some(width) = metrics.width {
         button = button.width(Length::Fixed(width));
@@ -100,10 +113,11 @@ fn build_content_button<'a, Message: Clone + 'a>(
     on_press: Option<Message>,
 ) -> Button<'a, Message> {
     let metrics = metrics(role);
+    let content = Container::new(content).center_y(Length::Fill);
     let mut button = Button::new(content)
         .padding(metrics.padding)
         .height(Length::Fixed(metrics.height as f32))
-        .style(theme::button_style(tone));
+        .style(theme::button_style_for(tone, chrome(role)));
 
     if let Some(width) = metrics.width {
         button = button.width(Length::Fixed(width));
@@ -157,9 +171,12 @@ pub fn toolbar_split_main<'a, Message: Clone + 'a>(
     on_press: Option<Message>,
 ) -> Button<'a, Message> {
     let metrics = metrics(ButtonRole::ToolbarSplitMain);
-    let button = Button::new(content)
+    let button = Button::new(Container::new(content).center_y(Length::Fill))
         .padding(metrics.padding)
-        .style(theme::button_style(tone))
+        .style(theme::button_style_for(
+            tone,
+            chrome(ButtonRole::ToolbarSplitMain),
+        ))
         .height(Length::Fixed(metrics.height as f32));
 
     if let Some(message) = on_press {
@@ -175,11 +192,17 @@ pub fn toolbar_split_chevron<'a, Message: Clone + 'a>(
     on_press: Option<Message>,
 ) -> Button<'a, Message> {
     let metrics = metrics(ButtonRole::ToolbarSplitChevron);
-    let button = Button::new(Text::new(label.into()).size(u32::from(metrics.text_size)))
-        .padding(metrics.padding)
-        .width(Length::Fixed(metrics.width.expect("split chevron width")))
-        .height(Length::Fixed(metrics.height as f32))
-        .style(theme::button_style(tone));
+    let button = Button::new(
+        Container::new(Text::new(label.into()).size(u32::from(metrics.text_size)))
+            .center_y(Length::Fill),
+    )
+    .padding(metrics.padding)
+    .width(Length::Fixed(metrics.width.expect("split chevron width")))
+    .height(Length::Fixed(metrics.height as f32))
+    .style(theme::button_style_for(
+        tone,
+        chrome(ButtonRole::ToolbarSplitChevron),
+    ));
 
     if let Some(message) = on_press {
         button.on_press(message)
@@ -261,14 +284,19 @@ mod tests {
 
         assert_eq!(main.padding[0], chevron.padding[0]);
         assert_eq!(main.height, chevron.height);
-        assert_eq!(main.height, theme::density::STANDARD_CONTROL_HEIGHT as u16);
+        assert_eq!(main.height, 30);
     }
 
     #[test]
     fn tabs_share_the_standard_control_height() {
-        assert_eq!(
-            metrics(ButtonRole::Tab).height,
-            theme::density::STANDARD_CONTROL_HEIGHT as u16
-        );
+        assert_eq!(metrics(ButtonRole::Tab).height, 30);
+    }
+
+    #[test]
+    fn rail_buttons_use_fixed_square_footprint() {
+        let metrics = metrics(ButtonRole::Rail);
+
+        assert_eq!(metrics.height, 40);
+        assert_eq!(metrics.width, Some(40.0));
     }
 }

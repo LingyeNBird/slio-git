@@ -24,7 +24,7 @@ impl<'a> DiffViewer<'a> {
             return widgets::panel_empty_state(
                 "差异",
                 "当前没有可显示的 diff",
-                "切换文件、刷新状态，或比较其它提交后再查看这里。",
+                "选择文件或比较提交后查看差异内容。",
                 None,
             );
         }

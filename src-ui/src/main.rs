@@ -799,8 +799,12 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     state.branch_popup.close_context_menu();
                 }
                 BranchPopupMessage::SetSearchQuery(query) => {
-                    state.branch_popup.search_query = query;
-                    state.branch_popup.error = None;
+                    let selection_changed = state.branch_popup.set_search_query(query);
+                    if selection_changed {
+                        if let Ok(repo) = require_repository(state) {
+                            state.branch_popup.load_selected_branch_history(&repo);
+                        }
+                    }
                 }
                 BranchPopupMessage::SetNewBranchName(name) => {
                     state.branch_popup.new_branch_name = name;
@@ -1538,10 +1542,15 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     "workspace.history",
                 );
             }
+            HistoryMessage::TrackContextMenuCursor(position) => {
+                state.history_view.track_context_menu_cursor(position);
+            }
             HistoryMessage::OpenCommitContextMenu(commit_id) => {
                 if let Ok(repo) = require_repository(state) {
                     state.history_view.select_commit(&repo, commit_id.clone());
                     state.history_view.context_menu_commit = Some(commit_id);
+                    state.history_view.context_menu_anchor =
+                        Some(state.history_view.context_menu_cursor);
                     state.open_auxiliary_view(AuxiliaryView::History);
                     if let Some(error) = state.history_view.error.clone() {
                         report_async_failure(
@@ -1556,6 +1565,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             HistoryMessage::CloseCommitContextMenu => {
                 state.history_view.context_menu_commit = None;
+                state.history_view.context_menu_anchor = None;
             }
             HistoryMessage::CopyCommitHash(commit_id) => {
                 if let Err(error) = copy_text_to_clipboard(&commit_id) {
@@ -3840,7 +3850,7 @@ fn build_conflict_action_panel<'a>(
             .push(widgets::section_header(
                 "当前文件",
                 "快速解决",
-                "和 JetBrains 一样，先在这里决定整文件取舍；需要精细处理时再进入三栏合并。",
+                "先决定整文件取舍，需要精细处理时进入三栏合并。",
             ))
             .push(
                 Column::new()
