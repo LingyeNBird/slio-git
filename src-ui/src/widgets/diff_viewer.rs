@@ -356,7 +356,15 @@ fn render_unified_line<Message: Clone + 'static>(
                             .color(prefix_color(&line.origin))
                             .width(Length::Fixed(PREFIX_WIDTH)),
                     )
-                    .push(line_highlighter.view_diff_code(&line.origin, &line.content)),
+                    .push(if line.inline_changes.is_empty() {
+                        line_highlighter.view_diff_code(&line.origin, &line.content)
+                    } else {
+                        line_highlighter.view_diff_code_with_inline(
+                            &line.origin,
+                            &line.content,
+                            &line.inline_changes,
+                        )
+                    }),
             )
             .padding([0, 10])
             .height(Length::Fixed(DIFF_ROW_HEIGHT))

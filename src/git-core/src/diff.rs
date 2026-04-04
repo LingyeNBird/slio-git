@@ -28,6 +28,18 @@ impl From<char> for DiffLineOrigin {
     }
 }
 
+/// A span within a diff line marking character-level changes.
+/// Used for GitHub-style inline highlighting of specific changed characters.
+#[derive(Debug, Clone)]
+pub struct InlineChangeSpan {
+    /// Byte offset in the line content
+    pub start: usize,
+    /// Byte length of the span
+    pub len: usize,
+    /// Whether this span represents a change (true) or unchanged text (false)
+    pub changed: bool,
+}
+
 /// A single line in a diff
 #[derive(Debug, Clone)]
 pub struct DiffLine {
@@ -35,6 +47,8 @@ pub struct DiffLine {
     pub origin: DiffLineOrigin,
     pub old_lineno: Option<u32>,
     pub new_lineno: Option<u32>,
+    /// Character-level change spans within this line (empty = whole line is one span)
+    pub inline_changes: Vec<InlineChangeSpan>,
 }
 
 /// A hunk in a diff
@@ -288,6 +302,7 @@ fn extract_diff_info(diff: &Git2Diff) -> Result<Diff, GitError> {
                         origin,
                         old_lineno: line.old_lineno(),
                         new_lineno: line.new_lineno(),
+                        inline_changes: Vec::new(),
                     });
                 }
             }
@@ -300,8 +315,17 @@ fn extract_diff_info(diff: &Git2Diff) -> Result<Diff, GitError> {
         details: e.to_string(),
     })?;
 
+    let mut result_files = files.into_inner();
+
+    // Enhance each hunk with character-level inline change spans
+    for file in &mut result_files {
+        for hunk in &mut file.hunks {
+            enhance_hunk_with_inline_changes(hunk);
+        }
+    }
+
     Ok(Diff {
-        files: files.into_inner(),
+        files: result_files,
         total_additions: total_additions.get(),
         total_deletions: total_deletions.get(),
     })
@@ -820,6 +844,100 @@ pub fn resolve_conflict_hunk(hunk: &ConflictHunk, resolution: &ConflictResolutio
     }
 }
 
+// ── Character-level inline diff (013 - similar crate) ─────────────────────
+
+/// Compute character-level change spans for paired deletion/addition lines.
+/// This powers GitHub-style inline highlighting where specific changed
+/// characters within a line are marked with a brighter background.
+pub fn compute_inline_changes(old_line: &str, new_line: &str) -> (Vec<InlineChangeSpan>, Vec<InlineChangeSpan>) {
+    use similar::{ChangeTag, TextDiff};
+
+    let diff = TextDiff::from_chars(old_line, new_line);
+    let mut old_spans = Vec::new();
+    let mut new_spans = Vec::new();
+    let mut old_pos = 0usize;
+    let mut new_pos = 0usize;
+
+    for change in diff.iter_all_changes() {
+        let text = change.value();
+        let len = text.len();
+
+        match change.tag() {
+            ChangeTag::Equal => {
+                old_spans.push(InlineChangeSpan { start: old_pos, len, changed: false });
+                new_spans.push(InlineChangeSpan { start: new_pos, len, changed: false });
+                old_pos += len;
+                new_pos += len;
+            }
+            ChangeTag::Delete => {
+                old_spans.push(InlineChangeSpan { start: old_pos, len, changed: true });
+                old_pos += len;
+            }
+            ChangeTag::Insert => {
+                new_spans.push(InlineChangeSpan { start: new_pos, len, changed: true });
+                new_pos += len;
+            }
+        }
+    }
+
+    // Merge adjacent spans with same changed status
+    (merge_spans(old_spans), merge_spans(new_spans))
+}
+
+fn merge_spans(spans: Vec<InlineChangeSpan>) -> Vec<InlineChangeSpan> {
+    let mut merged = Vec::with_capacity(spans.len());
+    for span in spans {
+        if let Some(last) = merged.last_mut() {
+            let last: &mut InlineChangeSpan = last;
+            if last.changed == span.changed && last.start + last.len == span.start {
+                last.len += span.len;
+                continue;
+            }
+        }
+        merged.push(span);
+    }
+    merged
+}
+
+/// Enhance a hunk by computing inline changes for paired deletion/addition lines.
+/// Pairs consecutive delete+insert lines and computes character-level diffs.
+pub fn enhance_hunk_with_inline_changes(hunk: &mut DiffHunk) {
+    let lines = &mut hunk.lines;
+    let mut i = 0;
+
+    while i < lines.len() {
+        // Look for a deletion followed by an addition
+        if lines[i].origin == DiffLineOrigin::Deletion {
+            // Collect consecutive deletions
+            let del_start = i;
+            while i < lines.len() && lines[i].origin == DiffLineOrigin::Deletion {
+                i += 1;
+            }
+            let del_end = i;
+
+            // Collect consecutive additions
+            let add_start = i;
+            while i < lines.len() && lines[i].origin == DiffLineOrigin::Addition {
+                i += 1;
+            }
+            let add_end = i;
+
+            // Pair up deletions and additions
+            let pairs = (del_end - del_start).min(add_end - add_start);
+            for p in 0..pairs {
+                let (old_spans, new_spans) = compute_inline_changes(
+                    &lines[del_start + p].content,
+                    &lines[add_start + p].content,
+                );
+                lines[del_start + p].inline_changes = old_spans;
+                lines[add_start + p].inline_changes = new_spans;
+            }
+        } else {
+            i += 1;
+        }
+    }
+}
+
 // ── Full file preview support (012-idea-ui-refactor) ──────────────────────
 
 const MAX_PREVIEW_BYTES: usize = 1_048_576; // 1 MB
@@ -883,6 +1001,7 @@ pub fn build_full_file_diff(repo: &Repository, file_path: &Path) -> Result<FullF
             origin: DiffLineOrigin::Addition,
             old_lineno: None,
             new_lineno: Some(i as u32 + 1),
+            inline_changes: Vec::new(),
         })
         .collect();
 

@@ -18,6 +18,7 @@ tokio = { workspace = true, features = ["sync", "rt"] }
 
 serde_json = { workspace = true }
 dirs-next = { workspace = true }
+similar = "3.0.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }

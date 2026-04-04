@@ -133,6 +133,68 @@ impl HighlightedSegment {
     ) -> Element<'static, Message> {
         render_segments(segments, diff_code_render_config())
     }
+
+    /// Render with inline change highlighting — changed characters get a brighter background.
+    /// This produces GitHub-style character-level diff highlighting.
+    pub fn render_diff_code_with_inline<Message: Clone + 'static>(
+        segments: &[Self],
+        inline_changes: &[git_core::diff::InlineChangeSpan],
+        is_addition: bool,
+    ) -> Element<'static, Message> {
+        if inline_changes.is_empty() {
+            return render_segments(segments, diff_code_render_config());
+        }
+
+        let change_bg = if is_addition {
+            Color::from_rgba(0.0, 0.68, 0.37, 0.30) // green tint for additions
+        } else {
+            Color::from_rgba(1.0, 0.32, 0.32, 0.30) // red tint for deletions
+        };
+
+        // Build a position→color lookup from syntax segments
+        let mut color_map: Vec<(usize, usize, Color)> = Vec::new();
+        let mut pos = 0;
+        for seg in segments {
+            let end = pos + seg.text.len();
+            color_map.push((pos, end, seg.color));
+            pos = end;
+        }
+
+        let full_text: String = segments.iter().map(|s| s.text.as_str()).collect();
+        let mut result_spans: Vec<text::Span<'static, Message, Font>> = Vec::new();
+
+        for inline in inline_changes {
+            let end = (inline.start + inline.len).min(full_text.len());
+            let text_slice = full_text.get(inline.start..end).unwrap_or("").to_string();
+            if text_slice.is_empty() {
+                continue;
+            }
+
+            // Find syntax color at this position
+            let color = color_map.iter()
+                .find(|(s, e, _)| *s <= inline.start && *e > inline.start)
+                .map(|(_, _, c)| *c)
+                .unwrap_or(crate::theme::darcula::TEXT_PRIMARY);
+
+            let mut s = span(text_slice).color(color);
+            if inline.changed {
+                s = s.background(iced::Background::Color(change_bg));
+            }
+            result_spans.push(s);
+        }
+
+        if result_spans.is_empty() {
+            return render_segments(segments, diff_code_render_config());
+        }
+
+        rich_text(result_spans)
+            .size(11)
+            .line_height(text::LineHeight::Relative(1.30))
+            .font(Font::MONOSPACE)
+            .wrapping(text::Wrapping::None)
+            .width(Length::Shrink)
+            .into()
+    }
 }
 
 fn render_segments<Message: Clone + 'static>(
@@ -190,6 +252,18 @@ impl HunkSyntaxHighlighter {
     ) -> Element<'static, Message> {
         let segments = self.highlight_segments(origin, content);
         HighlightedSegment::render_diff_code(&segments)
+    }
+
+    /// Render code with inline character-level change highlighting (GitHub-style).
+    pub fn view_diff_code_with_inline<Message: Clone + 'static>(
+        &mut self,
+        origin: &DiffLineOrigin,
+        content: &str,
+        inline_changes: &[git_core::diff::InlineChangeSpan],
+    ) -> Element<'static, Message> {
+        let segments = self.highlight_segments(origin, content);
+        let is_addition = matches!(origin, DiffLineOrigin::Addition);
+        HighlightedSegment::render_diff_code_with_inline(&segments, inline_changes, is_addition)
     }
 }
 

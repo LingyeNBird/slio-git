@@ -73,7 +73,7 @@ pub use diff::{
     diff_ref_to_workdir, diff_refs, file_is_binary, get_conflict_diff, resolve_conflict,
     resolve_conflict_hunk, AutoMergeResult, ConflictHunk, ConflictHunkType, ConflictLine,
     ConflictLineType, ConflictResolution, Diff, DiffHunk, DiffLine, DiffLineOrigin, FileDiff,
-    FullFilePreview, ThreeWayDiff,
+    FullFilePreview, InlineChangeSpan, ThreeWayDiff,
 };
 pub use error::GitError;
 pub use history::{

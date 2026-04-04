@@ -17,6 +17,7 @@ struct SplitCell {
     line_number: Option<u32>,
     origin: DiffLineOrigin,
     segments: Vec<syntax_highlighting::HighlightedSegment>,
+    inline_changes: Vec<git_core::diff::InlineChangeSpan>,
 }
 
 pub struct SplitDiffViewer<'a> {
@@ -154,6 +155,7 @@ fn render_split_line<Message: Clone + 'static>(
                 line_number: line.new_lineno,
                 origin: DiffLineOrigin::Addition,
                 segments: line_highlighter.highlight_segments(&line.origin, &line.content),
+                inline_changes: line.inline_changes.clone(),
             };
             render_split_row(None, Some(right))
         }
@@ -162,6 +164,7 @@ fn render_split_line<Message: Clone + 'static>(
                 line_number: line.old_lineno,
                 origin: DiffLineOrigin::Deletion,
                 segments: line_highlighter.highlight_segments(&line.origin, &line.content),
+                inline_changes: line.inline_changes.clone(),
             };
             render_split_row(Some(left), None)
         }
@@ -171,11 +174,13 @@ fn render_split_line<Message: Clone + 'static>(
                 line_number: line.old_lineno,
                 origin: DiffLineOrigin::Context,
                 segments: segments.clone(),
+                inline_changes: Vec::new(),
             };
             let right = SplitCell {
                 line_number: line.new_lineno,
                 origin: DiffLineOrigin::Context,
                 segments,
+                inline_changes: Vec::new(),
             };
             render_split_row(Some(left), Some(right))
         }
@@ -185,11 +190,13 @@ fn render_split_line<Message: Clone + 'static>(
                 line_number: line.old_lineno,
                 origin: DiffLineOrigin::Header,
                 segments: segments.clone(),
+                inline_changes: Vec::new(),
             };
             let right = SplitCell {
                 line_number: line.new_lineno,
                 origin: DiffLineOrigin::Header,
                 segments,
+                inline_changes: Vec::new(),
             };
             render_split_row(Some(left), Some(right))
         }
@@ -247,9 +254,18 @@ fn render_side<Message: Clone + 'static>(cell: Option<SplitCell>) -> Element<'st
                                     .color(prefix_color(&cell.origin))
                                     .width(Length::Fixed(PREFIX_WIDTH)),
                             )
-                            .push(syntax_highlighting::HighlightedSegment::render_diff_code(
-                                &cell.segments,
-                            )),
+                            .push(if cell.inline_changes.is_empty() {
+                                syntax_highlighting::HighlightedSegment::render_diff_code(
+                                    &cell.segments,
+                                )
+                            } else {
+                                let is_add = matches!(cell.origin, DiffLineOrigin::Addition);
+                                syntax_highlighting::HighlightedSegment::render_diff_code_with_inline(
+                                    &cell.segments,
+                                    &cell.inline_changes,
+                                    is_add,
+                                )
+                            }),
                     )
                     .padding([0, 6])
                     .height(Length::Fixed(DIFF_ROW_HEIGHT))
