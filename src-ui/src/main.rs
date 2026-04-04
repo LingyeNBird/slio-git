@@ -134,6 +134,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
 
     match message {
         Message::OpenRepository => {
+            state.show_project_dropdown = false;
             state.set_loading(
                 "正在打开仓库",
                 Some("选择本地 Git 目录后会直接进入变更工作台。".to_string()),
@@ -416,6 +417,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
         Message::ToggleDiffPresentation => state.toggle_diff_presentation(),
         Message::ToggleProjectDropdown => {
             state.show_project_dropdown = !state.show_project_dropdown;
+            state.show_branch_dropdown = false; // close branch if open
         }
         Message::ToggleFileDisplayMode => {
             state.file_display_mode = match state.file_display_mode {
@@ -566,6 +568,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
         }
         Message::SwitchProject(path) => {
+            state.show_project_dropdown = false;
             if let Err(error) = state.switch_to_project(&path) {
                 report_async_failure(
                     state,
@@ -4029,7 +4032,7 @@ fn view(state: &AppState) -> Element<'_, Message> {
         state,
         body,
         bottom_tool_window,
-        Message::OpenRepository,
+        Message::ToggleProjectDropdown,
         Message::SwitchProject,
         Message::InitRepository,
         Message::Refresh,
@@ -4053,6 +4056,117 @@ fn view(state: &AppState) -> Element<'_, Message> {
         Message::DismissToast,
     );
     let main_view = main_window.view();
+
+    // Overlay: project dropdown
+    if state.show_project_dropdown {
+        let mut project_list = Column::new().spacing(0).width(Length::Fill);
+
+        // "Open project" button
+        project_list = project_list.push(
+            Button::new(
+                Row::new()
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+                    .push(Text::new("📂").size(12))
+                    .push(Text::new("打开项目...").size(12)),
+            )
+            .style(theme::button_style(theme::ButtonTone::Ghost))
+            .padding([6, 12])
+            .width(Length::Fill)
+            .on_press(Message::OpenRepository),
+        );
+
+        project_list = project_list.push(
+            iced::widget::rule::horizontal(1).style(theme::separator_rule_style()),
+        );
+
+        // Recent projects header
+        if !state.project_history.is_empty() {
+            project_list = project_list.push(
+                Container::new(
+                    Text::new("最近的项目")
+                        .size(10)
+                        .color(theme::darcula::TEXT_DISABLED),
+                )
+                .padding([6, 12]),
+            );
+        }
+
+        // Project list
+        for project in state.project_history.iter().take(10) {
+            let is_active = state
+                .active_project_path()
+                .map(|p| p == project.path.as_path())
+                .unwrap_or(false);
+            let path = project.path.clone();
+            let name_color = if is_active {
+                theme::darcula::ACCENT
+            } else {
+                theme::darcula::TEXT_PRIMARY
+            };
+
+            project_list = project_list.push(
+                Button::new(
+                    Column::new()
+                        .spacing(1)
+                        .push(Text::new(&project.name).size(12).color(name_color))
+                        .push(
+                            Text::new(project.path.to_string_lossy().to_string())
+                                .size(10)
+                                .color(theme::darcula::TEXT_DISABLED),
+                        ),
+                )
+                .style(theme::button_style(theme::ButtonTone::Ghost))
+                .padding([4, 12])
+                .width(Length::Fill)
+                .on_press(Message::SwitchProject(path)),
+            );
+        }
+
+        let dropdown = Container::new(
+            widgets::scrollable::styled(project_list).height(Length::Shrink),
+        )
+        .width(Length::Fixed(320.0))
+        .max_height(400.0)
+        .style(|_| iced::widget::container::Style {
+            background: Some(iced::Background::Color(theme::darcula::BG_PANEL)),
+            border: iced::Border {
+                width: 1.0,
+                color: theme::darcula::BORDER,
+                radius: 8.0.into(),
+            },
+            shadow: iced::Shadow {
+                color: iced::Color::from_rgba(0.0, 0.0, 0.0, 0.4),
+                offset: iced::Vector::new(0.0, 4.0),
+                blur_radius: 16.0,
+            },
+            ..Default::default()
+        });
+
+        let overlay = Container::new(
+            Column::new()
+                .push(iced::widget::Space::new().height(Length::Fixed(46.0)))
+                .push(
+                    Row::new()
+                        .push(iced::widget::Space::new().width(Length::Fixed(10.0)))
+                        .push(dropdown),
+                ),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        let backdrop = iced::widget::mouse_area(
+            Container::new(iced::widget::Space::new())
+                .width(Length::Fill)
+                .height(Length::Fill),
+        )
+        .on_press(Message::ToggleProjectDropdown);
+
+        return iced::widget::stack([main_view, backdrop.into(), overlay.into()])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+    }
 
     // Overlay: IDEA-style floating branch dropdown
     if state.show_branch_dropdown {

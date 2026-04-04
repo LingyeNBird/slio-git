@@ -315,7 +315,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         )
         .style(theme::button_style(ButtonTone::Ghost))
         .padding([4, 8])
-        .on_press(on_open_repo.clone());
+        .on_press(on_open_repo.clone()); // wired to ToggleProjectDropdown in main view()
 
         let branch_switcher = Button::new(
             Container::new(
