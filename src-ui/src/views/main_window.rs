@@ -300,46 +300,11 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         );
         let context_widths = Self::chrome_context_widths();
 
-        // IDEA-style: compact project button — [icon] name [▾]
-        let project_monogram = Self::project_monogram(&context.repository_name);
-        let project_color = Self::project_color(&context.repository_name);
-
-        let repo_switcher = Button::new(
-            Row::new()
-                .spacing(6)
-                .align_y(Alignment::Center)
-                .push(
-                    Container::new(
-                        Text::new(project_monogram)
-                            .size(9)
-                            .color(Color::from_rgba(1.0, 1.0, 1.0, 0.85)),
-                    )
-                    .width(Length::Fixed(18.0))
-                    .height(Length::Fixed(18.0))
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .style(move |_: &_| container::Style {
-                        background: Some(iced::Background::Color(project_color)),
-                        border: iced::Border {
-                            radius: 4.0.into(),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    }),
-                )
-                .push(
-                    Text::new(&context.repository_name)
-                        .size(12),
-                )
-                .push(
-                    Text::new("▾")
-                        .size(9)
-                        .color(theme::darcula::TEXT_DISABLED),
-                ),
-        )
-        .style(theme::button_style(ButtonTone::Ghost))
-        .padding([4, 8])
-        .on_press(on_show_branches.clone());
+        // Project selector — name + ▾, opens project list (not branches)
+        let repo_switcher = button::ghost(
+            &format!("{} ▾", context.repository_name),
+            Some(on_show_branches.clone()), // TODO: wire to project dropdown
+        );
 
         let branch_switcher = Button::new(
             Container::new(

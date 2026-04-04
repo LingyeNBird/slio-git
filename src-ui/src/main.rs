@@ -4059,8 +4059,8 @@ fn view(state: &AppState) -> Element<'_, Message> {
         let dropdown = Container::new(
             branch_popup::view(&state.branch_popup).map(Message::BranchPopupMessage),
         )
-        .width(Length::Fixed(480.0))
-        .height(Length::Fixed(500.0))
+        .width(Length::Fixed(620.0))
+        .height(Length::Fixed(520.0))
         .style(|_| iced::widget::container::Style {
             background: Some(iced::Background::Color(theme::darcula::BG_PANEL)),
             border: iced::Border {
