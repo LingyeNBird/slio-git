@@ -415,6 +415,21 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
         }
         Message::ToggleDiffPresentation => state.toggle_diff_presentation(),
+        Message::ShowSettings => {
+            state.open_auxiliary_view(state::AuxiliaryView::Settings);
+        }
+        Message::SettingsMessage(msg) => {
+            use views::settings_view::SettingsMessage;
+            match &msg {
+                SettingsMessage::Close => state.close_auxiliary_view(),
+                SettingsMessage::SaveAndClose => {
+                    state.git_settings.apply_message(&msg);
+                    state.close_auxiliary_view();
+                    state.set_success("设置已保存", None, "settings.save");
+                }
+                other => state.git_settings.apply_message(other),
+            }
+        }
         Message::ToggleProjectDropdown => {
             state.show_project_dropdown = !state.show_project_dropdown;
             state.show_branch_dropdown = false; // close branch if open
@@ -3377,7 +3392,8 @@ fn refresh_open_auxiliary_view(state: &mut AppState) {
         Some(AuxiliaryView::Stashes) => state.stash_panel.load_stashes(&repo),
         Some(AuxiliaryView::Rebase) => state.rebase_editor.load_status(&repo),
         Some(AuxiliaryView::Worktrees) => state.worktree_state.load_worktrees(&repo),
-        Some(AuxiliaryView::Commit)
+        Some(AuxiliaryView::Settings)
+        | Some(AuxiliaryView::Commit)
         | Some(AuxiliaryView::History)
         | None => {}
     }
@@ -4252,6 +4268,10 @@ fn build_body<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Mess
             AuxiliaryView::Worktrees => {
                 views::worktree_view::view(&state.worktree_state)
                     .map(Message::WorktreeMessage)
+            }
+            AuxiliaryView::Settings => {
+                views::settings_view::view(&state.git_settings)
+                    .map(Message::SettingsMessage)
             }
             AuxiliaryView::Commit => build_changes_body(state, i18n),
             AuxiliaryView::History => build_log_body(state),
@@ -5444,6 +5464,8 @@ pub enum Message {
     TagDialogMessage(TagDialogMessage),
     StashPanelMessage(StashPanelMessage),
     RebaseEditorMessage(RebaseEditorMessage),
+    ShowSettings,
+    SettingsMessage(views::settings_view::SettingsMessage),
     ToggleProjectDropdown,
     ToggleFileDisplayMode,
     ToggleStagedCollapsed,

@@ -272,6 +272,7 @@ pub enum AuxiliaryView {
     Stashes,
     Rebase,
     Worktrees,
+    Settings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -495,6 +496,8 @@ pub struct AppState {
     pub show_project_dropdown: bool,
     /// Whether the branch dropdown popup is visible (IDEA-style floating panel)
     pub show_branch_dropdown: bool,
+    /// Git settings
+    pub git_settings: crate::views::settings_view::GitSettings,
     auto_refresh: AutoRefreshState,
     /// File display mode for the change list (flat vs tree)
     pub file_display_mode: FileDisplayMode,
@@ -601,6 +604,7 @@ impl AppState {
             toolbar_remote_menu: None,
             show_project_dropdown: false,
             show_branch_dropdown: false,
+            git_settings: Default::default(),
             auto_refresh: AutoRefreshState::default(),
             file_display_mode: FileDisplayMode::default(),
             log_tabs: vec![LogTab::all()],
@@ -1735,7 +1739,8 @@ impl AppState {
                     | AuxiliaryView::Tags
                     | AuxiliaryView::Stashes
                     | AuxiliaryView::Rebase
-                    | AuxiliaryView::Worktrees => {}
+                    | AuxiliaryView::Worktrees
+                    | AuxiliaryView::Settings => {}
                     AuxiliaryView::Branches => {
                         shell.title = "分支与操作".to_string();
                         shell.subtitle = branch.clone();
@@ -2029,6 +2034,7 @@ fn auxiliary_label(view: AuxiliaryView) -> String {
         AuxiliaryView::Stashes => "储藏".to_string(),
         AuxiliaryView::Rebase => "Rebase".to_string(),
         AuxiliaryView::Worktrees => "工作树".to_string(),
+        AuxiliaryView::Settings => "设置".to_string(),
     }
 }
 

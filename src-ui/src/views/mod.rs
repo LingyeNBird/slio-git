@@ -6,6 +6,7 @@ pub mod history_view;
 pub mod main_window;
 pub mod rebase_editor;
 pub mod remote_dialog;
+pub mod settings_view;
 pub mod stash_panel;
 pub mod tag_dialog;
 pub mod worktree_view;
