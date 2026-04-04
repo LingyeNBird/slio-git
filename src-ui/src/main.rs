@@ -837,15 +837,22 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::ShowHistory => {
             state.switch_git_tool_window_tab(GitToolWindowTab::Log);
-            if let Some(repo) = state.current_repository.as_ref() {
-                state.history_view.load_history(repo);
+            if let Some(repo) = state.current_repository.clone() {
+                state.history_view.load_history(&repo);
+                // Also load branches for the dashboard sidebar
+                if state.branch_popup.local_branches.is_empty() {
+                    state.branch_popup.load_branches(&repo);
+                }
             }
         }
         Message::SwitchGitToolWindowTab(tab) => {
             state.switch_git_tool_window_tab(tab);
             if tab == GitToolWindowTab::Log {
-                if let Some(repo) = state.current_repository.as_ref() {
-                    state.history_view.load_history(repo);
+                if let Some(repo) = state.current_repository.clone() {
+                    state.history_view.load_history(&repo);
+                    if state.branch_popup.local_branches.is_empty() {
+                        state.branch_popup.load_branches(&repo);
+                    }
                 }
             }
         }

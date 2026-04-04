@@ -119,43 +119,30 @@ pub fn action_row<'a, Message: Clone + 'a>(
         theme::darcula::TEXT_DISABLED
     };
 
-    let leading: Element<'a, Message> = icon
-        .map(|icon| icon_badge(icon, tone, enabled))
-        .unwrap_or_else(|| {
-            Space::new()
-                .width(Length::Fixed(24.0))
-                .height(Length::Fixed(18.0))
-                .into()
-        });
+    // IDEA-style: no leading icon placeholder, no trailing arrow — compact flat list
+    let mut row = Row::new()
+        .spacing(theme::spacing::XS)
+        .align_y(Alignment::Center);
+
+    if let Some(icon) = icon {
+        row = row.push(icon_badge(icon, tone, enabled));
+    }
+
+    row = row.push(
+        Text::new(title.into())
+            .size(12)
+            .width(Length::Fill)
+            .color(title_color),
+    );
+
+    if let Some((label, badge_tone)) = badge {
+        row = row.push(crate::widgets::compact_chip::<Message>(label, badge_tone));
+    }
 
     let button = Button::new(
-        Container::new(
-            Row::new()
-                .spacing(theme::spacing::SM)
-                .align_y(Alignment::Center)
-                .push(leading)
-                .push(
-                    // IDEA-style: compact menu — title only, no detail subtitle
-                    Column::new()
-                        .spacing(0)
-                        .width(Length::Fill)
-                        .push(Text::new(title.into()).size(12).color(title_color)),
-                )
-                .push_maybe(
-                    badge.map(|(label, tone)| crate::widgets::compact_chip::<Message>(label, tone)),
-                )
-                .push(
-                    Text::new(if enabled { "›" } else { "" })
-                        .size(11)
-                        .color(if enabled {
-                            group_title_color(tone)
-                        } else {
-                            theme::darcula::TEXT_DISABLED
-                        }),
-                ),
-        )
-        .padding([4, 8])
-        .width(Length::Fill),
+        Container::new(row)
+            .padding([4, 8])
+            .width(Length::Fill),
     )
     .width(Length::Fill)
     .style(action_button_style(tone, enabled));
