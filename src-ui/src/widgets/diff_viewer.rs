@@ -9,8 +9,8 @@ const MARKER_WIDTH: f32 = 3.0;
 const GUTTER_WIDTH: f32 = 62.0;
 const PREFIX_WIDTH: f32 = 10.0;
 const SEPARATOR_WIDTH: f32 = 1.0;
-const DIFF_ROW_HEIGHT: f32 = 20.0;
-const HUNK_HEADER_HEIGHT: f32 = 20.0;
+const DIFF_ROW_HEIGHT: f32 = 22.0;
+const HUNK_HEADER_HEIGHT: f32 = 24.0;
 
 pub struct DiffViewer<'a, Message> {
     diff: &'a Diff,

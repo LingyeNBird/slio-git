@@ -7,12 +7,12 @@
 use crate::theme;
 use crate::widgets::{diff_file_header, scrollable, syntax_highlighting};
 use git_core::diff::{Diff, DiffHunk, DiffLine, DiffLineOrigin, FileDiff};
-use iced::widget::{container, text, Column, Container, Row, Space, Text};
+use iced::widget::{container, text, Column, Container, Row, Scrollable, Space, Text};
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Theme};
 
 const GUTTER_WIDTH: f32 = 40.0;
-const DIFF_ROW_HEIGHT: f32 = 20.0;
-const HUNK_HEADER_HEIGHT: f32 = 22.0;
+const DIFF_ROW_HEIGHT: f32 = 22.0;
+const HUNK_HEADER_HEIGHT: f32 = 24.0;
 
 #[derive(Clone)]
 struct SplitCell {
@@ -221,12 +221,22 @@ fn render_half<'a, Message: Clone + 'static>(
                             .color(prefix_color)
                             .width(Length::Fixed(14.0)),
                     )
-                    // Code content
+                    // Code content — wrapped in scrollable to CLIP overflow
                     .push(
-                        Container::new(code_content)
+                        Container::new(
+                            Scrollable::new(
+                                Container::new(code_content).padding([2, 4]),
+                            )
+                            .direction(iced::widget::scrollable::Direction::Horizontal(
+                                iced::widget::scrollable::Scrollbar::new()
+                                    .width(0)
+                                    .scroller_width(0),
+                            ))
                             .width(Length::Fill)
-                            .height(Length::Fixed(DIFF_ROW_HEIGHT))
-                            .padding([2, 4]),
+                            .height(Length::Fixed(DIFF_ROW_HEIGHT)),
+                        )
+                        .width(Length::Fill)
+                        .height(Length::Fixed(DIFF_ROW_HEIGHT)),
                     ),
             )
             .height(Length::Fixed(DIFF_ROW_HEIGHT))
