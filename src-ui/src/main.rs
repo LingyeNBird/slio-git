@@ -66,21 +66,30 @@ pub fn main() -> iced::Result {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let cjk_font = iced::Font::with_name("Noto Sans CJK SC");
 
+    // Load embedded window icon (64x64 RGBA)
+    let icon_data = include_bytes!("../assets/icon_64.rgba");
+    let window_icon = iced::window::icon::from_rgba(icon_data.to_vec(), 64, 64).ok();
+
+    let mut window_settings = iced::window::Settings {
+        size: iced::Size::new(
+            theme::layout::WINDOW_DEFAULT_WIDTH,
+            theme::layout::WINDOW_DEFAULT_HEIGHT,
+        ),
+        min_size: Some(iced::Size::new(
+            theme::layout::WINDOW_MIN_WIDTH,
+            theme::layout::WINDOW_MIN_HEIGHT,
+        )),
+        ..Default::default()
+    };
+    if let Some(icon) = window_icon {
+        window_settings.icon = Some(icon);
+    }
+
     iced::application(|| (AppState::restore(), Task::none()), update, view)
         .title("slio-git")
         .default_font(cjk_font)
         .theme(app_theme)
-        .window(iced::window::Settings {
-            size: iced::Size::new(
-                theme::layout::WINDOW_DEFAULT_WIDTH,
-                theme::layout::WINDOW_DEFAULT_HEIGHT,
-            ),
-            min_size: Some(iced::Size::new(
-                theme::layout::WINDOW_MIN_WIDTH,
-                theme::layout::WINDOW_MIN_HEIGHT,
-            )),
-            ..Default::default()
-        })
+        .window(window_settings)
         .subscription(app_subscription)
         .run()
 }
