@@ -300,65 +300,45 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         );
         let context_widths = Self::chrome_context_widths();
 
-        // IDEA-style: project name button opens project dropdown (not branches)
+        // IDEA-style: compact project button — [icon] name [▾]
         let project_monogram = Self::project_monogram(&context.repository_name);
         let project_color = Self::project_color(&context.repository_name);
 
         let repo_switcher = Button::new(
-            Container::new(
-                Row::new()
-                    .spacing(theme::spacing::SM)
-                    .align_y(Alignment::Center)
-                    .width(Length::Fill)
-                    .push(
-                        Container::new(
-                            Text::new(project_monogram)
-                                .size(9)
-                                .color(Color::from_rgba(1.0, 1.0, 1.0, 0.85)),
-                        )
-                        .width(Length::Fixed(20.0))
-                        .height(Length::Fixed(20.0))
-                        .center_x(Length::Fill)
-                        .center_y(Length::Fill)
-                        .style(move |_: &_| container::Style {
-                            background: Some(iced::Background::Color(project_color)),
-                            border: iced::Border {
-                                radius: 4.0.into(),
-                                ..Default::default()
-                            },
+            Row::new()
+                .spacing(6)
+                .align_y(Alignment::Center)
+                .push(
+                    Container::new(
+                        Text::new(project_monogram)
+                            .size(9)
+                            .color(Color::from_rgba(1.0, 1.0, 1.0, 0.85)),
+                    )
+                    .width(Length::Fixed(18.0))
+                    .height(Length::Fixed(18.0))
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .style(move |_: &_| container::Style {
+                        background: Some(iced::Background::Color(project_color)),
+                        border: iced::Border {
+                            radius: 4.0.into(),
                             ..Default::default()
-                        }),
-                    )
-                    .push(
-                        Column::new()
-                            .spacing(0)
-                            .width(Length::Fill)
-                            .push(
-                                Text::new(&context.repository_name)
-                                    .size(12)
-                                    .width(Length::Fill)
-                                    .wrapping(text::Wrapping::WordOrGlyph),
-                            )
-                            .push(
-                                Text::new(&context.repository_path)
-                                    .size(9)
-                                    .color(theme::darcula::TEXT_DISABLED)
-                                    .width(Length::Fill)
-                                    .wrapping(text::Wrapping::WordOrGlyph),
-                            ),
-                    )
-                    .push(
-                        Text::new("▾")
-                            .size(10)
-                            .color(theme::darcula::TEXT_DISABLED),
-                    ),
-            )
-            .padding(theme::density::TOOLBAR_PADDING)
-            .width(Length::Fill)
-            .style(theme::panel_style(Surface::ToolbarField)),
+                        },
+                        ..Default::default()
+                    }),
+                )
+                .push(
+                    Text::new(&context.repository_name)
+                        .size(12),
+                )
+                .push(
+                    Text::new("▾")
+                        .size(9)
+                        .color(theme::darcula::TEXT_DISABLED),
+                ),
         )
         .style(theme::button_style(ButtonTone::Ghost))
-        .width(Length::FillPortion(context_widths.repo))
+        .padding([4, 8])
         .on_press(on_show_branches.clone());
 
         let branch_switcher = Button::new(
@@ -387,12 +367,10 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             .style(theme::panel_style(Surface::ToolbarField)),
         )
         .style(theme::button_style(ButtonTone::Ghost))
-        .width(Length::FillPortion(context_widths.branch))
         .on_press(on_show_branches.clone());
 
         let context_switchers = Row::new()
             .spacing(theme::spacing::SM)
-            .width(Length::Fill)
             .push(repo_switcher)
             .push(branch_switcher);
 
