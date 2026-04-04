@@ -619,7 +619,6 @@ fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
     if let Some(s) = status {
         body = body.push(s);
     }
-    body = body.push(iced::widget::Space::new().height(Length::Fill));
     body = body.push(iced::widget::rule::horizontal(1));
     body = body.push(footer);
 
@@ -766,7 +765,6 @@ fn build_pull_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
     if let Some(s) = status {
         body = body.push(s);
     }
-    body = body.push(iced::widget::Space::new().height(Length::Fill));
     body = body.push(iced::widget::rule::horizontal(1));
     body = body.push(footer);
 

@@ -953,19 +953,20 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
 
         let avatar = Container::new(
             Text::new(monogram)
-                .size(11)
-                .color(Color::WHITE)
+                .size(10)
+                .color(Color::from_rgba(1.0, 1.0, 1.0, 0.85))
                 .width(Length::Fill),
         )
-        .width(Length::Fixed(32.0))
-        .height(Length::Fixed(32.0))
+        .width(Length::Fixed(28.0))
+        .height(Length::Fixed(28.0))
         .center_x(Length::Fill)
         .center_y(Length::Fill)
         .style(move |_: &_| container::Style {
             background: Some(iced::Background::Color(bg_color)),
             border: iced::Border {
-                radius: 8.0.into(),
-                ..Default::default()
+                radius: 6.0.into(),
+                width: 1.0,
+                color: Color::from_rgba(1.0, 1.0, 1.0, 0.08),
             },
             ..Default::default()
         });
@@ -1036,20 +1037,19 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         rail_icons::view(icon, color, theme::darcula::TEXT_PRIMARY, size)
     }
 
-    /// Generate a consistent color from a project name (like GitHub/GitLab avatars)
+    /// Generate a consistent muted color from a project name
     fn project_color(name: &str) -> Color {
-        // Hash the name to get a consistent hue
         let hash: u32 = name.bytes().fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
-        // Predefined palette of pleasant dark-mode colors
+        // Muted dark-mode palette — low saturation, medium brightness
         const PALETTE: &[(f32, f32, f32)] = &[
-            (0.35, 0.53, 0.87), // blue
-            (0.29, 0.69, 0.50), // green
-            (0.72, 0.40, 0.72), // purple
-            (0.87, 0.53, 0.35), // orange
-            (0.50, 0.60, 0.80), // slate blue
-            (0.65, 0.55, 0.35), // warm brown
-            (0.40, 0.70, 0.70), // teal
-            (0.80, 0.45, 0.55), // rose
+            (0.22, 0.33, 0.52), // dark blue
+            (0.20, 0.42, 0.33), // dark green
+            (0.40, 0.25, 0.45), // dark purple
+            (0.50, 0.33, 0.22), // dark brown
+            (0.30, 0.38, 0.48), // dark slate
+            (0.25, 0.42, 0.42), // dark teal
+            (0.45, 0.30, 0.35), // dark rose
+            (0.35, 0.35, 0.25), // dark olive
         ];
         let (r, g, b) = PALETTE[(hash as usize) % PALETTE.len()];
         Color::from_rgb(r, g, b)
