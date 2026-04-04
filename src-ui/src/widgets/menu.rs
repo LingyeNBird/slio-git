@@ -63,34 +63,40 @@ pub fn group<'a, Message: 'a>(
     tone: MenuTone,
     rows: Vec<Element<'a, Message>>,
 ) -> Element<'a, Message> {
+    let title_str: String = title.into();
+    let detail_str: String = detail.into();
     let rows = rows
         .into_iter()
         .fold(Column::new().spacing(0), |column, row| column.push(row));
 
-    Container::new(
-        Column::new()
-            .spacing(theme::spacing::XS)
-            .push(
-                Column::new()
-                    .spacing(4)
-                    .push(
-                        Text::new(title.into())
-                            .size(10)
-                            .color(group_title_color(tone)),
-                    )
-                    .push(
-                        Text::new(detail.into())
-                            .size(10)
-                            .width(Length::Fill)
-                            .wrapping(iced::widget::text::Wrapping::WordOrGlyph)
-                            .color(theme::darcula::TEXT_SECONDARY),
-                    ),
-            )
-            .push(rows),
-    )
-    .padding([4, 8])
-    .style(group_style(tone))
-    .into()
+    // IDEA-style: if title and detail are empty, render separator-only group
+    let mut content = Column::new().spacing(2);
+
+    if !title_str.is_empty() {
+        let mut header = Column::new().spacing(2);
+        header = header.push(
+            Text::new(title_str)
+                .size(10)
+                .color(group_title_color(tone)),
+        );
+        if !detail_str.is_empty() {
+            header = header.push(
+                Text::new(detail_str)
+                    .size(10)
+                    .width(Length::Fill)
+                    .wrapping(iced::widget::text::Wrapping::WordOrGlyph)
+                    .color(theme::darcula::TEXT_SECONDARY),
+            );
+        }
+        content = content.push(header);
+    }
+
+    content = content.push(rows);
+
+    Container::new(content)
+        .padding([4, 8])
+        .style(group_style(tone))
+        .into()
 }
 
 pub fn action_row<'a, Message: Clone + 'a>(
