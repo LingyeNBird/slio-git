@@ -770,8 +770,10 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     "workspace.pull",
                 );
             } else {
+                // Switch to IDEA-style Pull dialog
+                state.remote_dialog.mode = views::remote_dialog::RemoteDialogMode::Pull;
                 state.set_info(
-                    "已打开远程面板",
+                    "已打开拉取面板",
                     state
                         .current_repository
                         .as_ref()
@@ -790,6 +792,8 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     "workspace.push",
                 );
             } else {
+                // Switch to IDEA-style Push dialog
+                state.remote_dialog.mode = views::remote_dialog::RemoteDialogMode::Push;
                 state.set_info(
                     "已打开远程面板",
                     state
@@ -2673,7 +2677,120 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     }
                 }
             }
-            RemoteDialogMessage::Close => state.close_auxiliary_view(),
+            RemoteDialogMessage::Close => {
+                state.remote_dialog.mode = views::remote_dialog::RemoteDialogMode::Overview;
+                state.close_auxiliary_view();
+            }
+            RemoteDialogMessage::SwitchMode(mode) => {
+                state.remote_dialog.mode = mode;
+            }
+            RemoteDialogMessage::SetTargetBranch(branch) => {
+                state.remote_dialog.target_branch = branch;
+            }
+            RemoteDialogMessage::ToggleForcePush => {
+                state.remote_dialog.force_push = !state.remote_dialog.force_push;
+            }
+            RemoteDialogMessage::TogglePushTags => {
+                state.remote_dialog.push_tags = !state.remote_dialog.push_tags;
+            }
+            RemoteDialogMessage::ToggleSetUpstream => {
+                state.remote_dialog.set_upstream = !state.remote_dialog.set_upstream;
+            }
+            RemoteDialogMessage::ExecutePush => {
+                if let Ok(repo) = require_repository(state) {
+                    let remote = state.remote_dialog.selected_remote.clone()
+                        .or_else(|| state.remote_dialog.preferred_remote.clone())
+                        .unwrap_or_else(|| "origin".to_string());
+                    let branch = state.remote_dialog.current_branch_name.clone()
+                        .unwrap_or_else(|| "main".to_string());
+
+                    state.remote_dialog.is_loading = true;
+                    state.remote_dialog.error = None;
+
+                    let result = if state.remote_dialog.force_push {
+                        git_core::force_push(&repo, &remote, &branch)
+                    } else {
+                        git_core::push(&repo, &remote, &branch, None)
+                    };
+
+                    state.remote_dialog.is_loading = false;
+                    match result {
+                        Ok(()) => {
+                            state.remote_dialog.success_message = Some(format!(
+                                "已推送 {} → {}/{}",
+                                branch, remote, branch
+                            ));
+                            let _ = refresh_repository_after_action(state, &repo, false);
+                        }
+                        Err(e) => {
+                            state.remote_dialog.error = Some(e.to_string());
+                        }
+                    }
+                }
+            }
+            RemoteDialogMessage::SetPullBranch(branch) => {
+                state.remote_dialog.pull_branch = branch;
+            }
+            RemoteDialogMessage::TogglePullRebase => {
+                state.remote_dialog.pull_rebase = !state.remote_dialog.pull_rebase;
+                if state.remote_dialog.pull_rebase {
+                    state.remote_dialog.pull_ff_only = false;
+                    state.remote_dialog.pull_no_ff = false;
+                    state.remote_dialog.pull_squash = false;
+                }
+            }
+            RemoteDialogMessage::TogglePullFfOnly => {
+                state.remote_dialog.pull_ff_only = !state.remote_dialog.pull_ff_only;
+                if state.remote_dialog.pull_ff_only {
+                    state.remote_dialog.pull_rebase = false;
+                    state.remote_dialog.pull_no_ff = false;
+                    state.remote_dialog.pull_squash = false;
+                }
+            }
+            RemoteDialogMessage::TogglePullNoFf => {
+                state.remote_dialog.pull_no_ff = !state.remote_dialog.pull_no_ff;
+                if state.remote_dialog.pull_no_ff {
+                    state.remote_dialog.pull_rebase = false;
+                    state.remote_dialog.pull_ff_only = false;
+                    state.remote_dialog.pull_squash = false;
+                }
+            }
+            RemoteDialogMessage::TogglePullSquash => {
+                state.remote_dialog.pull_squash = !state.remote_dialog.pull_squash;
+                if state.remote_dialog.pull_squash {
+                    state.remote_dialog.pull_rebase = false;
+                    state.remote_dialog.pull_ff_only = false;
+                    state.remote_dialog.pull_no_ff = false;
+                }
+            }
+            RemoteDialogMessage::ExecutePull => {
+                if let Ok(repo) = require_repository(state) {
+                    let remote = state.remote_dialog.selected_remote.clone()
+                        .or_else(|| state.remote_dialog.preferred_remote.clone())
+                        .unwrap_or_else(|| "origin".to_string());
+                    let branch = state.remote_dialog.current_branch_name.clone()
+                        .unwrap_or_else(|| "main".to_string());
+
+                    state.remote_dialog.is_loading = true;
+                    state.remote_dialog.error = None;
+
+                    let result = git_core::pull(&repo, &remote, &branch, None);
+
+                    state.remote_dialog.is_loading = false;
+                    match result {
+                        Ok(()) => {
+                            state.remote_dialog.success_message = Some(format!(
+                                "已拉取 {}/{} → {}",
+                                remote, branch, branch
+                            ));
+                            let _ = refresh_repository_after_action(state, &repo, false);
+                        }
+                        Err(e) => {
+                            state.remote_dialog.error = Some(e.to_string());
+                        }
+                    }
+                }
+            }
         },
         Message::TagDialogMessage(message) => match message {
             TagDialogMessage::SelectTag(name) => {

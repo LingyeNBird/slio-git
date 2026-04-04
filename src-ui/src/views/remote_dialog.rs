@@ -8,6 +8,17 @@ use git_core::{remote::RemoteInfo, Repository};
 use iced::widget::{text, Button, Column, Container, Row, Text};
 use iced::{Alignment, Element, Length};
 
+/// Active mode of the remote dialog
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteDialogMode {
+    /// Show remote list overview
+    Overview,
+    /// IDEA-style Push dialog
+    Push,
+    /// IDEA-style Pull dialog
+    Pull,
+}
+
 /// Message types for remote dialog.
 #[derive(Debug, Clone)]
 pub enum RemoteDialogMessage {
@@ -19,6 +30,20 @@ pub enum RemoteDialogMessage {
     SetPassword(String),
     Refresh,
     Close,
+    // IDEA Push dialog messages
+    SwitchMode(RemoteDialogMode),
+    SetTargetBranch(String),
+    ToggleForcePush,
+    TogglePushTags,
+    ToggleSetUpstream,
+    ExecutePush,
+    // IDEA Pull dialog messages
+    SetPullBranch(String),
+    TogglePullRebase,
+    TogglePullFfOnly,
+    TogglePullNoFf,
+    TogglePullSquash,
+    ExecutePull,
 }
 
 /// State for the remote dialog.
@@ -37,6 +62,17 @@ pub struct RemoteDialogState {
     pub is_loading: bool,
     pub error: Option<String>,
     pub success_message: Option<String>,
+    // IDEA Push/Pull dialog state
+    pub mode: RemoteDialogMode,
+    pub target_branch: String,
+    pub force_push: bool,
+    pub push_tags: bool,
+    pub set_upstream: bool,
+    pub pull_branch: String,
+    pub pull_rebase: bool,
+    pub pull_ff_only: bool,
+    pub pull_no_ff: bool,
+    pub pull_squash: bool,
 }
 
 impl RemoteDialogState {
@@ -55,6 +91,16 @@ impl RemoteDialogState {
             is_loading: false,
             error: None,
             success_message: None,
+            mode: RemoteDialogMode::Overview,
+            target_branch: String::new(),
+            force_push: false,
+            push_tags: false,
+            set_upstream: false,
+            pull_branch: String::new(),
+            pull_rebase: false,
+            pull_ff_only: false,
+            pull_no_ff: false,
+            pull_squash: false,
         }
     }
 
@@ -444,7 +490,271 @@ fn build_action_buttons(state: &RemoteDialogState) -> Element<'_, RemoteDialogMe
 }
 
 /// Build the remote dialog view.
+/// IDEA-style Push dialog view
+fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
+    use iced::widget::Checkbox;
+
+    let remote_name = state
+        .selected_remote
+        .as_deref()
+        .or(state.preferred_remote.as_deref())
+        .unwrap_or("origin");
+    let branch = state
+        .current_branch_name
+        .as_deref()
+        .unwrap_or("main");
+    let target_display = if state.target_branch.is_empty() {
+        branch
+    } else {
+        &state.target_branch
+    };
+
+    let title = format!("推送提交到 {}", remote_name);
+
+    let mut content = Column::new()
+        .spacing(theme::spacing::SM)
+        .push(
+            Container::new(
+                Row::new()
+                    .spacing(theme::spacing::XS)
+                    .align_y(Alignment::Center)
+                    .push(Text::new(title).size(14))
+                    .push(iced::widget::Space::new().width(Length::Fill))
+                    .push(button::ghost("关闭", Some(RemoteDialogMessage::Close))),
+            )
+            .padding([8, 12])
+            .style(theme::panel_style(Surface::Toolbar)),
+        )
+        // Branch row: current → remote/branch
+        .push(
+            Container::new(
+                Row::new()
+                    .spacing(theme::spacing::SM)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new(format!("{} →", branch))
+                            .size(12)
+                            .color(theme::darcula::TEXT_PRIMARY),
+                    )
+                    .push(
+                        Text::new(format!("{} :", remote_name))
+                            .size(12)
+                            .color(theme::darcula::ACCENT),
+                    )
+                    .push(
+                        Container::new(text_input::styled(
+                            "目标分支",
+                            target_display,
+                            RemoteDialogMessage::SetTargetBranch,
+                        ))
+                        .width(Length::Fill),
+                    ),
+            )
+            .padding([8, 12]),
+        )
+        // Options
+        .push(
+            Container::new(
+                Column::new()
+                    .spacing(theme::spacing::XS)
+                    .push(
+                        Checkbox::new(state.force_push)
+                            .label("强制推送 (--force-with-lease)")
+                            .size(13)
+                            .style(theme::checkbox_style())
+                            .on_toggle(|_| RemoteDialogMessage::ToggleForcePush),
+                    )
+                    .push(
+                        Checkbox::new(state.push_tags)
+                            .label("推送标签")
+                            .size(13)
+                            .style(theme::checkbox_style())
+                            .on_toggle(|_| RemoteDialogMessage::TogglePushTags),
+                    )
+                    .push(
+                        Checkbox::new(state.set_upstream)
+                            .label("设置上游分支")
+                            .size(13)
+                            .style(theme::checkbox_style())
+                            .on_toggle(|_| RemoteDialogMessage::ToggleSetUpstream),
+                    ),
+            )
+            .padding([8, 12]),
+        );
+
+    // Status
+    if let Some(error) = &state.error {
+        content = content.push(build_status_panel::<RemoteDialogMessage>(
+            "失败", error, BadgeTone::Danger,
+        ));
+    } else if let Some(msg) = &state.success_message {
+        content = content.push(build_status_panel::<RemoteDialogMessage>(
+            "完成", msg, BadgeTone::Success,
+        ));
+    }
+
+    // Action buttons
+    content = content.push(
+        Container::new(
+            Row::new()
+                .spacing(theme::spacing::XS)
+                .push(iced::widget::Space::new().width(Length::Fill))
+                .push(button::ghost("取消", Some(RemoteDialogMessage::Close)))
+                .push(button::primary(
+                    "推送",
+                    (!state.is_loading).then_some(RemoteDialogMessage::ExecutePush),
+                )),
+        )
+        .padding([8, 12]),
+    );
+
+    Container::new(scrollable::styled(content).height(Length::Fill))
+        .padding([10, 12])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(theme::panel_style(Surface::Panel))
+        .into()
+}
+
+/// IDEA-style Pull dialog view
+fn build_pull_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
+    use iced::widget::Checkbox;
+
+    let remote_name = state
+        .selected_remote
+        .as_deref()
+        .or(state.preferred_remote.as_deref())
+        .unwrap_or("origin");
+    let branch = state
+        .current_branch_name
+        .as_deref()
+        .unwrap_or("main");
+    let pull_target = if state.pull_branch.is_empty() {
+        branch
+    } else {
+        &state.pull_branch
+    };
+
+    let title = format!("拉取到 {}", branch);
+
+    let mut content = Column::new()
+        .spacing(theme::spacing::SM)
+        .push(
+            Container::new(
+                Row::new()
+                    .spacing(theme::spacing::XS)
+                    .align_y(Alignment::Center)
+                    .push(Text::new(title).size(14))
+                    .push(iced::widget::Space::new().width(Length::Fill))
+                    .push(button::ghost("关闭", Some(RemoteDialogMessage::Close))),
+            )
+            .padding([8, 12])
+            .style(theme::panel_style(Surface::Toolbar)),
+        )
+        // Command row: git pull [remote] [branch]
+        .push(
+            Container::new(
+                Row::new()
+                    .spacing(theme::spacing::SM)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new("git pull")
+                            .size(12)
+                            .color(theme::darcula::TEXT_SECONDARY),
+                    )
+                    .push(
+                        Text::new(remote_name)
+                            .size(12)
+                            .color(theme::darcula::ACCENT),
+                    )
+                    .push(
+                        Container::new(text_input::styled(
+                            "选择要拉取的分支",
+                            pull_target,
+                            RemoteDialogMessage::SetPullBranch,
+                        ))
+                        .width(Length::Fill),
+                    ),
+            )
+            .padding([8, 12]),
+        )
+        // Options
+        .push(
+            Container::new(
+                Column::new()
+                    .spacing(theme::spacing::XS)
+                    .push(
+                        Checkbox::new(state.pull_rebase)
+                            .label("变基 (--rebase)")
+                            .size(13)
+                            .style(theme::checkbox_style())
+                            .on_toggle(|_| RemoteDialogMessage::TogglePullRebase),
+                    )
+                    .push(
+                        Checkbox::new(state.pull_ff_only)
+                            .label("仅快进 (--ff-only)")
+                            .size(13)
+                            .style(theme::checkbox_style())
+                            .on_toggle(|_| RemoteDialogMessage::TogglePullFfOnly),
+                    )
+                    .push(
+                        Checkbox::new(state.pull_no_ff)
+                            .label("禁止快进 (--no-ff)")
+                            .size(13)
+                            .style(theme::checkbox_style())
+                            .on_toggle(|_| RemoteDialogMessage::TogglePullNoFf),
+                    )
+                    .push(
+                        Checkbox::new(state.pull_squash)
+                            .label("压缩 (--squash)")
+                            .size(13)
+                            .style(theme::checkbox_style())
+                            .on_toggle(|_| RemoteDialogMessage::TogglePullSquash),
+                    ),
+            )
+            .padding([8, 12]),
+        );
+
+    // Status
+    if let Some(error) = &state.error {
+        content = content.push(build_status_panel::<RemoteDialogMessage>(
+            "失败", error, BadgeTone::Danger,
+        ));
+    } else if let Some(msg) = &state.success_message {
+        content = content.push(build_status_panel::<RemoteDialogMessage>(
+            "完成", msg, BadgeTone::Success,
+        ));
+    }
+
+    // Action buttons
+    content = content.push(
+        Container::new(
+            Row::new()
+                .spacing(theme::spacing::XS)
+                .push(iced::widget::Space::new().width(Length::Fill))
+                .push(button::ghost("取消", Some(RemoteDialogMessage::Close)))
+                .push(button::primary(
+                    "拉取",
+                    (!state.is_loading).then_some(RemoteDialogMessage::ExecutePull),
+                )),
+        )
+        .padding([8, 12]),
+    );
+
+    Container::new(scrollable::styled(content).height(Length::Fill))
+        .padding([10, 12])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(theme::panel_style(Surface::Panel))
+        .into()
+}
+
 pub fn view(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
+    match state.mode {
+        RemoteDialogMode::Push => return build_push_panel(state),
+        RemoteDialogMode::Pull => return build_pull_panel(state),
+        RemoteDialogMode::Overview => {} // fall through to existing overview
+    }
     // IDEA-style: compact loading indicator when processing
     let status_panel: Option<Element<'_, RemoteDialogMessage>> = if state.is_loading {
         Some(
