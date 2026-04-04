@@ -2286,5 +2286,25 @@ mod tests {
         assert!(state.full_file_preview.is_none());
         assert!(!state.full_file_preview_binary);
         assert!(!state.full_file_preview_truncated);
+        assert!(!state.show_project_dropdown);
+        assert!(!state.show_branch_dropdown);
+    }
+
+    #[test]
+    fn dropdowns_default_closed() {
+        let state = super::AppState::new();
+        assert!(!state.show_project_dropdown);
+        assert!(!state.show_branch_dropdown);
+    }
+
+    #[test]
+    fn log_tab_default_has_empty_filters() {
+        let tab = super::LogTab::all();
+        assert!(tab.text_filter.is_empty());
+        assert!(tab.author_filter.is_none());
+        assert!(tab.date_range.is_none());
+        assert!(tab.path_filter.is_none());
+        assert!(tab.selected_commit.is_none());
+        assert_eq!(tab.scroll_offset, 0.0);
     }
 }
