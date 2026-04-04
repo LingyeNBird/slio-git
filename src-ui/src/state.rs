@@ -739,6 +739,9 @@ impl AppState {
 
         self.current_repository = Some(repo);
         self.remember_project(project_entry);
+        // Persist immediately so the project list survives crashes
+        let active_path = self.current_repository.as_ref().map(|r| r.path().to_path_buf());
+        self.persist_workspace_memory(active_path.as_deref());
         self.reset_auto_refresh_state();
         self.is_loading = false;
         self.error_message = None;
