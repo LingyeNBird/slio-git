@@ -230,6 +230,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                     on_toolbar_remote_action.as_ref(),
                     &on_close_toolbar_remote_menu,
                     &on_show_branches,
+                    &on_open_repo,
                 ))
                 .push(rule::horizontal(1).style(theme::separator_rule_style()))
                 .push(workspace)
@@ -290,6 +291,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         on_toolbar_remote_action: &dyn Fn(ToolbarRemoteAction, String) -> Message,
         on_close_toolbar_remote_menu: &Message,
         on_show_branches: &Message,
+        on_open_repo: &Message,
     ) -> Element<'a, Message> {
         let context = &state.shell.context_switcher;
         let badges = Self::pick_branch_badges(
@@ -301,10 +303,19 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         let context_widths = Self::chrome_context_widths();
 
         // Project selector — name + ▾, opens project list (not branches)
-        let repo_switcher = button::ghost(
-            &format!("{} ▾", context.repository_name),
-            Some(on_show_branches.clone()), // TODO: wire to project dropdown
-        );
+        let repo_switcher = Button::new(
+            Row::new()
+                .spacing(4)
+                .align_y(Alignment::Center)
+                .push(
+                    Self::inline_icon(RailIcon::Repository, theme::darcula::TEXT_SECONDARY, 12.0),
+                )
+                .push(Text::new(&context.repository_name).size(12))
+                .push(Text::new("▾").size(9).color(theme::darcula::TEXT_DISABLED)),
+        )
+        .style(theme::button_style(ButtonTone::Ghost))
+        .padding([4, 8])
+        .on_press(on_open_repo.clone());
 
         let branch_switcher = Button::new(
             Container::new(
