@@ -17,12 +17,15 @@ pub enum TagDialogMessage {
     SelectTag(String),
     CreateTag(String, String, bool),
     DeleteTag(String),
+    DeleteLocalAndRemote(String),
     PushTag(String),
     DeleteRemoteTag(String),
     SetTagName(String),
     SetTarget(String),
     SetMessage(String),
     SetLightweight(bool),
+    SetForceTag(bool),
+    ValidateCommitRef,
     Refresh,
     Close,
 }
@@ -36,9 +39,11 @@ pub struct TagDialogState {
     pub target: String,
     pub message: String,
     pub is_lightweight: bool,
+    pub is_force: bool,
     pub is_loading: bool,
     pub error: Option<String>,
     pub success_message: Option<String>,
+    pub validation_result: Option<String>,
 }
 
 impl TagDialogState {
@@ -50,9 +55,11 @@ impl TagDialogState {
             target: String::new(),
             message: String::new(),
             is_lightweight: false,
+            is_force: false,
             is_loading: false,
             error: None,
             success_message: None,
+            validation_result: None,
         }
     }
 
@@ -249,40 +256,76 @@ fn build_tags_list(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
 }
 
 fn build_tag_form(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
-    Container::new(
-        Column::new()
-            .spacing(theme::spacing::SM)
-            .push(widgets::section_header(
-                "创建".to_uppercase(),
-                "新建标签",
-                "支持轻量标签与注释标签两种模式。",
-            ))
-            .push(text_input::styled(
-                "标签名称",
-                &state.tag_name,
-                TagDialogMessage::SetTagName,
-            ))
-            .push(text_input::styled(
-                "目标 commit（如 HEAD 或 commit hash）",
-                &state.target,
-                TagDialogMessage::SetTarget,
-            ))
-            .push(text_input::styled(
-                "标签消息（仅注释标签会使用）",
-                &state.message,
-                TagDialogMessage::SetMessage,
-            ))
-            .push(
-                Checkbox::new(state.is_lightweight)
-                    .label("创建轻量标签")
-                    .size(13)
-                    .style(theme::checkbox_style())
-                    .on_toggle(TagDialogMessage::SetLightweight),
-            ),
-    )
-    .padding([12, 12])
-    .style(theme::panel_style(Surface::Panel))
-    .into()
+    // IDEA-style tag dialog layout: name / force / commit+validate / message
+    let mut form = Column::new()
+        .spacing(theme::spacing::SM)
+        .push(widgets::section_header(
+            "创建".to_uppercase(),
+            "新建标签",
+            "支持轻量标签与注释标签两种模式。",
+        ))
+        .push(text_input::styled(
+            "标签名称",
+            &state.tag_name,
+            TagDialogMessage::SetTagName,
+        ))
+        .push(
+            Checkbox::new(state.is_force)
+                .label("强制覆盖已有标签")
+                .size(13)
+                .style(theme::checkbox_style())
+                .on_toggle(TagDialogMessage::SetForceTag),
+        )
+        .push(
+            Row::new()
+                .spacing(theme::spacing::XS)
+                .align_y(Alignment::Center)
+                .push(
+                    Container::new(text_input::styled(
+                        "目标 commit（HEAD 或 hash）",
+                        &state.target,
+                        TagDialogMessage::SetTarget,
+                    ))
+                    .width(Length::Fill),
+                )
+                .push(button::secondary(
+                    "验证",
+                    (!state.target.trim().is_empty())
+                        .then_some(TagDialogMessage::ValidateCommitRef),
+                )),
+        );
+
+    // Show validation result
+    if let Some(result) = &state.validation_result {
+        form = form.push(
+            Text::new(result.as_str())
+                .size(11)
+                .color(if result.starts_with('✓') {
+                    theme::darcula::SUCCESS
+                } else {
+                    theme::darcula::DANGER
+                }),
+        );
+    }
+
+    form = form
+        .push(text_input::styled(
+            "标签消息（仅注释标签会使用）",
+            &state.message,
+            TagDialogMessage::SetMessage,
+        ))
+        .push(
+            Checkbox::new(state.is_lightweight)
+                .label("创建轻量标签")
+                .size(13)
+                .style(theme::checkbox_style())
+                .on_toggle(TagDialogMessage::SetLightweight),
+        );
+
+    Container::new(form)
+        .padding([12, 12])
+        .style(theme::panel_style(Surface::Panel))
+        .into()
 }
 
 fn build_action_buttons(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
@@ -302,9 +345,27 @@ fn build_action_buttons(state: &TagDialogState) -> Element<'_, TagDialogMessage>
                     )
                 }),
             ))
+            .push(button::secondary(
+                "推送到远程",
+                state.selected_tag.clone().map(TagDialogMessage::PushTag),
+            ))
             .push(button::ghost(
-                "删除标签",
+                "删除本地",
                 state.selected_tag.clone().map(TagDialogMessage::DeleteTag),
+            ))
+            .push(button::ghost(
+                "删除远程",
+                state
+                    .selected_tag
+                    .clone()
+                    .map(TagDialogMessage::DeleteRemoteTag),
+            ))
+            .push(button::ghost(
+                "删除本地和远程",
+                state
+                    .selected_tag
+                    .clone()
+                    .map(TagDialogMessage::DeleteLocalAndRemote),
             ))
             .push(button::ghost("刷新", Some(TagDialogMessage::Refresh)))
             .push(button::ghost("关闭", Some(TagDialogMessage::Close))),

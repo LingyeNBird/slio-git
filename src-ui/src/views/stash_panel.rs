@@ -21,7 +21,13 @@ pub enum StashPanelMessage {
     PopStash(u32),
     DropStash(u32),
     ToggleIncludeUntracked,
+    SetKeepIndex(bool),
     TogglePreview(u32),
+    ShowUnstashDialog(u32),
+    SetUnstashBranchName(String),
+    ConfirmUnstashAsBranch,
+    CancelUnstashDialog,
+    ClearAllStashes,
     Refresh,
     Close,
 }
@@ -33,6 +39,9 @@ pub struct StashPanelState {
     pub selected_stash: Option<u32>,
     pub new_stash_message: String,
     pub include_untracked: bool,
+    pub keep_index: bool,
+    pub unstash_branch_name: String,
+    pub show_unstash_dialog: Option<u32>,
     pub preview_stash_index: Option<u32>,
     pub preview_diff_text: Option<String>,
     pub is_loading: bool,
@@ -47,6 +56,9 @@ impl StashPanelState {
             selected_stash: None,
             new_stash_message: String::new(),
             include_untracked: false,
+            keep_index: false,
+            unstash_branch_name: String::new(),
+            show_unstash_dialog: None,
             preview_stash_index: None,
             preview_diff_text: None,
             is_loading: false,
@@ -88,7 +100,7 @@ impl StashPanelState {
             Some(self.new_stash_message.as_str())
         };
 
-        match git_core::stash_save_with_options(repo, message, self.include_untracked) {
+        match git_core::stash_save_with_options(repo, message, self.include_untracked, self.keep_index) {
             Ok(_) => {
                 self.success_message = Some(if let Some(message) = message {
                     format!("已保存储藏：{message}")
@@ -282,6 +294,7 @@ fn build_stashes_list(state: &StashPanelState) -> Element<'_, StashPanelMessage>
 }
 
 fn build_stash_input(state: &StashPanelState) -> Element<'_, StashPanelMessage> {
+    use iced::widget::Checkbox;
     Container::new(
         Column::new()
             .spacing(theme::spacing::SM)
@@ -294,7 +307,25 @@ fn build_stash_input(state: &StashPanelState) -> Element<'_, StashPanelMessage> 
                 "储藏消息（可选）",
                 &state.new_stash_message,
                 StashPanelMessage::SetNewStashMessage,
-            )),
+            ))
+            .push(
+                Row::new()
+                    .spacing(theme::spacing::MD)
+                    .push(
+                        Checkbox::new(state.include_untracked)
+                            .label("包含未跟踪文件")
+                            .size(14)
+                            .style(crate::theme::checkbox_style())
+                            .on_toggle(|_| StashPanelMessage::ToggleIncludeUntracked),
+                    )
+                    .push(
+                        Checkbox::new(state.keep_index)
+                            .label("保留暂存区")
+                            .size(14)
+                            .style(crate::theme::checkbox_style())
+                            .on_toggle(|_| StashPanelMessage::SetKeepIndex(!state.keep_index)),
+                    ),
+            ),
     )
     .padding([12, 12])
     .style(theme::panel_style(Surface::Panel))
@@ -310,15 +341,25 @@ fn build_action_buttons(state: &StashPanelState) -> Element<'_, StashPanelMessag
                 (!state.is_loading).then_some(StashPanelMessage::SaveStash),
             ))
             .push(button::secondary(
-                "应用储藏",
+                "弹出",
+                state.selected_stash.map(StashPanelMessage::PopStash),
+            ))
+            .push(button::secondary(
+                "应用",
                 state.selected_stash.map(StashPanelMessage::ApplyStash),
             ))
             .push(button::ghost(
-                "删除储藏",
+                "应用到新分支",
+                state.selected_stash.map(StashPanelMessage::ShowUnstashDialog),
+            ))
+            .push(button::ghost(
+                "丢弃",
                 state.selected_stash.map(StashPanelMessage::DropStash),
             ))
-            .push(button::ghost("刷新", Some(StashPanelMessage::Refresh)))
-            .push(button::ghost("关闭", Some(StashPanelMessage::Close))),
+            .push(button::ghost(
+                "清空所有",
+                (!state.stashes.is_empty()).then_some(StashPanelMessage::ClearAllStashes),
+            )),
     )
     .width(Length::Fill)
     .into()

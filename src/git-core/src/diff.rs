@@ -820,6 +820,94 @@ pub fn resolve_conflict_hunk(hunk: &ConflictHunk, resolution: &ConflictResolutio
     }
 }
 
+// ── Full file preview support (012-idea-ui-refactor) ──────────────────────
+
+const MAX_PREVIEW_BYTES: usize = 1_048_576; // 1 MB
+const MAX_PREVIEW_LINES: usize = 5000;
+
+/// Check if a file is binary by looking for null bytes in the first 8KB.
+pub fn file_is_binary(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut buf = [0u8; 8192];
+    let Ok(n) = f.read(&mut buf) else {
+        return false;
+    };
+    buf[..n].contains(&0)
+}
+
+/// Result of building a full-file preview diff.
+pub struct FullFilePreview {
+    pub diff: FileDiff,
+    pub is_binary: bool,
+    pub is_truncated: bool,
+}
+
+/// Build a FileDiff that shows the entire file content as additions.
+/// Used when there's no diff to display (new/untracked files).
+/// Respects MAX_PREVIEW_BYTES / MAX_PREVIEW_LINES limits.
+pub fn build_full_file_diff(repo: &Repository, file_path: &Path) -> Result<FullFilePreview, GitError> {
+    let abs_path = repo.path().join(file_path);
+
+    if file_is_binary(&abs_path) {
+        return Ok(FullFilePreview {
+            diff: FileDiff {
+                old_path: None,
+                new_path: Some(file_path.to_string_lossy().to_string()),
+                hunks: Vec::new(),
+                additions: 0,
+                deletions: 0,
+            },
+            is_binary: true,
+            is_truncated: false,
+        });
+    }
+
+    let content = std::fs::read_to_string(&abs_path).map_err(|e| GitError::OperationFailed {
+        operation: "build_full_file_diff".to_string(),
+        details: format!("Failed to read file {:?}: {}", file_path, e),
+    })?;
+
+    let is_truncated = content.len() > MAX_PREVIEW_BYTES;
+
+    let lines: Vec<&str> = content.lines().take(MAX_PREVIEW_LINES).collect();
+    let line_count = lines.len() as u32;
+
+    let diff_lines: Vec<DiffLine> = lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| DiffLine {
+            content: line.to_string(),
+            origin: DiffLineOrigin::Addition,
+            old_lineno: None,
+            new_lineno: Some(i as u32 + 1),
+        })
+        .collect();
+
+    let hunk = DiffHunk {
+        header: format!("@@ -0,0 +1,{} @@", line_count),
+        lines: diff_lines,
+        old_start: 0,
+        old_lines: 0,
+        new_start: 1,
+        new_lines: line_count,
+    };
+
+    Ok(FullFilePreview {
+        diff: FileDiff {
+            old_path: None,
+            new_path: Some(file_path.to_string_lossy().to_string()),
+            hunks: vec![hunk],
+            additions: line_count,
+            deletions: 0,
+        },
+        is_binary: false,
+        is_truncated,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::diff_file_to_index;

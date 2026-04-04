@@ -158,6 +158,25 @@ pub fn get_default_signature(repo: &Repository) -> Result<git2::Signature<'stati
         })
 }
 
+/// Validate a commit reference (hash, branch name, tag, etc.)
+/// Returns the resolved full hash and first line of commit message if valid.
+pub fn validate_commit_ref(repo: &Repository, reference: &str) -> Result<(String, String), GitError> {
+    let repo_lock = repo.inner.read().unwrap();
+    let object = repo_lock
+        .revparse_single(reference)
+        .map_err(|_| GitError::CommitNotFound {
+            id: reference.to_string(),
+        })?;
+    let commit = object
+        .peel_to_commit()
+        .map_err(|_| GitError::CommitNotFound {
+            id: reference.to_string(),
+        })?;
+    let hash = commit.id().to_string();
+    let summary = commit.summary().unwrap_or("").to_string();
+    Ok((hash, summary))
+}
+
 /// Get commit information
 pub fn get_commit(repo: &Repository, commit_id: &str) -> Result<CommitInfo, GitError> {
     let repo_lock = repo.inner.read().unwrap();

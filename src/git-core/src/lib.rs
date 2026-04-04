@@ -58,20 +58,22 @@ pub mod worktree;
 pub use branch::Branch;
 pub use commit::{
     amend_commit, create_commit, create_signature, get_commit, get_default_signature,
-    load_recent_messages, save_recent_message, CommitInfo,
+    load_recent_messages, save_recent_message, validate_commit_ref, CommitInfo,
 };
 pub use commit_actions::{
     abort_in_progress_commit_action, cherry_pick_commit, continue_in_progress_commit_action,
     drop_commit_from_history, edit_commit_message, export_commit_patch, fixup_commit_to_previous,
     get_in_progress_commit_action, push_current_branch_to_commit, reset_current_branch_to_commit,
     resolve_push_current_branch_target, revert_commit, squash_commit_to_previous,
-    InProgressCommitAction, InProgressCommitActionKind, PushCurrentBranchTarget, RewriteExecution,
+    uncommit_to_commit, InProgressCommitAction, InProgressCommitActionKind,
+    PushCurrentBranchTarget, RewriteExecution,
 };
 pub use diff::{
-    auto_merge_conflict, diff_file_to_index, diff_index_to_head, diff_ref_to_workdir, diff_refs,
-    get_conflict_diff, resolve_conflict, resolve_conflict_hunk, AutoMergeResult, ConflictHunk,
-    ConflictHunkType, ConflictLine, ConflictLineType, ConflictResolution, Diff, DiffHunk, DiffLine,
-    DiffLineOrigin, FileDiff, ThreeWayDiff,
+    auto_merge_conflict, build_full_file_diff, diff_file_to_index, diff_index_to_head,
+    diff_ref_to_workdir, diff_refs, file_is_binary, get_conflict_diff, resolve_conflict,
+    resolve_conflict_hunk, AutoMergeResult, ConflictHunk, ConflictHunkType, ConflictLine,
+    ConflictLineType, ConflictResolution, Diff, DiffHunk, DiffLine, DiffLineOrigin, FileDiff,
+    FullFilePreview, ThreeWayDiff,
 };
 pub use error::GitError;
 pub use history::{
@@ -92,8 +94,8 @@ pub use remote::{
 };
 pub use repository::{Repository, RepositoryManager, SyncStatus};
 pub use stash::{
-    list_stashes, stash_apply, stash_diff, stash_drop, stash_pop, stash_save,
-    stash_save_with_options, StashInfo,
+    list_stashes, stash_apply, stash_clear, stash_diff, stash_drop, stash_pop, stash_save,
+    stash_save_with_options, unstash_as_branch, StashInfo,
 };
 pub use tag::{
     create_lightweight_tag, create_tag, delete_remote_tag, delete_tag, list_tags, push_tag, TagInfo,

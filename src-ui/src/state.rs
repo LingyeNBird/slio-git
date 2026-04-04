@@ -508,6 +508,12 @@ pub struct AppState {
     pub recent_commit_messages: Vec<String>,
     /// Working tree management state
     pub worktree_state: crate::views::worktree_view::WorktreeState,
+    /// Full file preview diff (for new/untracked files without diff)
+    pub full_file_preview: Option<git_core::diff::FileDiff>,
+    /// Whether the full file preview was truncated
+    pub full_file_preview_truncated: bool,
+    /// Whether the selected file is binary (no preview possible)
+    pub full_file_preview_binary: bool,
     /// In-progress network operation for progress bar display
     pub network_operation: Option<NetworkOperation>,
     /// Pull strategy preference (merge or rebase)
@@ -598,6 +604,9 @@ impl AppState {
             blame_active: false,
             recent_commit_messages: Vec::new(),
             worktree_state: Default::default(),
+            full_file_preview: None,
+            full_file_preview_truncated: false,
+            full_file_preview_binary: false,
             network_operation: None,
             pull_strategy: PullStrategy::default(),
         };
@@ -1556,8 +1565,34 @@ impl AppState {
         self.selected_change_path = Some(path.clone());
         self.shell.active_section = ShellSection::Changes;
         self.view_mode = ViewMode::Repository;
+        self.full_file_preview = None;
+        self.full_file_preview_binary = false;
+        self.full_file_preview_truncated = false;
         self.sync_shell_state();
-        self.load_diff_for_file(&path)
+
+        let result = self.load_diff_for_file(&path);
+
+        // If diff is empty/missing, try full file preview (for new/untracked files)
+        let diff_empty = self
+            .current_diff
+            .as_ref()
+            .map(|d| d.files.is_empty())
+            .unwrap_or(true);
+
+        if diff_empty || result.is_err() {
+            if let Some(repo) = &self.current_repository {
+                let file_path = std::path::Path::new(&path);
+                if let Ok(preview) = git_core::diff::build_full_file_diff(repo, file_path) {
+                    self.full_file_preview_binary = preview.is_binary;
+                    self.full_file_preview_truncated = preview.is_truncated;
+                    if !preview.is_binary {
+                        self.full_file_preview = Some(preview.diff);
+                    }
+                }
+            }
+        }
+
+        result.or(Ok(()))
     }
 
     pub fn load_diff_for_file(&mut self, path: &str) -> Result<(), String> {

@@ -2309,6 +2309,86 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     }
                 }
             }
+            HistoryMessage::ToggleMultiSelect(commit_id) => {
+                let pos = state
+                    .history_view
+                    .multi_selected_commits
+                    .iter()
+                    .position(|id| id == &commit_id);
+                if let Some(pos) = pos {
+                    state.history_view.multi_selected_commits.remove(pos);
+                } else {
+                    state.history_view.multi_selected_commits.push(commit_id);
+                }
+            }
+            HistoryMessage::SquashSelectedCommits => {
+                // Validate contiguous selection and squash via interactive rebase
+                let selected = &state.history_view.multi_selected_commits;
+                if selected.len() < 2 {
+                    state.set_error_with_source(
+                        "无法压缩",
+                        "请先选中至少两个连续提交",
+                        "workspace.squash",
+                    );
+                } else {
+                    // TODO: Validate contiguous, open message editor, execute squash
+                    state.record_defect_observation(
+                        "squash_selected",
+                        "多选压缩流程的消息编辑器和连续性验证待完善",
+                    );
+                }
+            }
+            HistoryMessage::UncommitToHere(commit_id) => {
+                if let Ok(repo) = require_repository(state) {
+                    match git_core::uncommit_to_commit(&repo, &commit_id) {
+                        Ok(()) => {
+                            let _ = refresh_repository_after_action(state, &repo, false);
+                            state.set_success(
+                                "提交已撤销",
+                                Some("改动已返回暂存区".to_string()),
+                                "workspace.uncommit",
+                            );
+                        }
+                        Err(e) => {
+                            report_async_failure(
+                                state,
+                                "撤销提交失败",
+                                e.to_string(),
+                                "workspace.uncommit",
+                                "workspace.uncommit",
+                            );
+                        }
+                    }
+                }
+            }
+            HistoryMessage::PushUpToCommit(commit_id) => {
+                if let Ok(repo) = require_repository(state) {
+                    if let Ok(Some(branch)) = repo.current_branch() {
+                        let remote = repo
+                            .current_upstream_remote()
+                            .unwrap_or_else(|| "origin".to_string());
+                        let refspec = format!("{}:refs/heads/{}", commit_id, branch);
+                        match git_core::push(&repo, &remote, &refspec, None) {
+                            Ok(()) => {
+                                state.set_success(
+                                    "推送成功",
+                                    Some(format!("已推送到 {} 的 {}", &commit_id[..7.min(commit_id.len())], remote)),
+                                    "workspace.push.up_to",
+                                );
+                            }
+                            Err(e) => {
+                                report_async_failure(
+                                    state,
+                                    "推送到此提交失败",
+                                    e.to_string(),
+                                    "workspace.push.up_to",
+                                    "workspace.push.up_to",
+                                );
+                            }
+                        }
+                    }
+                }
+            }
             HistoryMessage::SetSearchQuery(query) => state.history_view.set_search_query(query),
             HistoryMessage::Search => {
                 if let Ok(repo) = require_repository(state) {
@@ -2614,6 +2694,43 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     }
                 }
             }
+            TagDialogMessage::SetForceTag(value) => state.tag_dialog.is_force = value,
+            TagDialogMessage::ValidateCommitRef => {
+                if let Ok(repo) = require_repository(state) {
+                    match git_core::validate_commit_ref(&repo, &state.tag_dialog.target) {
+                        Ok((hash, summary)) => {
+                            state.tag_dialog.validation_result =
+                                Some(format!("✓ {} — {}", &hash[..8.min(hash.len())], summary));
+                            state.tag_dialog.error = None;
+                        }
+                        Err(_) => {
+                            state.tag_dialog.validation_result =
+                                Some("✗ 无效的提交引用".to_string());
+                        }
+                    }
+                }
+            }
+            TagDialogMessage::DeleteLocalAndRemote(name) => {
+                if let Ok(repo) = require_repository(state) {
+                    // Delete local first
+                    if let Err(e) = git_core::delete_tag(&repo, &name) {
+                        state.tag_dialog.error = Some(format!("删除本地标签失败: {e}"));
+                    } else {
+                        let remote = repo
+                            .current_upstream_remote()
+                            .unwrap_or_else(|| "origin".to_string());
+                        if let Err(e) = git_core::delete_remote_tag(&repo, &name, &remote) {
+                            state.tag_dialog.error = Some(format!("删除远程标签失败: {e}"));
+                        } else {
+                            state.tag_dialog.success_message =
+                                Some(format!("标签 {name} 已从本地和远程删除"));
+                            if let Some(current) = state.current_repository.clone() {
+                                state.tag_dialog.load_tags(&current);
+                            }
+                        }
+                    }
+                }
+            }
             TagDialogMessage::SetTagName(value) => state.tag_dialog.tag_name = value,
             TagDialogMessage::SetTarget(value) => state.tag_dialog.target = value,
             TagDialogMessage::SetMessage(value) => state.tag_dialog.message = value,
@@ -2749,6 +2866,56 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             StashPanelMessage::ToggleIncludeUntracked => {
                 state.stash_panel.include_untracked = !state.stash_panel.include_untracked;
             }
+            StashPanelMessage::SetKeepIndex(value) => {
+                state.stash_panel.keep_index = value;
+            }
+            StashPanelMessage::ShowUnstashDialog(index) => {
+                state.stash_panel.show_unstash_dialog = Some(index);
+                state.stash_panel.unstash_branch_name = format!("stash-branch-{}", index);
+            }
+            StashPanelMessage::SetUnstashBranchName(name) => {
+                state.stash_panel.unstash_branch_name = name;
+            }
+            StashPanelMessage::ConfirmUnstashAsBranch => {
+                if let Some(index) = state.stash_panel.show_unstash_dialog.take() {
+                    let branch_name = state.stash_panel.unstash_branch_name.clone();
+                    if branch_name.trim().is_empty() {
+                        state.stash_panel.error = Some("分支名不能为空".to_string());
+                    } else if let Ok(repo) = require_repository(state) {
+                        match git_core::unstash_as_branch(&repo, index, &branch_name) {
+                            Ok(()) => {
+                                let _ = refresh_repository_after_action(state, &repo, false);
+                                state.stash_panel.success_message =
+                                    Some(format!("已应用到新分支 {branch_name}"));
+                                if let Some(current) = state.current_repository.clone() {
+                                    state.stash_panel.load_stashes(&current);
+                                }
+                            }
+                            Err(e) => {
+                                state.stash_panel.error =
+                                    Some(format!("应用到新分支失败: {e}"));
+                            }
+                        }
+                    }
+                }
+            }
+            StashPanelMessage::CancelUnstashDialog => {
+                state.stash_panel.show_unstash_dialog = None;
+            }
+            StashPanelMessage::ClearAllStashes => {
+                if let Ok(repo) = require_repository(state) {
+                    match git_core::stash_clear(&repo) {
+                        Ok(()) => {
+                            state.stash_panel.success_message = Some("所有储藏已清空".to_string());
+                            state.stash_panel.stashes.clear();
+                            state.stash_panel.selected_stash = None;
+                        }
+                        Err(e) => {
+                            state.stash_panel.error = Some(format!("清空储藏失败: {e}"));
+                        }
+                    }
+                }
+            }
             StashPanelMessage::TogglePreview(index) => {
                 if let Ok(repo) = require_repository(state) {
                     state.stash_panel.toggle_preview(&repo, index);
@@ -2771,11 +2938,32 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             RebaseEditorMessage::CycleTodoAction(index) => {
                 state.rebase_editor.cycle_todo_action(index);
             }
+            RebaseEditorMessage::SetTodoAction(index, action) => {
+                state.rebase_editor.set_todo_action(index, action);
+            }
             RebaseEditorMessage::MoveTodoUp(index) => {
                 state.rebase_editor.move_todo_up(index);
             }
             RebaseEditorMessage::MoveTodoDown(index) => {
                 state.rebase_editor.move_todo_down(index);
+            }
+            RebaseEditorMessage::StartInlineEdit(index) => {
+                state.rebase_editor.start_inline_edit(index);
+            }
+            RebaseEditorMessage::InlineEditChanged(text) => {
+                state.rebase_editor.inline_edit_text = text;
+            }
+            RebaseEditorMessage::ConfirmInlineEdit => {
+                state.rebase_editor.confirm_inline_edit();
+            }
+            RebaseEditorMessage::CancelInlineEdit => {
+                state.rebase_editor.cancel_inline_edit();
+            }
+            RebaseEditorMessage::OpenTodoContextMenu(index) => {
+                state.rebase_editor.context_menu_index = Some(index);
+            }
+            RebaseEditorMessage::CloseTodoContextMenu => {
+                state.rebase_editor.context_menu_index = None;
             }
             RebaseEditorMessage::StartRebase => {
                 if let Ok(repo) = require_repository(state) {
@@ -4130,6 +4318,18 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
 }
 
 fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Message> {
+    // Check full file preview first (for new/untracked/binary files)
+    if state.full_file_preview_binary {
+        return widgets::panel_empty_state_compact(
+            i18n.binary_file_no_preview,
+            state.selected_change_path.as_deref().unwrap_or(""),
+        );
+    }
+
+    if let Some(preview_diff) = &state.full_file_preview {
+        return widgets::diff_viewer::file_preview(preview_diff);
+    }
+
     if !state.show_diff || state.current_diff.is_none() {
         return widgets::panel_empty_state_compact(
             i18n.diff_empty,

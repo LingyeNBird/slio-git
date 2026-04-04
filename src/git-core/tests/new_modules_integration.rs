@@ -245,3 +245,94 @@ fn is_branch_merged_detects_merged_branch() {
     let merged = r.is_branch_merged("feature").unwrap();
     assert!(merged, "feature branch should be merged into main");
 }
+
+// ── T007: Uncommit ────────────────────────────────────────────────────────────
+
+#[test]
+fn uncommit_to_commit_soft_resets_and_preserves_staging() {
+    let repo = TestRepo::new().unwrap();
+    repo.add_and_commit("a.txt", "first", "commit 1").unwrap();
+    repo.add_and_commit("b.txt", "second", "commit 2").unwrap();
+    repo.add_and_commit("c.txt", "third", "commit 3").unwrap();
+
+    let r = Repository::discover(repo.path()).unwrap();
+    let history = git_core::get_history(&r, Some(10)).unwrap();
+    assert_eq!(history.len(), 3);
+
+    // Uncommit to commit 3 (the latest/HEAD) — removes only commit 3
+    // uncommit_to_commit resets to target^, so passing commit 3 resets to commit 2
+    let target_id = &history[0].id; // commit 3 (HEAD, newest)
+    git_core::uncommit_to_commit(&r, target_id).unwrap();
+
+    // Refresh and verify commits 1 and 2 remain
+    let r2 = Repository::discover(repo.path()).unwrap();
+    let history_after = git_core::get_history(&r2, Some(10)).unwrap();
+    assert_eq!(history_after.len(), 2, "commits 1 and 2 should remain after uncommitting commit 3");
+
+    // Changes from commit 3 (c.txt) should be in staging area
+    let status = git_core::index::get_status(&r2).unwrap();
+    let staged: Vec<_> = status.iter().filter(|c| c.staged).collect();
+    assert!(
+        !staged.is_empty(),
+        "c.txt should be staged after uncommit, got {} staged files",
+        staged.len()
+    );
+}
+
+// ── T008: Unstash as branch ──────────────────────────────────────────────────
+
+#[test]
+fn unstash_as_branch_creates_branch_and_applies_changes() {
+    let repo = TestRepo::new().unwrap();
+    repo.add_and_commit("a.txt", "base", "initial").unwrap();
+    repo.write_file("b.txt", "stashed content").unwrap();
+
+    // Stage and stash
+    std::process::Command::new("git")
+        .args(["add", "b.txt"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    git_core::stash_save(&Repository::discover(repo.path()).unwrap(), Some("test stash")).unwrap();
+
+    let r = Repository::discover(repo.path()).unwrap();
+    let stashes = git_core::list_stashes(&r).unwrap();
+    assert!(!stashes.is_empty());
+
+    // Unstash as new branch
+    git_core::unstash_as_branch(&r, 0, "stash-branch").unwrap();
+
+    // Verify new branch exists and is checked out
+    let r2 = Repository::discover(repo.path()).unwrap();
+    let current = r2.current_branch().unwrap();
+    assert_eq!(current.as_deref(), Some("stash-branch"));
+
+    // Verify file exists
+    assert!(repo.path().join("b.txt").exists());
+}
+
+// ── T009: Keep index stash ────────────────────────────────────────────────────
+
+#[test]
+fn stash_with_keep_index_preserves_staged_files() {
+    let repo = TestRepo::new().unwrap();
+    repo.add_and_commit("a.txt", "base", "initial").unwrap();
+
+    // Create two changes: one staged, one unstaged
+    repo.write_file("staged.txt", "staged content").unwrap();
+    std::process::Command::new("git")
+        .args(["add", "staged.txt"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    repo.write_file("unstaged.txt", "unstaged content").unwrap();
+
+    let r = Repository::discover(repo.path()).unwrap();
+    git_core::stash_save_with_options(&r, Some("keep index test"), false, true).unwrap();
+
+    // With keep-index, staged.txt should still be in the working tree
+    assert!(
+        repo.path().join("staged.txt").exists(),
+        "staged file should be preserved with --keep-index"
+    );
+}

@@ -5,8 +5,8 @@
 use crate::theme::{self, BadgeTone, Surface};
 use crate::widgets::{self, button, scrollable, text_input, OptionalPush};
 use git_core::Repository;
-use iced::widget::{text, Column, Container, Row, Text};
-use iced::{Alignment, Element, Length};
+use iced::widget::{mouse_area, text, Button, Column, Container, Row, Text};
+use iced::{Alignment, Color, Element, Length};
 
 const FIRST_TODO_ACTIONS: [&str; 4] = ["pick", "reword", "edit", "drop"];
 const OTHER_TODO_ACTIONS: [&str; 6] = ["pick", "reword", "edit", "fixup", "squash", "drop"];
@@ -21,8 +21,17 @@ pub enum RebaseEditorMessage {
     AbortRebase,
     OpenAmendForCurrentStep,
     CycleTodoAction(usize),
+    SetTodoAction(usize, String),
     MoveTodoUp(usize),
     MoveTodoDown(usize),
+    // Inline message editing (T045)
+    StartInlineEdit(usize),
+    InlineEditChanged(String),
+    ConfirmInlineEdit,
+    CancelInlineEdit,
+    // Right-click context menu (T046)
+    OpenTodoContextMenu(usize),
+    CloseTodoContextMenu,
     Refresh,
     Close,
 }
@@ -51,6 +60,14 @@ pub struct RebaseEditorState {
     pub is_loading: bool,
     pub error: Option<String>,
     pub success_message: Option<String>,
+    /// Index of the todo item currently being inline-edited (T045)
+    pub inline_edit_index: Option<usize>,
+    /// Current inline edit text
+    pub inline_edit_text: String,
+    /// Index of the todo item with open context menu (T046)
+    pub context_menu_index: Option<usize>,
+    /// Selected todo item index for detail panel (T043)
+    pub selected_todo_index: Option<usize>,
 }
 
 impl RebaseEditorState {
@@ -69,6 +86,10 @@ impl RebaseEditorState {
             is_loading: false,
             error: None,
             success_message: None,
+            inline_edit_index: None,
+            inline_edit_text: String::new(),
+            context_menu_index: None,
+            selected_todo_index: None,
         }
     }
 
@@ -365,6 +386,42 @@ impl RebaseEditorState {
         self.error = None;
     }
 
+    /// Set a specific action for a todo item (T046 context menu)
+    pub fn set_todo_action(&mut self, index: usize, action: String) {
+        if !self.todo_is_editable || index >= self.todo_list.len() {
+            return;
+        }
+        self.todo_list[index].action = action;
+        self.normalize_todo_constraints();
+        self.error = None;
+        self.context_menu_index = None;
+    }
+
+    /// Start inline editing of a todo item's message (T045)
+    pub fn start_inline_edit(&mut self, index: usize) {
+        if index < self.todo_list.len() {
+            self.inline_edit_text = self.todo_list[index].message.clone();
+            self.inline_edit_index = Some(index);
+        }
+    }
+
+    /// Confirm inline edit and update the message
+    pub fn confirm_inline_edit(&mut self) {
+        if let Some(index) = self.inline_edit_index {
+            if index < self.todo_list.len() {
+                self.todo_list[index].message = self.inline_edit_text.clone();
+            }
+        }
+        self.inline_edit_index = None;
+        self.inline_edit_text.clear();
+    }
+
+    /// Cancel inline edit
+    pub fn cancel_inline_edit(&mut self) {
+        self.inline_edit_index = None;
+        self.inline_edit_text.clear();
+    }
+
     fn normalize_todo_constraints(&mut self) {
         if let Some(first) = self.todo_list.first_mut() {
             let action = first.action.to_lowercase();
@@ -383,6 +440,7 @@ impl Default for RebaseEditorState {
 
 fn build_rebase_controls(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage> {
     if state.is_rebasing {
+        // In-progress rebase: continue/skip/abort
         let row = Row::new()
             .spacing(theme::spacing::XS)
             .push_maybe(
@@ -416,10 +474,61 @@ fn build_rebase_controls(state: &RebaseEditorState) -> Element<'_, RebaseEditorM
             .width(Length::Fill)
             .into()
     } else if state.has_interactive_draft() {
-        scrollable::styled_horizontal(Row::new().spacing(theme::spacing::XS).push(button::primary(
-            "开始交互式变基",
-            (!state.is_loading).then_some(RebaseEditorMessage::StartRebase),
-        )))
+        // IDEA-style toolbar: [↑上移] [↓下移] | [Pick] [Edit] | [开始] [重置]
+        let selected = state.selected_todo_index;
+        let has_selected = selected.is_some();
+        let can_move_up = selected.is_some_and(|i| i > 0);
+        let can_move_down =
+            selected.is_some_and(|i| i + 1 < state.todo_list.len());
+
+        scrollable::styled_horizontal(
+            Row::new()
+                .spacing(theme::spacing::XS)
+                .push(button::toolbar_icon(
+                    "↑",
+                    can_move_up.then(|| {
+                        RebaseEditorMessage::MoveTodoUp(selected.unwrap())
+                    }),
+                ))
+                .push(button::toolbar_icon(
+                    "↓",
+                    can_move_down.then(|| {
+                        RebaseEditorMessage::MoveTodoDown(selected.unwrap())
+                    }),
+                ))
+                .push(
+                    Text::new("│")
+                        .size(12)
+                        .color(theme::darcula::SEPARATOR),
+                )
+                .push(button::toolbar_icon(
+                    "Pick",
+                    (has_selected && state.todo_is_editable).then(|| {
+                        RebaseEditorMessage::SetTodoAction(
+                            selected.unwrap(),
+                            "pick".to_string(),
+                        )
+                    }),
+                ))
+                .push(button::toolbar_icon(
+                    "Edit",
+                    (has_selected && state.todo_is_editable).then(|| {
+                        RebaseEditorMessage::SetTodoAction(
+                            selected.unwrap(),
+                            "edit".to_string(),
+                        )
+                    }),
+                ))
+                .push(
+                    Text::new("│")
+                        .size(12)
+                        .color(theme::darcula::SEPARATOR),
+                )
+                .push(button::primary(
+                    "开始交互式变基",
+                    (!state.is_loading).then_some(RebaseEditorMessage::StartRebase),
+                )),
+        )
         .width(Length::Fill)
         .into()
     } else {
@@ -442,7 +551,7 @@ fn build_todo_list(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage
                 Text::new(if state.is_rebasing {
                     "当前没有额外的 todo 项可显示。"
                 } else {
-                    "还没有载入 todo 列表；可先从历史视图选择“从这里进行交互式变基”。"
+                    "还没有载入 todo 列表，可先从历史视图选择从这里进行交互式变基。"
                 })
                 .size(12)
                 .color(theme::darcula::TEXT_SECONDARY),
@@ -450,89 +559,137 @@ fn build_todo_list(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage
             .into();
     }
 
-    state
-        .todo_list
-        .iter()
-        .enumerate()
-        .fold(
-            Column::new().spacing(theme::spacing::XS),
-            |column, (index, item)| {
-                let action_chip: Element<'_, RebaseEditorMessage> = if state.todo_is_editable {
-                    button::secondary(
-                        todo_action_label(&item.action),
-                        (!state.is_loading).then_some(RebaseEditorMessage::CycleTodoAction(index)),
-                    )
-                    .into()
-                } else {
-                    widgets::info_chip::<RebaseEditorMessage>(
-                        todo_action_label(&item.action),
-                        todo_action_tone(&item.action),
-                    )
-                };
-
-                let move_controls = if state.todo_is_editable {
-                    Row::new()
-                        .spacing(theme::spacing::XS)
-                        .push(button::compact_ghost(
-                            "↑",
-                            (index > 0 && !state.is_loading)
-                                .then_some(RebaseEditorMessage::MoveTodoUp(index)),
-                        ))
-                        .push(button::compact_ghost(
-                            "↓",
-                            (index + 1 < state.todo_list.len() && !state.is_loading)
-                                .then_some(RebaseEditorMessage::MoveTodoDown(index)),
-                        ))
-                } else {
-                    Row::new()
-                };
-
-                column.push(
-                    Container::new(
-                        Row::new()
-                            .spacing(theme::spacing::SM)
-                            .align_y(Alignment::Center)
-                            .push(action_chip)
-                            .push(
-                                Column::new()
-                                    .spacing(2)
-                                    .width(Length::Fill)
-                                    .push(
-                                        Row::new()
-                                            .spacing(theme::spacing::XS)
-                                            .align_y(Alignment::Center)
-                                            .push(
-                                                Text::new(short_commit_id(&item.commit))
-                                                    .size(11)
-                                                    .color(theme::darcula::TEXT_DISABLED),
-                                            )
-                                            .push(
-                                                Text::new(&item.message)
-                                                    .size(12)
-                                                    .width(Length::Fill)
-                                                    .wrapping(text::Wrapping::WordOrGlyph),
-                                            ),
-                                    )
-                                    .push(
-                                        Text::new(format!("完整哈希 {}", item.commit))
-                                            .size(10)
-                                            .width(Length::Fill)
-                                            .wrapping(text::Wrapping::WordOrGlyph)
-                                            .color(theme::darcula::TEXT_SECONDARY),
-                                    ),
-                            )
-                            .push(move_controls),
-                    )
-                    .padding([6, 8])
-                    .style(theme::panel_style(if state.todo_is_editable {
-                        Surface::Raised
-                    } else {
-                        Surface::Panel
-                    })),
-                )
-            },
+    // IDEA-style 3-column table: 操作 | 哈希 | 消息
+    let header = Row::new()
+        .spacing(0)
+        .push(
+            Container::new(
+                Text::new("操作")
+                    .size(10)
+                    .color(theme::darcula::TEXT_DISABLED),
+            )
+            .width(Length::Fixed(80.0))
+            .padding([2, 8]),
         )
-        .into()
+        .push(
+            Container::new(
+                Text::new("哈希")
+                    .size(10)
+                    .color(theme::darcula::TEXT_DISABLED),
+            )
+            .width(Length::Fixed(80.0))
+            .padding([2, 4]),
+        )
+        .push(
+            Container::new(
+                Text::new("消息")
+                    .size(10)
+                    .color(theme::darcula::TEXT_DISABLED),
+            )
+            .width(Length::Fill)
+            .padding([2, 4]),
+        );
+
+    let mut table = Column::new().spacing(0).push(header);
+
+    for (index, item) in state.todo_list.iter().enumerate() {
+        let is_selected = state.selected_todo_index == Some(index);
+        let is_editing = state.inline_edit_index == Some(index);
+
+        // Column 1: Action (clickable to cycle)
+        let action_cell: Element<'_, RebaseEditorMessage> = if state.todo_is_editable {
+            Button::new(
+                Text::new(todo_action_label(&item.action))
+                    .size(11)
+                    .color(todo_action_color(&item.action)),
+            )
+            .style(theme::button_style(theme::ButtonTone::Ghost))
+            .padding([2, 4])
+            .on_press(RebaseEditorMessage::CycleTodoAction(index))
+            .into()
+        } else {
+            Text::new(todo_action_label(&item.action))
+                .size(11)
+                .color(todo_action_color(&item.action))
+                .into()
+        };
+
+        // Column 2: Short hash
+        let hash_cell = Text::new(short_commit_id(&item.commit))
+            .size(11)
+            .color(theme::darcula::TEXT_DISABLED);
+
+        // Column 3: Message (inline editable on double-click)
+        let message_cell: Element<'_, RebaseEditorMessage> = if is_editing {
+            text_input::styled(
+                "提交消息...",
+                &state.inline_edit_text,
+                RebaseEditorMessage::InlineEditChanged,
+            )
+            .into()
+        } else {
+            // Double-click to start editing
+            mouse_area(
+                Text::new(&item.message)
+                    .size(11)
+                    .width(Length::Fill)
+                    .wrapping(text::Wrapping::WordOrGlyph),
+            )
+            .on_double_click(RebaseEditorMessage::StartInlineEdit(index))
+            .interaction(iced::mouse::Interaction::Text)
+            .into()
+        };
+
+        let row = Row::new()
+            .spacing(0)
+            .align_y(Alignment::Center)
+            .push(
+                Container::new(action_cell)
+                    .width(Length::Fixed(80.0))
+                    .padding([3, 8]),
+            )
+            .push(
+                Container::new(hash_cell)
+                    .width(Length::Fixed(80.0))
+                    .padding([3, 4]),
+            )
+            .push(
+                Container::new(message_cell)
+                    .width(Length::Fill)
+                    .padding([3, 4]),
+            );
+
+        let row_surface = if is_selected {
+            Surface::ListSelection
+        } else {
+            Surface::ListRow
+        };
+
+        // Right-click context menu support
+        let row_area = mouse_area(
+            Container::new(row)
+                .width(Length::Fill)
+                .style(theme::panel_style(row_surface)),
+        )
+        .on_right_press(RebaseEditorMessage::OpenTodoContextMenu(index))
+        .interaction(iced::mouse::Interaction::Pointer);
+
+        table = table.push(row_area);
+    }
+
+    table.into()
+}
+
+/// Get color for a rebase action label
+fn todo_action_color(action: &str) -> Color {
+    match action.to_lowercase().as_str() {
+        "pick" => theme::darcula::TEXT_PRIMARY,
+        "reword" => theme::darcula::ACCENT,
+        "edit" => theme::darcula::WARNING,
+        "squash" | "fixup" => theme::darcula::STATUS_MODIFIED,
+        "drop" => theme::darcula::STATUS_DELETED,
+        _ => theme::darcula::TEXT_SECONDARY,
+    }
 }
 
 fn build_progress(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage> {
@@ -800,7 +957,8 @@ pub fn view(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage> {
                 .push_maybe(context_panel)
                 .push(branch_inputs)
                 .push(build_progress(state))
-                .push(build_rebase_controls(state)),
+                .push(build_rebase_controls(state))
+                .push_maybe(build_selected_todo_detail(state)),
         )
         .height(Length::Fill),
     )
@@ -809,6 +967,54 @@ pub fn view(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage> {
     .height(Length::Fill)
     .style(theme::panel_style(Surface::Panel))
     .into()
+}
+
+/// Build detail panel for the selected todo item (T043)
+fn build_selected_todo_detail(
+    state: &RebaseEditorState,
+) -> Option<Element<'_, RebaseEditorMessage>> {
+    let index = state.selected_todo_index?;
+    let item = state.todo_list.get(index)?;
+
+    Some(
+        Container::new(
+            Column::new()
+                .spacing(theme::spacing::XS)
+                .push(
+                    Text::new("提交详情")
+                        .size(12)
+                        .color(theme::darcula::TEXT_SECONDARY),
+                )
+                .push(
+                    Row::new()
+                        .spacing(theme::spacing::SM)
+                        .push(
+                            Text::new(short_commit_id(&item.commit))
+                                .size(11)
+                                .color(theme::darcula::TEXT_DISABLED),
+                        )
+                        .push(
+                            Text::new(todo_action_label(&item.action))
+                                .size(11)
+                                .color(todo_action_color(&item.action)),
+                        ),
+                )
+                .push(
+                    Text::new(&item.message)
+                        .size(12)
+                        .width(Length::Fill)
+                        .wrapping(text::Wrapping::WordOrGlyph),
+                )
+                .push(
+                    Text::new(format!("完整哈希: {}", item.commit))
+                        .size(10)
+                        .color(theme::darcula::TEXT_DISABLED),
+                ),
+        )
+        .padding([8, 12])
+        .style(theme::panel_style(Surface::Raised))
+        .into(),
+    )
 }
 
 fn allowed_todo_actions(index: usize) -> &'static [&'static str] {

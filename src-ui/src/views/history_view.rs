@@ -43,6 +43,12 @@ pub enum HistoryMessage {
     SquashCommitToPrevious(String),
     DropCommitFromHistory(String),
     OpenInteractiveRebaseFromCommit(String),
+    // 012: New commit actions matching IDEA Git.Log.ContextMenu
+    UncommitToHere(String),
+    PushUpToCommit(String),
+    // Multi-select for squash
+    ToggleMultiSelect(String),
+    SquashSelectedCommits,
     // Multi-tab log messages
     SelectLogTab(usize),
     CloseLogTab(usize),
@@ -72,6 +78,7 @@ pub struct HistoryState {
     pub error: Option<String>,
     pub search_query: String,
     pub is_searching: bool,
+    pub multi_selected_commits: Vec<String>,
     pub context_menu_commit: Option<String>,
     pub context_menu_cursor: Point,
     pub context_menu_anchor: Option<Point>,
@@ -91,6 +98,7 @@ impl HistoryState {
             error: None,
             search_query: String::new(),
             is_searching: false,
+            multi_selected_commits: Vec::new(),
             context_menu_commit: None,
             context_menu_cursor: Point::new(0.0, 0.0),
             context_menu_anchor: None,
@@ -685,13 +693,13 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
     let is_merge_commit = selected_info.is_some_and(|info| info.parent_ids.len() > 1);
     let is_root_commit = selected_info.is_some_and(|info| info.parent_ids.is_empty());
 
-    let compare_with_current_detail = if let Some(branch_name) = state.current_branch_name.as_ref()
+    let _compare_with_current_detail = if let Some(branch_name) = state.current_branch_name.as_ref()
     {
         format!("直接比较这条提交和当前分支 {branch_name} 的差异")
     } else {
         "当前为 detached HEAD，不能直接与当前分支比较".to_string()
     };
-    let compare_with_worktree_detail = if let Some(branch_name) = state.current_branch_name.as_ref()
+    let _compare_with_worktree_detail = if let Some(branch_name) = state.current_branch_name.as_ref()
     {
         format!("把这条提交和当前工作树直接做比较，基于 {branch_name} 继续判断")
     } else {
@@ -767,70 +775,81 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
         "当前为 detached HEAD，不能直接围绕当前分支开始交互式变基".to_string()
     };
 
+    // IDEA Git.Log.ContextMenu layout — 5 groups matching IntelliJ
     let actions = Column::new()
         .spacing(theme::spacing::XS)
+        // Group 1: 历史重写 (History Rewrite)
         .push(history_context_group(
-            "常用",
-            "复制、导出和快速查看。",
+            "历史重写",
+            "修改、压缩或删除本地提交历史。",
             vec![
                 history_context_action_row(
-                    "复制哈希",
-                    "把完整提交哈希复制到系统剪贴板".to_string(),
-                    Some(HistoryMessage::CopyCommitHash(entry.id.clone())),
+                    "修改提交消息",
+                    edit_message_detail,
+                    (!state.is_loading
+                        && commit_detail_ready
+                        && !is_merge_commit
+                        && has_current_branch)
+                        .then_some(HistoryMessage::EditCommitMessage(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "导出 Patch",
-                    "用 git format-patch 导出这条提交的补丁文件".to_string(),
-                    Some(HistoryMessage::ExportCommitPatch(entry.id.clone())),
-                    widgets::menu::MenuTone::Neutral,
+                    "Fixup 到此提交",
+                    fixup_detail,
+                    (!state.is_loading
+                        && commit_detail_ready
+                        && !is_merge_commit
+                        && !is_root_commit
+                        && has_current_branch)
+                        .then_some(HistoryMessage::FixupCommitToPrevious(entry.id.clone())),
+                    widgets::menu::MenuTone::Accent,
                 ),
                 history_context_action_row(
-                    "查看详情",
-                    "加载完整提交信息并保持当前列表上下文".to_string(),
-                    Some(HistoryMessage::SelectCommit(entry.id.clone())),
+                    "Squash 到此提交",
+                    squash_detail,
+                    (!state.is_loading
+                        && commit_detail_ready
+                        && !is_merge_commit
+                        && !is_root_commit
+                        && has_current_branch)
+                        .then_some(HistoryMessage::SquashCommitToPrevious(entry.id.clone())),
+                    widgets::menu::MenuTone::Accent,
+                ),
+                history_context_action_row(
+                    "丢弃提交",
+                    drop_detail,
+                    (!state.is_loading
+                        && commit_detail_ready
+                        && !is_merge_commit
+                        && has_current_branch)
+                        .then_some(HistoryMessage::DropCommitFromHistory(entry.id.clone())),
+                    widgets::menu::MenuTone::Danger,
+                ),
+                history_context_action_row(
+                    "交互式变基...",
+                    interactive_rebase_detail,
+                    (!state.is_loading && has_current_branch).then_some(
+                        HistoryMessage::OpenInteractiveRebaseFromCommit(entry.id.clone()),
+                    ),
                     widgets::menu::MenuTone::Neutral,
                 ),
             ],
         ))
+        // Group 2: 提交操作 (Commit Operations)
         .push(history_context_group(
-            "比较与派生",
-            "保留历史不动，围绕这条提交继续判断。",
+            "提交操作",
+            "还原或撤销提交。",
             vec![
                 history_context_action_row(
-                    "与当前分支比较",
-                    compare_with_current_detail,
-                    has_current_branch
-                        .then_some(HistoryMessage::CompareWithCurrent(entry.id.clone())),
+                    "还原提交",
+                    revert_detail,
+                    (!state.is_loading
+                        && commit_detail_ready
+                        && !is_merge_commit
+                        && has_current_branch)
+                        .then_some(HistoryMessage::PrepareRevertCommit(entry.id.clone())),
                     widgets::menu::MenuTone::Accent,
                 ),
-                history_context_action_row(
-                    "查看与工作树差异",
-                    compare_with_worktree_detail,
-                    (!state.is_loading)
-                        .then_some(HistoryMessage::CompareWithWorktree(entry.id.clone())),
-                    widgets::menu::MenuTone::Accent,
-                ),
-                history_context_action_row(
-                    "从该提交建分支",
-                    "保留当前分支不动，基于这条提交创建新分支".to_string(),
-                    (!state.is_loading)
-                        .then_some(HistoryMessage::PrepareCreateBranch(entry.id.clone())),
-                    widgets::menu::MenuTone::Neutral,
-                ),
-                history_context_action_row(
-                    "给该提交打标签",
-                    "在这条提交上创建一个新的标签".to_string(),
-                    (!state.is_loading)
-                        .then_some(HistoryMessage::PrepareTagFromCommit(entry.id.clone())),
-                    widgets::menu::MenuTone::Neutral,
-                ),
-            ],
-        ))
-        .push(history_context_group(
-            "应用到当前分支",
-            "会在当前分支生成新的提交。",
-            vec![
                 history_context_action_row(
                     "Cherry-pick",
                     cherry_pick_detail,
@@ -842,91 +861,73 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Accent,
                 ),
                 history_context_action_row(
-                    "Revert",
-                    revert_detail,
-                    (!state.is_loading
-                        && commit_detail_ready
-                        && !is_merge_commit
-                        && has_current_branch)
-                        .then_some(HistoryMessage::PrepareRevertCommit(entry.id.clone())),
+                    "撤销提交到此处",
+                    "从 HEAD 到该提交（含）全部撤销，改动返回暂存区".to_string(),
+                    (!state.is_loading && has_current_branch)
+                        .then_some(HistoryMessage::UncommitToHere(entry.id.clone())),
+                    widgets::menu::MenuTone::Danger,
+                ),
+            ],
+        ))
+        // Group 3: 引用操作 (Reference Operations)
+        .push(history_context_group(
+            "引用操作",
+            "从该提交创建新的分支或标签。",
+            vec![
+                history_context_action_row(
+                    "从此提交新建分支",
+                    "基于这条提交创建新分支".to_string(),
+                    (!state.is_loading)
+                        .then_some(HistoryMessage::PrepareCreateBranch(entry.id.clone())),
+                    widgets::menu::MenuTone::Neutral,
+                ),
+                history_context_action_row(
+                    "从此提交创建标签",
+                    "在这条提交上创建一个新的标签".to_string(),
+                    (!state.is_loading)
+                        .then_some(HistoryMessage::PrepareTagFromCommit(entry.id.clone())),
+                    widgets::menu::MenuTone::Neutral,
+                ),
+                history_context_action_row(
+                    "推送到此提交",
+                    push_to_here_detail,
+                    (!state.is_loading && has_current_branch && has_upstream).then_some(
+                        HistoryMessage::PushUpToCommit(entry.id.clone()),
+                    ),
                     widgets::menu::MenuTone::Accent,
                 ),
             ],
         ))
+        // Group 4: 重置 (Reset)
         .push(history_context_group(
-            "危险动作",
-            "会移动当前分支指针或直接发布到当前上游。",
+            "重置",
+            "移动当前分支指针。",
             vec![
                 history_context_action_row(
-                    "重置当前分支到这里",
+                    "重置当前分支到此处",
                     reset_detail,
                     (!state.is_loading && has_current_branch).then_some(
                         HistoryMessage::PrepareResetCurrentBranchToCommit(entry.id.clone()),
                     ),
                     widgets::menu::MenuTone::Danger,
                 ),
-                history_context_action_row(
-                    "推送当前分支到这里",
-                    push_to_here_detail,
-                    (!state.is_loading && has_current_branch && has_upstream).then_some(
-                        HistoryMessage::PreparePushCurrentBranchToCommit(entry.id.clone()),
-                    ),
-                    widgets::menu::MenuTone::Danger,
-                ),
             ],
         ))
+        // Group 5: 复制 (Copy)
         .push(history_context_group(
-            "历史整理",
-            "围绕本地提交改说明、压缩或删除历史。",
+            "复制",
+            "复制信息或导出补丁。",
             vec![
                 history_context_action_row(
-                    "编辑提交消息...",
-                    edit_message_detail,
-                    (!state.is_loading
-                        && commit_detail_ready
-                        && !is_merge_commit
-                        && has_current_branch)
-                        .then_some(HistoryMessage::EditCommitMessage(entry.id.clone())),
+                    "复制提交哈希",
+                    "把完整提交哈希复制到系统剪贴板".to_string(),
+                    Some(HistoryMessage::CopyCommitHash(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "Fixup...",
-                    fixup_detail,
-                    (!state.is_loading
-                        && commit_detail_ready
-                        && !is_merge_commit
-                        && !is_root_commit
-                        && has_current_branch)
-                        .then_some(HistoryMessage::FixupCommitToPrevious(entry.id.clone())),
-                    widgets::menu::MenuTone::Accent,
-                ),
-                history_context_action_row(
-                    "压缩到...",
-                    squash_detail,
-                    (!state.is_loading
-                        && commit_detail_ready
-                        && !is_merge_commit
-                        && !is_root_commit
-                        && has_current_branch)
-                        .then_some(HistoryMessage::SquashCommitToPrevious(entry.id.clone())),
-                    widgets::menu::MenuTone::Accent,
-                ),
-                history_context_action_row(
-                    "删除提交",
-                    drop_detail,
-                    (!state.is_loading
-                        && commit_detail_ready
-                        && !is_merge_commit
-                        && has_current_branch)
-                        .then_some(HistoryMessage::DropCommitFromHistory(entry.id.clone())),
-                    widgets::menu::MenuTone::Danger,
-                ),
-                history_context_action_row(
-                    "从这里进行交互式变基...",
-                    interactive_rebase_detail,
-                    (!state.is_loading && has_current_branch).then_some(
-                        HistoryMessage::OpenInteractiveRebaseFromCommit(entry.id.clone()),
-                    ),
+                    "导出 Patch",
+                    "用 git format-patch 导出这条提交的补丁文件".to_string(),
+                    Some(HistoryMessage::ExportCommitPatch(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
             ],

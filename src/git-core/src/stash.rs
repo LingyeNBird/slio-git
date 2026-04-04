@@ -79,10 +79,11 @@ pub fn stash_save_with_options(
     repo: &Repository,
     message: Option<&str>,
     include_untracked: bool,
+    keep_index: bool,
 ) -> Result<String, GitError> {
     info!(
-        "Saving changes to stash (include_untracked={})",
-        include_untracked
+        "Saving changes to stash (include_untracked={}, keep_index={})",
+        include_untracked, keep_index
     );
 
     let repo_path = repo.command_cwd();
@@ -90,6 +91,9 @@ pub fn stash_save_with_options(
     let mut args = vec!["stash".to_string(), "push".to_string()];
     if include_untracked {
         args.push("--include-untracked".to_string());
+    }
+    if keep_index {
+        args.push("--keep-index".to_string());
     }
     if let Some(msg) = message {
         args.push("-m".to_string());
@@ -282,4 +286,74 @@ pub fn stash_diff(repo: &Repository, index: u32) -> Result<String, GitError> {
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Apply a stash to a new branch (git stash branch <name> stash@{N}).
+/// Creates the branch, applies the stash, and removes it from the stash list.
+pub fn unstash_as_branch(
+    repo: &Repository,
+    index: u32,
+    branch_name: &str,
+) -> Result<(), GitError> {
+    info!(
+        "Applying stash@{{{}}} to new branch '{}'",
+        index, branch_name
+    );
+
+    let repo_path = repo.command_cwd();
+    let stash_ref = format!("stash@{{{}}}", index);
+
+    let output = Command::new("git")
+        .args(["stash", "branch", branch_name, &stash_ref])
+        .current_dir(&repo_path)
+        .output()
+        .map_err(|e| GitError::OperationFailed {
+            operation: "unstash_as_branch".to_string(),
+            details: format!("Failed to execute git stash branch: {}", e),
+        })?;
+
+    if !output.status.success() {
+        return Err(GitError::OperationFailed {
+            operation: "unstash_as_branch".to_string(),
+            details: format!(
+                "git stash branch failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        });
+    }
+
+    info!(
+        "Stash applied to new branch '{}' successfully",
+        branch_name
+    );
+    Ok(())
+}
+
+/// Clear all stashes (git stash clear)
+pub fn stash_clear(repo: &Repository) -> Result<(), GitError> {
+    info!("Clearing all stashes");
+
+    let repo_path = repo.command_cwd();
+
+    let output = Command::new("git")
+        .args(["stash", "clear"])
+        .current_dir(&repo_path)
+        .output()
+        .map_err(|e| GitError::OperationFailed {
+            operation: "stash_clear".to_string(),
+            details: format!("Failed to execute git stash clear: {}", e),
+        })?;
+
+    if !output.status.success() {
+        return Err(GitError::OperationFailed {
+            operation: "stash_clear".to_string(),
+            details: format!(
+                "git stash clear failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        });
+    }
+
+    info!("All stashes cleared");
+    Ok(())
 }

@@ -734,3 +734,40 @@ pub fn push_current_branch_to_commit(
 
     run_git_command(repo, "push", &args)
 }
+
+/// Uncommit: soft-reset from HEAD to the parent of the given commit.
+/// All changes from the removed commits are returned to the staging area.
+/// Equivalent to IDEA's "Uncommit" action.
+pub fn uncommit_to_commit(repo: &Repository, commit_id: &str) -> Result<(), GitError> {
+    info!(
+        "Uncommitting from HEAD to commit {} (soft reset to parent)",
+        commit_id
+    );
+
+    let repo_path = repo.command_cwd();
+
+    // Resolve the target commit's parent
+    let parent_ref = format!("{}^", commit_id);
+
+    let output = Command::new("git")
+        .args(["reset", "--soft", &parent_ref])
+        .current_dir(&repo_path)
+        .output()
+        .map_err(|e| GitError::OperationFailed {
+            operation: "uncommit_to_commit".to_string(),
+            details: format!("Failed to execute git reset --soft: {}", e),
+        })?;
+
+    if !output.status.success() {
+        return Err(GitError::OperationFailed {
+            operation: "uncommit_to_commit".to_string(),
+            details: format!(
+                "git reset --soft failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        });
+    }
+
+    info!("Uncommit completed — changes returned to staging area");
+    Ok(())
+}
