@@ -4095,7 +4095,7 @@ fn build_change_sections<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Eleme
     .view()
 }
 
-const CHANGE_CONTEXT_MENU_WIDTH: f32 = 228.0;
+const CHANGE_CONTEXT_MENU_WIDTH: f32 = 180.0;
 const CHANGE_CONTEXT_MENU_ESTIMATED_HEIGHT: f32 = 180.0;
 const CHANGE_CONTEXT_MENU_EDGE_PADDING: f32 = 8.0;
 
@@ -4124,53 +4124,48 @@ fn build_change_context_menu_overlay<'a>(state: &'a AppState) -> Element<'a, Mes
 
     let show_diff_enabled = state.selected_change_path.as_deref() != Some(path);
 
+    // IDEA-style compact file context menu — no subtitles, flat list
     let actions = Column::new()
-        .spacing(theme::spacing::XS)
-        .push(change_context_group(
-            "文件操作",
-            "针对选中文件的快速操作。",
-            vec![
-                change_context_action_row(
-                    "查看差异",
-                    "在右侧 diff 面板中显示该文件".to_string(),
-                    show_diff_enabled.then_some(Message::SelectChange(path.to_string())),
-                    widgets::menu::MenuTone::Neutral,
-                ),
-                change_context_action_row(
-                    stage_label,
-                    stage_detail,
-                    stage_message,
-                    widgets::menu::MenuTone::Accent,
-                ),
-                change_context_action_row(
-                    "回滚修改",
-                    "放弃该文件的所有本地修改（不可撤销）".to_string(),
-                    Some(Message::RevertFile(path.to_string())),
-                    widgets::menu::MenuTone::Danger,
-                ),
-                change_context_action_row(
-                    "复制路径",
-                    "将文件的相对路径复制到剪贴板".to_string(),
-                    Some(Message::CopyChangePath(path.to_string())),
-                    widgets::menu::MenuTone::Neutral,
-                ),
-                change_context_action_row(
-                    "显示历史",
-                    "在日志中查看该文件的提交记录".to_string(),
-                    Some(Message::ShowFileHistory(path.to_string())),
-                    widgets::menu::MenuTone::Neutral,
-                ),
-                change_context_action_row(
-                    "在编辑器中打开",
-                    "使用系统默认编辑器打开文件".to_string(),
-                    Some(Message::OpenInEditor(path.to_string())),
-                    widgets::menu::MenuTone::Neutral,
-                ),
-            ],
+        .spacing(0)
+        .push(change_context_action_row(
+            stage_label,
+            String::new(),
+            stage_message,
+            widgets::menu::MenuTone::Neutral,
+        ))
+        .push(change_context_action_row(
+            "查看差异",
+            String::new(),
+            show_diff_enabled.then_some(Message::SelectChange(path.to_string())),
+            widgets::menu::MenuTone::Neutral,
+        ))
+        .push(change_context_action_row(
+            "放弃更改",
+            String::new(),
+            Some(Message::RevertFile(path.to_string())),
+            widgets::menu::MenuTone::Danger,
+        ))
+        .push(change_context_action_row(
+            "显示历史",
+            String::new(),
+            Some(Message::ShowFileHistory(path.to_string())),
+            widgets::menu::MenuTone::Neutral,
+        ))
+        .push(change_context_action_row(
+            "复制路径",
+            String::new(),
+            Some(Message::CopyChangePath(path.to_string())),
+            widgets::menu::MenuTone::Neutral,
+        ))
+        .push(change_context_action_row(
+            "在编辑器中打开",
+            String::new(),
+            Some(Message::OpenInEditor(path.to_string())),
+            widgets::menu::MenuTone::Neutral,
         ));
 
     let menu = Container::new(actions)
-        .padding([8, 10])
+        .padding([4, 6])
         .width(Length::Fixed(CHANGE_CONTEXT_MENU_WIDTH))
         .style(widgets::menu::panel_style);
 

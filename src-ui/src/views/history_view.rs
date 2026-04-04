@@ -13,7 +13,7 @@ use git_core::{
 use iced::mouse;
 use iced::widget::canvas::{self, Canvas};
 use iced::widget::{mouse_area, opaque, stack, text, Button, Column, Container, Row, Space, Text};
-use iced::{Alignment, Color, Element, Length, Point, Rectangle, Renderer, Theme};
+use iced::{Alignment, Color, Element, Font, Length, Point, Rectangle, Renderer, Theme};
 use std::collections::HashSet;
 
 /// Message types for history view.
@@ -508,7 +508,6 @@ fn build_commit_row<'a>(
     is_menu_open: bool,
 ) -> Element<'a, HistoryMessage> {
     let subject = commit_subject(&entry.message);
-    let metadata = format!("{} · {}", short_commit_id(&entry.id), entry.author_name);
 
     let graph = Canvas::new(HistoryGraphCanvas {
         row: graph_row.clone(),
@@ -517,32 +516,42 @@ fn build_commit_row<'a>(
     .width(Length::Fixed(graph_width))
     .height(Length::Fixed(HISTORY_ROW_HEIGHT));
 
+    // IDEA-style compact row: graph | hash | message | author | date
     let row = Container::new(
         Row::new()
+            .spacing(theme::spacing::SM)
             .align_y(Alignment::Center)
             .push(graph)
             .push(
+                Text::new(short_commit_id(&entry.id))
+                    .size(11)
+                    .font(Font::MONOSPACE)
+                    .width(Length::Fixed(60.0))
+                    .wrapping(text::Wrapping::None)
+                    .color(theme::darcula::TEXT_DISABLED),
+            )
+            .push(
                 Text::new(subject)
-                    .size(13)
-                    .width(Length::FillPortion(5))
+                    .size(12)
+                    .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph),
             )
             .push(
-                Text::new(metadata)
+                Text::new(&entry.author_name)
                     .size(11)
-                    .width(Length::FillPortion(3))
+                    .width(Length::Fixed(100.0))
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY),
             )
             .push(
                 Text::new(format_relative_time(entry.timestamp))
                     .size(11)
-                    .width(Length::FillPortion(2))
+                    .width(Length::Fixed(80.0))
                     .wrapping(text::Wrapping::None)
-                    .color(theme::darcula::TEXT_SECONDARY),
+                    .color(theme::darcula::TEXT_DISABLED),
             ),
     )
-    .padding([4, 8])
+    .padding([2, 6])
     .style(theme::panel_style(if is_menu_open {
         Surface::Selection
     } else if is_selected {
@@ -926,60 +935,9 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
             ],
         ));
 
+    // IDEA-style: compact menu with just the action list, no verbose header
     let menu = Container::new(
-        Column::new()
-            .spacing(theme::spacing::MD)
-            .push(
-                Row::new()
-                    .spacing(theme::spacing::XS)
-                    .align_y(Alignment::Center)
-                    .push(
-                        Text::new(format!("提交动作 · {}", short_commit_id(&entry.id)))
-                            .size(12)
-                            .width(Length::Fill)
-                            .wrapping(text::Wrapping::WordOrGlyph),
-                    )
-                    .push(button::compact_ghost(
-                        "关闭",
-                        Some(HistoryMessage::CloseCommitContextMenu),
-                    )),
-            )
-            .push(
-                Text::new(commit_subject(&entry.message))
-                    .size(11)
-                    .width(Length::Fill)
-                    .wrapping(text::Wrapping::WordOrGlyph)
-                    .color(theme::darcula::TEXT_SECONDARY),
-            )
-            .push(
-                Row::new()
-                    .spacing(theme::spacing::XS)
-                    .push_maybe(state.current_branch_name.as_ref().map(|branch_name| {
-                        widgets::info_chip::<HistoryMessage>(
-                            format!("当前 {branch_name}"),
-                            BadgeTone::Success,
-                        )
-                    }))
-                    .push_maybe(state.current_upstream_ref.as_ref().map(|upstream_ref| {
-                        widgets::info_chip::<HistoryMessage>(
-                            format!("上游 {upstream_ref}"),
-                            BadgeTone::Neutral,
-                        )
-                    }))
-                    .push_maybe(state.current_branch_name.is_none().then(|| {
-                        widgets::info_chip::<HistoryMessage>("detached HEAD", BadgeTone::Warning)
-                    })),
-            )
-            .push_maybe(state.current_branch_state_hint.as_ref().map(|hint| {
-                Text::new(hint)
-                    .size(10)
-                    .width(Length::Fill)
-                    .wrapping(text::Wrapping::WordOrGlyph)
-                    .color(theme::darcula::TEXT_SECONDARY)
-            }))
-            .push(Container::new(
-                scrollable::styled(actions).height(Length::Fixed(250.0)),
-            )),
+        scrollable::styled(actions).height(Length::Shrink),
     )
     .padding([6, 8])
     .width(Length::Fixed(HISTORY_CONTEXT_MENU_WIDTH))
