@@ -16,9 +16,11 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt"] }
 
+serde = { workspace = true }
 serde_json = { workspace = true }
 dirs-next = { workspace = true }
 similar = "3.0.0"
+reqwest = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -145,10 +145,13 @@ impl HighlightedSegment {
             return render_segments(segments, diff_code_render_config());
         }
 
+        // Meld inline accent: #8ac2ff adapted for dark theme.
+        // Additions get a green-blue tint, deletions get a red-blue tint,
+        // both more prominent than the chunk fill to highlight exact changes.
         let change_bg = if is_addition {
-            Color::from_rgba(0.0, 0.68, 0.37, 0.30) // green tint for additions
+            Color::from_rgba(0.20, 0.62, 0.40, 0.35) // green-tinted inline accent
         } else {
-            Color::from_rgba(1.0, 0.32, 0.32, 0.30) // red tint for deletions
+            Color::from_rgba(0.65, 0.25, 0.25, 0.35) // red-tinted inline accent
         };
 
         // Build a position→color lookup from syntax segments

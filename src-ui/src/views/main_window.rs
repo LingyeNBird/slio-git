@@ -3,29 +3,23 @@
 use crate::components::rail_icons::{self, RailIcon};
 use crate::i18n::I18n;
 use crate::state::{
-    AppState, AuxiliaryView, FeedbackLevel, GitToolWindowTab, ProjectEntry, ShellSection,
+    AppState, AuxiliaryView, FeedbackLevel, GitToolWindowTab, ShellSection,
     StatusSeverity, ToolbarRemoteAction, ToolbarRemoteMenuState,
 };
 use crate::theme::{self, BadgeTone, ButtonTone, Surface};
 use crate::views;
 use crate::widgets::{self, button, scrollable, OptionalPush};
 use git_core::remote::RemoteInfo;
-use iced::widget::{container, rule, stack, text, Button, Column, Container, Row, Space, Text};
-use iced::{Alignment, Color, Element, Length};
+use iced::widget::{rule, stack, text, Button, Column, Container, Row, Space, Text};
+use iced::{Alignment, Element, Length};
 use std::path::PathBuf;
 
-const MAX_RAIL_PROJECTS: usize = 5;
+
 
 #[derive(Debug, Clone)]
 struct ChromeBadges {
     branch_badge: Option<(String, BadgeTone)>,
     sync_badge: Option<(String, BadgeTone)>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ChromeContextWidths {
-    repo: u16,
-    branch: u16,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +59,7 @@ pub struct MainWindow<'a, Message> {
     pub on_switch_git_tool_window_tab: Box<dyn Fn(GitToolWindowTab) -> Message + 'a>,
     pub on_dismiss_feedback: Message,
     pub on_dismiss_toast: Message,
+    pub on_show_settings: Message,
 }
 
 impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
@@ -96,6 +91,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         on_switch_git_tool_window_tab: impl Fn(GitToolWindowTab) -> Message + 'a,
         on_dismiss_feedback: Message,
         on_dismiss_toast: Message,
+        on_show_settings: Message,
     ) -> Self {
         Self {
             i18n,
@@ -124,6 +120,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             on_switch_git_tool_window_tab: Box::new(on_switch_git_tool_window_tab),
             on_dismiss_feedback,
             on_dismiss_toast,
+            on_show_settings,
         }
     }
 
@@ -155,6 +152,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             on_switch_git_tool_window_tab,
             on_dismiss_feedback,
             on_dismiss_toast,
+            on_show_settings,
         } = self;
 
         let banner = state
@@ -231,6 +229,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                     &on_close_toolbar_remote_menu,
                     &on_show_branches,
                     &on_open_repo,
+                    &on_show_settings,
                 ))
                 .push(rule::horizontal(1).style(theme::separator_rule_style()))
                 .push(workspace)
@@ -292,6 +291,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         on_close_toolbar_remote_menu: &Message,
         on_show_branches: &Message,
         on_open_repo: &Message,
+        on_show_settings: &Message,
     ) -> Element<'a, Message> {
         let context = &state.shell.context_switcher;
         let badges = Self::pick_branch_badges(
@@ -300,8 +300,6 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             context.sync_hint.as_deref(),
             &context.sync_label,
         );
-        let context_widths = Self::chrome_context_widths();
-
         // Project selector — name + ▾, opens project list (not branches)
         let repo_switcher = Button::new(
             Row::new()
@@ -382,7 +380,17 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                     .chrome
                     .has_staged_changes
                     .then_some(on_commit.clone()),
-            ));
+            ))
+            .push(
+                Button::new(Self::inline_icon(
+                    RailIcon::Settings,
+                    theme::darcula::TEXT_SECONDARY,
+                    14.0,
+                ))
+                .style(theme::button_style(ButtonTone::Ghost))
+                .padding([4, 6])
+                .on_press(on_show_settings.clone()),
+            );
 
         let primary_bar = Container::new(
             Row::new()
@@ -641,10 +649,6 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         }
     }
 
-    fn chrome_context_widths() -> ChromeContextWidths {
-        ChromeContextWidths { repo: 3, branch: 2 }
-    }
-
     fn editor_tab_strip(
         state: &'a AppState,
         on_switch_git_tool_window_tab: &dyn Fn(GitToolWindowTab) -> Message,
@@ -819,8 +823,8 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
     #[allow(clippy::too_many_arguments)]
     fn navigation_rail(
         state: &'a AppState,
-        on_open_repo: &Message,
-        on_switch_project: &dyn Fn(PathBuf) -> Message,
+        _on_open_repo: &Message,
+        _on_switch_project: &dyn Fn(PathBuf) -> Message,
         on_show_changes: &Message,
         on_show_conflicts: &Message,
         _on_show_history: &Message,
@@ -889,51 +893,6 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             .into()
     }
 
-    fn project_switch_button(
-        project: &ProjectEntry,
-        active: bool,
-        on_press: Option<Message>,
-    ) -> Element<'a, Message> {
-        // Generate a colored monogram avatar (like GitHub/GitLab default)
-        let monogram = Self::project_monogram(&project.name);
-        let bg_color = Self::project_color(&project.name);
-
-        let avatar = Container::new(
-            Text::new(monogram)
-                .size(10)
-                .color(Color::from_rgba(1.0, 1.0, 1.0, 0.85))
-                .width(Length::Fill),
-        )
-        .width(Length::Fixed(22.0))
-        .height(Length::Fixed(22.0))
-        .center_x(Length::Fill)
-        .center_y(Length::Fill)
-        .style(move |_: &_| container::Style {
-            background: Some(iced::Background::Color(bg_color)),
-            border: iced::Border {
-                radius: 6.0.into(),
-                width: 1.0,
-                color: Color::from_rgba(1.0, 1.0, 1.0, 0.08),
-            },
-            ..Default::default()
-        });
-
-        let btn = Button::new(avatar)
-            .style(|_, _| iced::widget::button::Style::default())
-            .padding(0);
-
-        let btn = if let Some(msg) = on_press {
-            btn.on_press(msg)
-        } else {
-            btn
-        };
-
-        Container::new(btn)
-            .width(Length::Fill)
-            .center_x(Length::Fill)
-            .into()
-    }
-
     fn rail_aux_button(
         icon: RailIcon,
         active: bool,
@@ -967,6 +926,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             AuxiliaryView::Stashes => RailIcon::Stashes,
             AuxiliaryView::Rebase => RailIcon::Rebase,
             AuxiliaryView::Worktrees => RailIcon::Repository,
+            AuxiliaryView::Settings => RailIcon::Repository,
         }
     }
 
@@ -984,31 +944,6 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         rail_icons::view(icon, color, theme::darcula::TEXT_PRIMARY, size)
     }
 
-    /// Generate a consistent muted color from a project name
-    fn project_color(name: &str) -> Color {
-        let hash: u32 = name.bytes().fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
-        // Muted dark-mode palette — low saturation, medium brightness
-        const PALETTE: &[(f32, f32, f32)] = &[
-            (0.22, 0.33, 0.52), // dark blue
-            (0.20, 0.42, 0.33), // dark green
-            (0.40, 0.25, 0.45), // dark purple
-            (0.50, 0.33, 0.22), // dark brown
-            (0.30, 0.38, 0.48), // dark slate
-            (0.25, 0.42, 0.42), // dark teal
-            (0.45, 0.30, 0.35), // dark rose
-            (0.35, 0.35, 0.25), // dark olive
-        ];
-        let (r, g, b) = PALETTE[(hash as usize) % PALETTE.len()];
-        Color::from_rgb(r, g, b)
-    }
-
-    fn project_monogram(name: &str) -> String {
-        // Single letter — cleaner in small icon
-        name.chars()
-            .find(|c| c.is_alphanumeric())
-            .map(|c| c.to_uppercase().to_string())
-            .unwrap_or_else(|| "G".to_string())
-    }
     fn welcome_status_bar(
         i18n: &'a I18n,
         state: &'a AppState,
@@ -1050,14 +985,6 @@ mod tests {
     use super::*;
     use crate::state::LightweightStatusSurface;
     use git_core::index::{Change, ChangeStatus};
-
-    #[test]
-    fn chrome_context_widths_leave_room_for_actions() {
-        assert_eq!(
-            MainWindow::<()>::chrome_context_widths(),
-            ChromeContextWidths { repo: 3, branch: 2 }
-        );
-    }
 
     #[test]
     fn pick_branch_badges_prefers_state_hint_over_secondary_label() {

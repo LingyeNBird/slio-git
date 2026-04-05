@@ -846,10 +846,26 @@ pub fn resolve_conflict_hunk(hunk: &ConflictHunk, resolution: &ConflictResolutio
 
 // ── Character-level inline diff (013 - similar crate) ─────────────────────
 
-/// Compute character-level change spans for paired deletion/addition lines.
-/// This powers GitHub-style inline highlighting where specific changed
-/// characters within a line are marked with a brighter background.
+/// Meld-compatible character-level inline diff.
+///
+/// Matches Meld's `InlineMyersSequenceMatcher` behavior:
+/// - Uses character-level diff (similar crate = Myers algorithm)
+/// - Filters out equal matches shorter than `MIN_MATCH_LEN` (3 chars), marking
+///   them as changed — this reduces visual noise from trivial shared characters
+/// - Skips inline diff entirely if total characters exceed `MAX_INLINE_CHARS` (20K)
+///   to avoid performance problems on very long lines
+const MIN_INLINE_MATCH_LEN: usize = 3;
+const MAX_INLINE_CHARS: usize = 20_000;
+
 pub fn compute_inline_changes(old_line: &str, new_line: &str) -> (Vec<InlineChangeSpan>, Vec<InlineChangeSpan>) {
+    // Meld threshold: skip inline diff for very long lines
+    if old_line.len() + new_line.len() > MAX_INLINE_CHARS {
+        return (
+            vec![InlineChangeSpan { start: 0, len: old_line.len(), changed: true }],
+            vec![InlineChangeSpan { start: 0, len: new_line.len(), changed: true }],
+        );
+    }
+
     use similar::{ChangeTag, TextDiff};
 
     let diff = TextDiff::from_chars(old_line, new_line);
@@ -864,8 +880,21 @@ pub fn compute_inline_changes(old_line: &str, new_line: &str) -> (Vec<InlineChan
 
         match change.tag() {
             ChangeTag::Equal => {
-                old_spans.push(InlineChangeSpan { start: old_pos, len, changed: false });
-                new_spans.push(InlineChangeSpan { start: new_pos, len, changed: false });
+                // Meld filter: equal matches shorter than 3 chars that are not at
+                // the very start or end are treated as changed (visual noise reduction)
+                let at_start = old_pos == 0 && new_pos == 0;
+                let at_end_old = old_pos + len == old_line.len();
+                let at_end_new = new_pos + len == new_line.len();
+                let too_short = len < MIN_INLINE_MATCH_LEN && !at_start && !(at_end_old && at_end_new);
+
+                if too_short {
+                    // Mark as changed on both sides
+                    old_spans.push(InlineChangeSpan { start: old_pos, len, changed: true });
+                    new_spans.push(InlineChangeSpan { start: new_pos, len, changed: true });
+                } else {
+                    old_spans.push(InlineChangeSpan { start: old_pos, len, changed: false });
+                    new_spans.push(InlineChangeSpan { start: new_pos, len, changed: false });
+                }
                 old_pos += len;
                 new_pos += len;
             }

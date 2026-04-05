@@ -18,6 +18,20 @@ pub fn styled<'a, Message: Clone + 'a>(
         .on_input(on_change)
 }
 
+pub fn styled_password<'a, Message: Clone + 'a>(
+    placeholder: &'a str,
+    value: &'a str,
+    on_change: impl Fn(String) -> Message + 'a,
+) -> TextInput<'a, Message> {
+    TextInput::new(placeholder, value)
+        .padding([5, 8])
+        .size(12)
+        .width(Length::Fill)
+        .secure(true)
+        .style(theme::text_input_style())
+        .on_input(on_change)
+}
+
 /// IDEA-style: search input with clear button extension
 /// When text is non-empty, shows a clear (×) button on the right
 /// Shows a search icon (🔎) on the left inside the input area

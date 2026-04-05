@@ -69,6 +69,10 @@ pub enum BranchPopupMessage {
     CancelDeleteBranch,
     Refresh,
     Close,
+    // Smart checkout dialog
+    SmartCheckout(String),
+    ForceCheckout(String),
+    CancelSmartCheckout,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,6 +155,12 @@ pub struct BranchPopupState {
     pub pending_delete_branch: Option<String>,
     /// Whether the pending delete branch is not fully merged (shows warning)
     pub pending_delete_not_merged: bool,
+    /// Smart checkout: branch name that triggered the conflict dialog
+    pub smart_checkout_branch: Option<String>,
+    /// Whether the smart checkout target is a remote branch
+    pub smart_checkout_is_remote: bool,
+    /// Files that would be overwritten by checkout
+    pub smart_checkout_affected_files: Vec<String>,
 }
 
 impl BranchPopupState {
@@ -183,6 +193,9 @@ impl BranchPopupState {
             context_menu_commit: None,
             pending_delete_branch: None,
             pending_delete_not_merged: false,
+            smart_checkout_branch: None,
+            smart_checkout_is_remote: false,
+            smart_checkout_affected_files: Vec::new(),
         }
     }
 
@@ -1477,11 +1490,176 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
         .push_maybe(build_status_panel(state))
         .push(branch_workspace);
 
-    Container::new(content)
+    let base: Element<'_, BranchPopupMessage> = Container::new(content)
         .width(Length::Fill)
         .height(Length::Fill)
         .style(theme::panel_style(Surface::Panel))
-        .into()
+        .into();
+
+    // IDEA-style: Smart checkout confirmation dialog overlay
+    if let Some(target_branch) = &state.smart_checkout_branch {
+        let dialog = build_smart_checkout_dialog(
+            target_branch,
+            &state.smart_checkout_affected_files,
+        );
+        return stack![
+            base,
+            opaque(
+                mouse_area(
+                    Container::new(dialog)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .center_x(Length::Fill)
+                        .center_y(Length::Fill)
+                        .style(|_: &Theme| container::Style {
+                            background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
+                            ..Default::default()
+                        })
+                )
+                .on_press(BranchPopupMessage::CancelSmartCheckout)
+            )
+        ]
+        .into();
+    }
+
+    base
+}
+
+/// IDEA-style Smart Checkout dialog.
+///
+/// Matches `GitSmartOperationDialog` layout:
+/// - Title: "Git 签出问题"
+/// - Description explaining stash→checkout→unstash
+/// - Scrollable affected file list
+/// - Three buttons: "智能签出" (primary), "强制签出" (left), "不签出" (cancel)
+fn build_smart_checkout_dialog<'a>(
+    target_branch: &str,
+    affected_files: &'a [String],
+) -> Element<'a, BranchPopupMessage> {
+    // ── Header ──
+    let header = Container::new(
+        Row::new()
+            .align_y(Alignment::Center)
+            .push(
+                Text::new("Git 签出问题")
+                    .size(14)
+                    .color(theme::darcula::TEXT_PRIMARY),
+            )
+            .push(Space::new().width(Length::Fill))
+            .push(button::compact_ghost(
+                "×",
+                Some(BranchPopupMessage::CancelSmartCheckout),
+            )),
+    )
+    .padding([6, 14])
+    .width(Length::Fill)
+    .style(theme::frame_style(Surface::Toolbar));
+
+    // ── Description (matches IDEA's north panel label) ──
+    let description = Container::new(
+        Text::new(format!(
+            "签出 {} 时，以下文件的本地更改将被覆盖。\
+             可以暂存 (stash) 这些更改，签出目标分支，然后自动恢复。",
+            target_branch
+        ))
+        .size(12)
+        .color(theme::darcula::TEXT_PRIMARY)
+        .wrapping(text::Wrapping::WordOrGlyph),
+    )
+    .padding([8, 14]);
+
+    // ── Affected file list (matches IDEA's ChangesBrowser / SimplePathsBrowser) ──
+    let file_list_content: Element<'a, BranchPopupMessage> = if affected_files.is_empty() {
+        Text::new("（无法获取受影响的文件列表）")
+            .size(11)
+            .color(theme::darcula::TEXT_DISABLED)
+            .into()
+    } else {
+        let mut col = Column::new().spacing(2);
+        for file in affected_files {
+            col = col.push(
+                Text::new(file.as_str())
+                    .size(12)
+                    .color(theme::darcula::TEXT_SECONDARY),
+            );
+        }
+        col.into()
+    };
+
+    let file_panel = Container::new(
+        Column::new()
+            .spacing(4)
+            .push(
+                Row::new()
+                    .spacing(theme::spacing::XS)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new("受影响的文件")
+                            .size(10)
+                            .color(theme::darcula::TEXT_DISABLED),
+                    )
+                    .push(widgets::compact_chip::<BranchPopupMessage>(
+                        affected_files.len().to_string(),
+                        BadgeTone::Warning,
+                    )),
+            )
+            .push(
+                Container::new(
+                    scrollable::styled(file_list_content).height(Length::Fixed(120.0)),
+                )
+                .padding([4, 6])
+                .width(Length::Fill)
+                .style(theme::panel_style(Surface::Editor)),
+            ),
+    )
+    .padding([4, 14]);
+
+    // ── Footer (IDEA layout: Force left | spacer | Don't | Smart) ──
+    let footer = Container::new(
+        Row::new()
+            .spacing(8)
+            .align_y(Alignment::Center)
+            .push(button::ghost(
+                "强制签出",
+                Some(BranchPopupMessage::ForceCheckout(target_branch.to_string())),
+            ))
+            .push(Space::new().width(Length::Fill))
+            .push(button::ghost(
+                "不签出",
+                Some(BranchPopupMessage::CancelSmartCheckout),
+            ))
+            .push(button::primary(
+                "智能签出",
+                Some(BranchPopupMessage::SmartCheckout(target_branch.to_string())),
+            )),
+    )
+    .padding([8, 14])
+    .width(Length::Fill)
+    .style(theme::frame_style(Surface::Toolbar));
+
+    // ── Assembly ──
+    Container::new(
+        Column::new()
+            .spacing(0)
+            .width(Length::Fill)
+            .push(header)
+            .push(iced::widget::rule::horizontal(1))
+            .push(description)
+            .push(file_panel)
+            .push(iced::widget::rule::horizontal(1))
+            .push(footer),
+    )
+    .width(Length::Fixed(440.0))
+    .style(|_: &Theme| container::Style {
+        background: Some(Background::Color(theme::darcula::BG_PANEL)),
+        border: Border {
+            width: 1.0,
+            color: theme::darcula::SEPARATOR,
+            radius: theme::radius::LG.into(),
+        },
+        ..Default::default()
+    })
+    .into()
 }
 
 fn build_status_panel<'a>(state: &'a BranchPopupState) -> Option<Element<'a, BranchPopupMessage>> {

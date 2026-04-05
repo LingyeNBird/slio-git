@@ -310,7 +310,7 @@ fn build_remote_row(remote: &RemoteInfo, is_selected: bool) -> Element<'_, Remot
                     Row::new()
                         .spacing(theme::spacing::XS)
                         .align_y(Alignment::Center)
-                        .push(Text::new(&remote.name).size(13))
+                        .push(Text::new(&remote.name).size(12))
                         .push(widgets::info_chip::<RemoteDialogMessage>(
                             "URL",
                             BadgeTone::Neutral,
@@ -326,7 +326,7 @@ fn build_remote_row(remote: &RemoteInfo, is_selected: bool) -> Element<'_, Remot
                     .color(theme::darcula::TEXT_SECONDARY),
             ),
     )
-    .padding([10, 12])
+    .padding([8, 14])
     .style(theme::panel_style(if is_selected {
         Surface::Selection
     } else {
@@ -373,8 +373,8 @@ fn build_remotes_list(state: &RemoteDialogState) -> Element<'_, RemoteDialogMess
                         } else {
                             "远程仓库"
                         })
-                        .size(13)
-                        .color(theme::darcula::TEXT_SECONDARY),
+                        .size(10)
+                        .color(theme::darcula::TEXT_DISABLED),
                     )
                     .push(widgets::info_chip::<RemoteDialogMessage>(
                         state.remotes.len().to_string(),
@@ -392,7 +392,7 @@ fn build_remotes_list(state: &RemoteDialogState) -> Element<'_, RemoteDialogMess
             )
             .push(scrollable::styled(list).height(Length::Fixed(150.0))),
     )
-    .padding([12, 12])
+    .padding([8, 14])
     .style(theme::panel_style(Surface::Panel))
     .into()
 }
@@ -412,7 +412,7 @@ fn build_credential_inputs(state: &RemoteDialogState) -> Element<'_, RemoteDialo
                 RemoteDialogMessage::SetPassword,
             )),
     )
-    .padding([12, 12])
+    .padding([8, 14])
     .style(theme::panel_style(Surface::Panel))
     .into()
 }
@@ -437,20 +437,20 @@ fn build_branch_scope_panel(state: &RemoteDialogState) -> Element<'_, RemoteDial
                 Row::new()
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
-                    .push(Text::new(&state.current_branch_display).size(14))
+                    .push(Text::new(&state.current_branch_display).size(12))
                     .push_maybe(remote_chip)
                     .push_maybe(state_chip)
                     .push_maybe(sync_chip),
             )
             .push(
                 Text::new(state.branch_scope_detail())
-                    .size(12)
+                    .size(11)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY),
             ),
     )
-    .padding([12, 12])
+    .padding([8, 14])
     .style(theme::panel_style(Surface::Panel))
     .into()
 }
@@ -515,7 +515,7 @@ fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
             .align_y(Alignment::Center)
             .push(
                 Text::new(format!("推送提交到 {}", remote_name))
-                    .size(13)
+                    .size(14)
                     .color(theme::darcula::TEXT_PRIMARY),
             )
             .push(iced::widget::Space::new().width(Length::Fill))
@@ -583,7 +583,7 @@ fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
                     .on_toggle(|_| RemoteDialogMessage::ToggleSetUpstream),
             ),
     )
-    .padding([10, 14]);
+    .padding([8, 14]);
 
     // ── Status ──
     let status: Option<Element<'_, RemoteDialogMessage>> = if let Some(error) = &state.error {
@@ -654,7 +654,7 @@ fn build_pull_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
             .align_y(Alignment::Center)
             .push(
                 Text::new(format!("拉取到 {}", branch))
-                    .size(13)
+                    .size(14)
                     .color(theme::darcula::TEXT_PRIMARY),
             )
             .push(iced::widget::Space::new().width(Length::Fill))
@@ -729,7 +729,7 @@ fn build_pull_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
                     .on_toggle(|_| RemoteDialogMessage::TogglePullSquash),
             ),
     )
-    .padding([10, 14]);
+    .padding([8, 14]);
 
     // ── Status ──
     let status: Option<Element<'_, RemoteDialogMessage>> = if let Some(error) = &state.error {
@@ -825,7 +825,7 @@ pub fn view(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
-            .push(Text::new("远程").size(16))
+            .push(Text::new("远程").size(14))
             .push(widgets::info_chip::<RemoteDialogMessage>(
                 format!("远程 {}", state.remotes.len()),
                 BadgeTone::Neutral,
@@ -841,13 +841,16 @@ pub fn view(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
                     .map(|remote| widgets::info_chip::<RemoteDialogMessage>(format!("已选 {remote}"), BadgeTone::Success)),
             ),
     )
-    .padding([10, 12])
-    .style(theme::panel_style(Surface::Panel));
+    .padding([6, 14])
+    .width(Length::Fill)
+    .style(theme::frame_style(Surface::Toolbar));
 
     let content = if state.remotes.is_empty() && !state.is_loading && state.error.is_none() {
         Column::new()
-            .spacing(theme::spacing::MD)
+            .spacing(0)
+            .width(Length::Fill)
             .push(toolbar)
+            .push(iced::widget::rule::horizontal(1))
             .push(build_branch_scope_panel(state))
             .push_maybe(status_panel)
             .push(widgets::panel_empty_state(
@@ -858,17 +861,21 @@ pub fn view(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
             ))
     } else {
         Column::new()
-            .spacing(theme::spacing::MD)
+            .spacing(0)
+            .width(Length::Fill)
             .push(toolbar)
+            .push(iced::widget::rule::horizontal(1))
             .push(build_branch_scope_panel(state))
+            .push(iced::widget::rule::horizontal(1))
             .push_maybe(status_panel)
             .push(build_remotes_list(state))
+            .push(iced::widget::rule::horizontal(1))
             .push(build_credential_inputs(state))
+            .push(iced::widget::rule::horizontal(1))
             .push(build_action_buttons(state))
     };
 
     Container::new(scrollable::styled(content).height(Length::Fill))
-        .padding([10, 12])
         .width(Length::Fill)
         .height(Length::Fill)
         .style(theme::panel_style(Surface::Panel))

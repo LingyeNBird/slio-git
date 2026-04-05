@@ -1,7 +1,7 @@
 //! Git settings view — matches IDEA's Version Control > Git settings panel.
 
-use crate::theme::{self, BadgeTone, Surface};
-use crate::widgets::{self, button, scrollable, text_input};
+use crate::theme::{self, Surface};
+use crate::widgets::{button, scrollable, text_input};
 use iced::widget::{Checkbox, Column, Container, Row, Space, Text};
 use iced::{Alignment, Element, Length};
 
@@ -23,6 +23,11 @@ pub enum SettingsMessage {
     ToggleStagingArea,
     // Fetch
     SetFetchTagsMode(FetchTagsMode),
+    // LLM
+    SetLlmApiUrl(String),
+    SetLlmApiKey(String),
+    SetLlmModel(String),
+    ToggleLlmEnabled,
     // Actions
     Close,
     SaveAndClose,
@@ -78,6 +83,11 @@ pub struct GitSettings {
     pub large_file_limit_mb: String,
     pub staging_area_enabled: bool,
     pub fetch_tags_mode: FetchTagsMode,
+    // LLM
+    pub llm_enabled: bool,
+    pub llm_api_url: String,
+    pub llm_api_key: String,
+    pub llm_model: String,
 }
 
 impl Default for GitSettings {
@@ -94,6 +104,10 @@ impl Default for GitSettings {
             large_file_limit_mb: "50".to_string(),
             staging_area_enabled: false,
             fetch_tags_mode: FetchTagsMode::Default,
+            llm_enabled: false,
+            llm_api_url: "https://api.deepseek.com/v1/chat/completions".to_string(),
+            llm_api_key: String::new(),
+            llm_model: "deepseek-chat".to_string(),
         }
     }
 }
@@ -124,7 +138,21 @@ impl GitSettings {
                 self.staging_area_enabled = !self.staging_area_enabled;
             }
             SettingsMessage::SetFetchTagsMode(mode) => self.fetch_tags_mode = *mode,
+            SettingsMessage::ToggleLlmEnabled => self.llm_enabled = !self.llm_enabled,
+            SettingsMessage::SetLlmApiUrl(val) => self.llm_api_url = val.clone(),
+            SettingsMessage::SetLlmApiKey(val) => self.llm_api_key = val.clone(),
+            SettingsMessage::SetLlmModel(val) => self.llm_model = val.clone(),
             SettingsMessage::Close | SettingsMessage::SaveAndClose => {}
+        }
+    }
+}
+
+impl GitSettings {
+    pub fn llm_config(&self) -> git_core::llm::LlmConfig {
+        git_core::llm::LlmConfig {
+            api_url: self.llm_api_url.clone(),
+            api_key: self.llm_api_key.clone(),
+            model: self.llm_model.clone(),
         }
     }
 }
@@ -265,6 +293,77 @@ pub fn view(settings: &GitSettings) -> Element<'_, SettingsMessage> {
     )
     .padding([8, 14]);
 
+    // ── AI 提交消息 ──
+    let llm_section = Container::new(
+        Column::new()
+            .spacing(6)
+            .push(
+                Text::new("AI 提交消息")
+                    .size(10)
+                    .color(theme::darcula::TEXT_DISABLED),
+            )
+            .push(checkbox_row(
+                settings.llm_enabled,
+                "启用 AI 生成提交消息 (OpenAI 兼容)",
+                SettingsMessage::ToggleLlmEnabled,
+            ))
+            .push(
+                Row::new()
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new("API 地址:")
+                            .size(12)
+                            .color(theme::darcula::TEXT_SECONDARY),
+                    )
+                    .push(
+                        Container::new(text_input::styled(
+                            "https://api.deepseek.com/v1/chat/completions",
+                            &settings.llm_api_url,
+                            SettingsMessage::SetLlmApiUrl,
+                        ))
+                        .width(Length::Fill),
+                    ),
+            )
+            .push(
+                Row::new()
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new("API 密钥:")
+                            .size(12)
+                            .color(theme::darcula::TEXT_SECONDARY),
+                    )
+                    .push(
+                        Container::new(text_input::styled_password(
+                            "sk-...",
+                            &settings.llm_api_key,
+                            SettingsMessage::SetLlmApiKey,
+                        ))
+                        .width(Length::Fill),
+                    ),
+            )
+            .push(
+                Row::new()
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new("模型名称:")
+                            .size(12)
+                            .color(theme::darcula::TEXT_SECONDARY),
+                    )
+                    .push(
+                        Container::new(text_input::styled(
+                            "deepseek-chat",
+                            &settings.llm_model,
+                            SettingsMessage::SetLlmModel,
+                        ))
+                        .width(Length::Fixed(200.0)),
+                    ),
+            ),
+    )
+    .padding([8, 14]);
+
     // ── Footer ──
     let footer = Container::new(
         Row::new()
@@ -293,6 +392,8 @@ pub fn view(settings: &GitSettings) -> Element<'_, SettingsMessage> {
         .push(update_section)
         .push(iced::widget::rule::horizontal(1))
         .push(fetch_section)
+        .push(iced::widget::rule::horizontal(1))
+        .push(llm_section)
         .push(Space::new().height(Length::Fill))
         .push(iced::widget::rule::horizontal(1))
         .push(footer);

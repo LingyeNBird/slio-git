@@ -23,6 +23,8 @@ pub enum CommitDialogMessage {
     CancelPressed,
     ToggleRecentMessages,
     SelectRecentMessage(usize),
+    GenerateCommitMessage,
+    GenerateCommitMessageResult(Result<String, String>),
 }
 
 /// State for the commit dialog.
@@ -37,6 +39,7 @@ pub struct CommitDialogState {
     pub selected_files: Vec<String>,
     pub previewed_file: Option<String>,
     pub is_committing: bool,
+    pub is_generating: bool,
     pub error: Option<String>,
     pub success_message: Option<String>,
 }
@@ -57,6 +60,7 @@ impl CommitDialogState {
             selected_files: Vec::new(),
             previewed_file: None,
             is_committing: false,
+            is_generating: false,
             error: None,
             success_message: None,
         }
@@ -78,6 +82,7 @@ impl CommitDialogState {
             selected_files: selected_files.clone(),
             previewed_file: initial_preview_path(&selected_files, diff),
             is_committing: false,
+            is_generating: false,
             error: None,
             success_message: None,
         }
@@ -99,6 +104,7 @@ impl CommitDialogState {
             selected_files: selected_files.clone(),
             previewed_file: initial_preview_path(&selected_files, diff),
             is_committing: false,
+            is_generating: false,
             error: None,
             success_message: None,
         }
@@ -246,6 +252,7 @@ impl Clone for CommitDialogState {
             selected_files: self.selected_files.clone(),
             previewed_file: self.previewed_file.clone(),
             is_committing: self.is_committing,
+            is_generating: self.is_generating,
             error: self.error.clone(),
             success_message: self.success_message.clone(),
         }

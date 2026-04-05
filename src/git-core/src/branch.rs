@@ -226,6 +226,112 @@ impl Repository {
         Ok(())
     }
 
+    /// List uncommitted changed file paths (staged + unstaged).
+    pub fn list_uncommitted_files(&self) -> Vec<String> {
+        let repo_path = self.command_cwd();
+        Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&repo_path)
+            .output()
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .filter_map(|line| {
+                        // porcelain format: "XY filename" — skip first 3 chars
+                        line.get(3..).map(|s| s.to_string())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Check if the working tree has uncommitted changes (staged or unstaged).
+    pub fn has_uncommitted_changes(&self) -> bool {
+        let repo_path = self.command_cwd();
+        // `git status --porcelain` outputs nothing when clean
+        Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&repo_path)
+            .output()
+            .map(|o| !o.stdout.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Check if a checkout error is due to uncommitted changes that would be overwritten.
+    pub fn is_checkout_conflict_error(error: &GitError) -> bool {
+        let msg = error.to_string().to_lowercase();
+        msg.contains("would be overwritten")
+            || msg.contains("please commit your changes or stash them")
+            || msg.contains("local changes")
+    }
+
+    /// Force checkout — discards all local changes.
+    pub fn force_checkout_branch(&self, name: &str) -> Result<(), GitError> {
+        info!("Force checking out branch '{}' (discarding changes)", name);
+        let repo_path = self.command_cwd();
+        let output = Command::new("git")
+            .args(["checkout", "--force", name])
+            .current_dir(&repo_path)
+            .output()
+            .map_err(|e| GitError::OperationFailed {
+                operation: "force_checkout_branch".to_string(),
+                details: format!("Failed to execute git checkout --force: {}", e),
+            })?;
+
+        if !output.status.success() {
+            return Err(GitError::OperationFailed {
+                operation: "force_checkout_branch".to_string(),
+                details: format!(
+                    "git checkout --force failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    /// Smart checkout — stash changes, checkout, then pop stash.
+    pub fn smart_checkout_branch(&self, name: &str) -> Result<(), GitError> {
+        info!("Smart checking out branch '{}' (stash → checkout → unstash)", name);
+        let repo_path = self.command_cwd();
+
+        // Step 1: stash including untracked files
+        let stash_output = Command::new("git")
+            .args(["stash", "push", "-m", "slio-git: smart checkout auto-stash", "--include-untracked"])
+            .current_dir(&repo_path)
+            .output()
+            .map_err(|e| GitError::OperationFailed {
+                operation: "smart_checkout_branch.stash".to_string(),
+                details: format!("Failed to stash: {}", e),
+            })?;
+
+        let stash_created = stash_output.status.success()
+            && !String::from_utf8_lossy(&stash_output.stdout).contains("No local changes");
+
+        // Step 2: checkout
+        let checkout_result = self.checkout_branch(name);
+
+        // Step 3: if stash was created, pop it regardless of checkout result
+        if stash_created {
+            let pop_output = Command::new("git")
+                .args(["stash", "pop"])
+                .current_dir(&repo_path)
+                .output();
+
+            if let Err(e) = &pop_output {
+                info!("Warning: stash pop failed after smart checkout: {}", e);
+            } else if let Ok(output) = &pop_output {
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    info!("Warning: stash pop had conflicts: {}", stderr);
+                    // Conflicts from stash pop are expected — user will see them in the UI
+                }
+            }
+        }
+
+        checkout_result
+    }
+
     /// Checkout a branch
     pub fn checkout_branch(&self, name: &str) -> Result<(), GitError> {
         info!("Checking out branch '{}'", name);

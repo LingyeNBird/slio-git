@@ -46,6 +46,7 @@ pub mod git_utils;
 pub mod graph;
 pub mod history;
 pub mod index;
+pub mod llm;
 pub mod rebase;
 pub mod remote;
 pub mod repository;

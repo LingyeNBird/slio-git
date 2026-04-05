@@ -13,6 +13,7 @@ use iced::{Alignment, Element, Length};
 pub fn view<'a>(
     state: &'a CommitDialogState,
     recent_messages: &'a [String],
+    llm_enabled: bool,
 ) -> Element<'a, CommitDialogMessage> {
     let status_panel = if state.is_committing {
         Some(build_compact_status(
@@ -60,9 +61,25 @@ pub fn view<'a>(
             .into()
     };
 
+    let ai_button: Element<'_, CommitDialogMessage> = if llm_enabled {
+        if state.is_generating {
+            button::secondary("✦ 生成中...", None::<CommitDialogMessage>).into()
+        } else {
+            let can_generate = state.has_files_to_commit() && !state.is_committing;
+            button::secondary(
+                "✦ AI 生成",
+                can_generate.then_some(CommitDialogMessage::GenerateCommitMessage),
+            )
+            .into()
+        }
+    } else {
+        Space::new().width(Length::Shrink).into()
+    };
+
     let actions = Row::new()
         .spacing(theme::spacing::XS)
         .align_y(Alignment::Center)
+        .push(ai_button)
         .push(history_button)
         .push(amend_checkbox)
         .push(Space::new().width(Length::Fill))

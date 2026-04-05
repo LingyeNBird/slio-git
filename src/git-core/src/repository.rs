@@ -363,7 +363,7 @@ pub(crate) fn compact_branch_sync_hint(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_remote_name_from_ref;
+    use super::*;
 
     #[test]
     fn parse_remote_name_from_ref_extracts_remote_segment() {
@@ -374,6 +374,213 @@ mod tests {
         );
         assert_eq!(parse_remote_name_from_ref("main"), None);
         assert_eq!(parse_remote_name_from_ref(""), None);
+    }
+
+    // ── SyncStatus tests ────────────────────────────────────────────────────────
+
+    #[test]
+    fn sync_status_display_text_formats_correctly() {
+        assert_eq!(SyncStatus::Ahead(3).display_text(), "↑3");
+        assert_eq!(SyncStatus::Behind(5).display_text(), "↓5");
+        assert_eq!(
+            SyncStatus::Diverged { ahead: 2, behind: 4 }.display_text(),
+            "↕2/4"
+        );
+        assert_eq!(SyncStatus::Synced.display_text(), "✓");
+        assert_eq!(SyncStatus::NoUpstream.display_text(), "○");
+        assert_eq!(SyncStatus::Unknown.display_text(), "?");
+    }
+
+    #[test]
+    fn sync_status_display_color_returns_rgb_values() {
+        // Just verify all variants return valid color arrays
+        let _ = SyncStatus::Ahead(1).display_color();
+        let _ = SyncStatus::Behind(1).display_color();
+        let _ = SyncStatus::Diverged { ahead: 1, behind: 1 }.display_color();
+        let _ = SyncStatus::Synced.display_color();
+        let _ = SyncStatus::NoUpstream.display_color();
+        let _ = SyncStatus::Unknown.display_color();
+    }
+
+    // ── compact_branch_sync_hint tests ─────────────────────────────────────────
+
+    #[test]
+    fn compact_branch_sync_hint_with_upstream_and_status() {
+        assert_eq!(
+            compact_branch_sync_hint(Some("origin/main"), Some("↑2")),
+            Some("↑2 origin/main".to_string())
+        );
+    }
+
+    #[test]
+    fn compact_branch_sync_hint_with_upstream_only() {
+        assert_eq!(
+            compact_branch_sync_hint(Some("origin/main"), None),
+            Some("origin/main".to_string())
+        );
+    }
+
+    #[test]
+    fn compact_branch_sync_hint_with_status_only() {
+        assert_eq!(
+            compact_branch_sync_hint(None, Some("↓5")),
+            Some("↓5".to_string())
+        );
+    }
+
+    #[test]
+    fn compact_branch_sync_hint_returns_none_when_empty() {
+        assert_eq!(compact_branch_sync_hint(None, None), None);
+        assert_eq!(compact_branch_sync_hint(Some(""), Some("")), None);
+        assert_eq!(compact_branch_sync_hint(None, Some("")), None);
+    }
+
+    // ── compact_relative_time tests ────────────────────────────────────────────
+
+    #[test]
+    fn compact_relative_time_returns_none_for_none() {
+        assert_eq!(compact_relative_time(None), None);
+    }
+
+    #[test]
+    fn compact_relative_time_formats_recent_commits() {
+        let now = Local::now().timestamp();
+        let five_minutes_ago = now - 5 * 60;
+        let result = compact_relative_time(Some(five_minutes_ago));
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("分钟前"));
+    }
+
+    #[test]
+    fn compact_relative_time_formats_hours() {
+        let now = Local::now().timestamp();
+        let three_hours_ago = now - 3 * 3600;
+        let result = compact_relative_time(Some(three_hours_ago));
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("小时前"));
+    }
+
+    #[test]
+    fn compact_relative_time_formats_days() {
+        let now = Local::now().timestamp();
+        let two_days_ago = now - 2 * 24 * 3600;
+        let result = compact_relative_time(Some(two_days_ago));
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("天前"));
+    }
+
+    #[test]
+    fn compact_relative_time_formats_old_commits_as_date() {
+        let now = Local::now().timestamp();
+        let ten_days_ago = now - 10 * 24 * 3600;
+        let result = compact_relative_time(Some(ten_days_ago));
+        assert!(result.is_some());
+        // Should be in MM-DD format
+        let formatted = result.unwrap();
+        assert!(formatted.contains('-'));
+    }
+
+    // ── RepositoryManager tests ────────────────────────────────────────────────
+
+    #[test]
+    fn repository_manager_new_is_empty() {
+        let manager = RepositoryManager::new();
+        assert!(manager.is_empty());
+        assert_eq!(manager.len(), 0);
+    }
+
+    #[test]
+    fn repository_manager_default_is_empty() {
+        let manager: RepositoryManager = Default::default();
+        assert!(manager.is_empty());
+    }
+
+    #[test]
+    fn repository_manager_init_adds_repository() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut manager = RepositoryManager::new();
+
+        let repo = manager.init(temp_dir.path()).unwrap();
+        let repo_path = repo.path.clone();
+        assert_eq!(manager.len(), 1);
+        assert!(!manager.is_empty());
+
+        // Verify we can get it back
+        let retrieved = manager.get(&repo_path);
+        assert!(retrieved.is_some());
+    }
+
+    #[test]
+    fn repository_manager_open_discovers_repository() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        // First init a repo
+        let _ = Repository::init(temp_dir.path()).unwrap();
+
+        let mut manager = RepositoryManager::new();
+        let repo = manager.open(temp_dir.path()).unwrap();
+        let repo_path = repo.path.clone();
+
+        assert_eq!(manager.len(), 1);
+        let retrieved = manager.get(&repo_path);
+        assert!(retrieved.is_some());
+    }
+
+    #[test]
+    fn repository_manager_remove_deletes_repository() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut manager = RepositoryManager::new();
+        let repo = manager.init(temp_dir.path()).unwrap();
+        let path = repo.path.clone();
+
+        assert!(manager.remove(&path));
+        assert!(manager.is_empty());
+        assert!(!manager.remove(&path)); // Second remove should return false
+    }
+
+    #[test]
+    fn repository_manager_list_returns_all_repositories() {
+        let temp_dir1 = tempfile::tempdir().unwrap();
+        let temp_dir2 = tempfile::tempdir().unwrap();
+
+        let mut manager = RepositoryManager::new();
+        manager.init(temp_dir1.path()).unwrap();
+        manager.init(temp_dir2.path()).unwrap();
+
+        let list = manager.list();
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn repository_manager_get_returns_none_for_unknown_path() {
+        let manager = RepositoryManager::new();
+        let unknown_path = PathBuf::from("/nonexistent/path");
+        assert!(manager.get(&unknown_path).is_none());
+    }
+
+    // ── RepositoryState tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn repository_state_debug_and_clone() {
+        let state = RepositoryState::Clean;
+        let cloned = state.clone();
+        assert_eq!(state, cloned);
+        assert_eq!(format!("{:?}", state), "Clean");
+    }
+
+    #[test]
+    fn repository_state_all_variants() {
+        // Just verify all variants can be created and compared
+        let states = vec![
+            RepositoryState::Clean,
+            RepositoryState::Dirty,
+            RepositoryState::Merging,
+            RepositoryState::Rebasing,
+            RepositoryState::ApplyMailbox,
+            RepositoryState::Bisect,
+            RepositoryState::CherryPick,
+            RepositoryState::Revert,
+        ];
+        assert_eq!(states.len(), 8);
     }
 }
 

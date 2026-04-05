@@ -1140,6 +1140,94 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         iced::widget::text_editor::Content::with_text(&msg);
                 }
             }
+            CommitDialogMessage::GenerateCommitMessage => {
+                if !state.git_settings.llm_enabled {
+                    state
+                        .commit_dialog
+                        .set_error("请先在设置中启用并配置 AI 提交消息。".to_string());
+                    return Task::none();
+                }
+                state.commit_dialog.is_generating = true;
+                state.commit_dialog.error = None;
+
+                // Gather diff summary from staged files
+                let diff_summary = state
+                    .commit_dialog
+                    .diff
+                    .files
+                    .iter()
+                    .map(|f| {
+                        let path = f
+                            .new_path
+                            .as_deref()
+                            .or(f.old_path.as_deref())
+                            .unwrap_or("?");
+                        let stats = format!("+{} -{}", f.additions, f.deletions);
+                        let hunks: String = f
+                            .hunks
+                            .iter()
+                            .flat_map(|h| h.lines.iter())
+                            .take(80)
+                            .map(|l| {
+                                let prefix = match l.origin {
+                                    git_core::diff::DiffLineOrigin::Addition => "+",
+                                    git_core::diff::DiffLineOrigin::Deletion => "-",
+                                    _ => " ",
+                                };
+                                format!("{}{}\n", prefix, l.content)
+                            })
+                            .collect();
+                        format!("--- {path} ({stats})\n{hunks}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                // Branch name for context
+                let branch_name = state.shell.context_switcher.branch_name.clone();
+
+                // Gather recent git log messages (actual commits, not just saved messages)
+                let recent_logs: Vec<String> = if let Some(repo) = &state.current_repository {
+                    git_core::get_history(repo, Some(15))
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|entry| entry.message)
+                        .collect()
+                } else {
+                    state.recent_commit_messages.clone()
+                };
+
+                let config = state.git_settings.llm_config();
+
+                return Task::perform(
+                    async move {
+                        git_core::llm::generate_commit_message(
+                            &config,
+                            &branch_name,
+                            &diff_summary,
+                            &recent_logs,
+                        )
+                        .await
+                    },
+                    |result| {
+                        Message::CommitDialogMessage(
+                            CommitDialogMessage::GenerateCommitMessageResult(result),
+                        )
+                    },
+                );
+            }
+            CommitDialogMessage::GenerateCommitMessageResult(result) => {
+                state.commit_dialog.is_generating = false;
+                match result {
+                    Ok(msg) => {
+                        state.commit_dialog.message = msg.clone();
+                        state.commit_dialog.message_editor =
+                            iced::widget::text_editor::Content::with_text(&msg);
+                    }
+                    Err(err) => {
+                        state.commit_dialog.set_error(err);
+                    }
+                }
+            }
         },
         Message::BranchPopupMessage(message) => {
             if branch_popup_message_closes_context_menu(&message) {
@@ -1321,15 +1409,27 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::CheckoutBranch(name) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.checkout_branch(&repo, name);
+                        state.branch_popup.checkout_branch(&repo, name.clone());
                         if let Some(error) = state.branch_popup.error.clone() {
-                            report_async_failure(
-                                state,
-                                "切换分支失败",
-                                error,
-                                "workspace.branches",
-                                "workspace.branches.checkout",
-                            );
+                            // Detect uncommitted changes conflict → show smart checkout dialog
+                            if error.contains("would be overwritten")
+                                || error.contains("please commit your changes or stash")
+                                || error.contains("local changes")
+                            {
+                                state.branch_popup.error = None;
+                                state.branch_popup.smart_checkout_affected_files =
+                                    repo.list_uncommitted_files();
+                                state.branch_popup.smart_checkout_branch = Some(name);
+                                state.branch_popup.smart_checkout_is_remote = false;
+                            } else {
+                                report_async_failure(
+                                    state,
+                                    "切换分支失败",
+                                    error,
+                                    "workspace.branches",
+                                    "workspace.branches.checkout",
+                                );
+                            }
                         } else if let Err(error) =
                             refresh_repository_after_action(state, &repo, false)
                         {
@@ -1351,15 +1451,28 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::CheckoutRemoteBranch(remote_ref) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.checkout_remote_branch(&repo, remote_ref);
+                        state
+                            .branch_popup
+                            .checkout_remote_branch(&repo, remote_ref.clone());
                         if let Some(error) = state.branch_popup.error.clone() {
-                            report_async_failure(
-                                state,
-                                "签出远程分支失败",
-                                error,
-                                "workspace.branches",
-                                "workspace.branches.checkout_remote",
-                            );
+                            if error.contains("would be overwritten")
+                                || error.contains("please commit your changes or stash")
+                                || error.contains("local changes")
+                            {
+                                state.branch_popup.error = None;
+                                state.branch_popup.smart_checkout_affected_files =
+                                    repo.list_uncommitted_files();
+                                state.branch_popup.smart_checkout_branch = Some(remote_ref);
+                                state.branch_popup.smart_checkout_is_remote = true;
+                            } else {
+                                report_async_failure(
+                                    state,
+                                    "签出远程分支失败",
+                                    error,
+                                    "workspace.branches",
+                                    "workspace.branches.checkout_remote",
+                                );
+                            }
                         } else if let Err(error) =
                             refresh_repository_after_action(state, &repo, false)
                         {
@@ -1378,6 +1491,82 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             }
                         }
                     }
+                }
+                BranchPopupMessage::SmartCheckout(name) => {
+                    state.branch_popup.smart_checkout_branch = None;
+                    state.branch_popup.smart_checkout_affected_files.clear();
+                    if let Ok(repo) = require_repository(state) {
+                        state.branch_popup.is_loading = true;
+                        match repo.smart_checkout_branch(&name) {
+                            Ok(()) => {
+                                state.branch_popup.is_loading = false;
+                                state.branch_popup.selected_branch = Some(name.clone());
+                                state.branch_popup.success_message =
+                                    Some(format!("智能签出: 已切到 {name}（变更已恢复）"));
+                                let _ = refresh_repository_after_action(state, &repo, true);
+                                if let Some(current) = state.current_repository.clone() {
+                                    state.branch_popup.load_branches(&current);
+                                }
+                                state.set_success(
+                                    format!("智能签出 {name} 完成"),
+                                    None,
+                                    "workspace.branches",
+                                );
+                            }
+                            Err(error) => {
+                                state.branch_popup.is_loading = false;
+                                let msg = format!("智能签出失败: {error}");
+                                state.branch_popup.error = Some(msg.clone());
+                                report_async_failure(
+                                    state,
+                                    "智能签出失败",
+                                    msg,
+                                    "workspace.branches",
+                                    "workspace.branches.smart_checkout",
+                                );
+                            }
+                        }
+                    }
+                }
+                BranchPopupMessage::ForceCheckout(name) => {
+                    state.branch_popup.smart_checkout_branch = None;
+                    state.branch_popup.smart_checkout_affected_files.clear();
+                    if let Ok(repo) = require_repository(state) {
+                        state.branch_popup.is_loading = true;
+                        match repo.force_checkout_branch(&name) {
+                            Ok(()) => {
+                                state.branch_popup.is_loading = false;
+                                state.branch_popup.selected_branch = Some(name.clone());
+                                state.branch_popup.success_message =
+                                    Some(format!("强制签出: 已切到 {name}（本地修改已丢弃）"));
+                                let _ = refresh_repository_after_action(state, &repo, false);
+                                if let Some(current) = state.current_repository.clone() {
+                                    state.branch_popup.load_branches(&current);
+                                }
+                                state.set_success(
+                                    format!("强制签出 {name} 完成"),
+                                    None,
+                                    "workspace.branches",
+                                );
+                            }
+                            Err(error) => {
+                                state.branch_popup.is_loading = false;
+                                let msg = format!("强制签出失败: {error}");
+                                state.branch_popup.error = Some(msg.clone());
+                                report_async_failure(
+                                    state,
+                                    "强制签出失败",
+                                    msg,
+                                    "workspace.branches",
+                                    "workspace.branches.force_checkout",
+                                );
+                            }
+                        }
+                    }
+                }
+                BranchPopupMessage::CancelSmartCheckout => {
+                    state.branch_popup.smart_checkout_branch = None;
+                    state.branch_popup.smart_checkout_affected_files.clear();
                 }
                 BranchPopupMessage::MergeBranch(name) => {
                     if let Ok(repo) = require_repository(state) {
@@ -3636,17 +3825,6 @@ fn submit_commit_dialog(state: &mut AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn open_branch_popup(state: &mut AppState) -> Result<(), String> {
-    let repo = require_repository(state)?;
-    state.branch_popup.load_branches(&repo);
-    if let Some(error) = state.branch_popup.error.clone() {
-        return Err(error);
-    }
-    state.open_auxiliary_view(AuxiliaryView::Branches);
-    logging::LogManager::log_context_switcher("open", &repo.name());
-    Ok(())
-}
-
 fn branch_popup_message_closes_context_menu(message: &BranchPopupMessage) -> bool {
     matches!(
         message,
@@ -4070,6 +4248,7 @@ fn view(state: &AppState) -> Element<'_, Message> {
         Message::SwitchGitToolWindowTab,
         Message::DismissFeedback,
         Message::DismissToast,
+        Message::ShowSettings,
     );
     let main_view = main_window.view();
 
@@ -4403,7 +4582,7 @@ fn build_changes_body<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<
     .height(Length::Fill)
     .style(theme::panel_style(theme::Surface::Panel));
 
-    let commit_panel = commit_panel::view(&state.commit_dialog, &state.recent_commit_messages).map(Message::CommitDialogMessage);
+    let commit_panel = commit_panel::view(&state.commit_dialog, &state.recent_commit_messages, state.git_settings.llm_enabled).map(Message::CommitDialogMessage);
 
     let right_panel = Column::new()
         .spacing(0)
@@ -4724,7 +4903,15 @@ fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<
             }
             viewer.view()
         }
-        DiffPresentation::Split => widgets::split_diff_viewer::SplitDiffViewer::new(diff).view(),
+        DiffPresentation::Split => {
+            let mut viewer = widgets::split_diff_viewer::SplitDiffViewer::new(diff);
+            if selected_is_staged {
+                viewer = viewer.with_unstage_hunk_handler(Message::UnstageHunk);
+            } else {
+                viewer = viewer.with_stage_hunk_handler(Message::StageHunk);
+            }
+            viewer.view()
+        }
     }
 }
 
