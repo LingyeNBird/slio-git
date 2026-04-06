@@ -7,7 +7,8 @@ use crate::views::{
     stash_panel::StashPanelState, tag_dialog::TagDialogState,
 };
 use crate::widgets::conflict_resolver::ConflictResolver;
-use git_core::diff::{AutoMergeResult, Diff, ThreeWayDiff};
+use crate::widgets::diff_editor::SplitDiffEditorState;
+use git_core::diff::{AutoMergeResult, Diff, EditorDiffModel, ThreeWayDiff};
 use git_core::index::Change;
 use git_core::remote::RemoteInfo;
 use git_core::repository::{Repository, SyncStatus};
@@ -521,6 +522,10 @@ pub struct AppState {
     pub full_file_preview_truncated: bool,
     /// Whether the selected file is binary (no preview possible)
     pub full_file_preview_binary: bool,
+    /// Editor-oriented split diff model (computed lazily for split view)
+    pub editor_diff: Option<EditorDiffModel>,
+    /// Runtime state for the editor-backed split diff surface.
+    pub split_diff_editor: Option<SplitDiffEditorState>,
     /// In-progress network operation for progress bar display
     pub network_operation: Option<NetworkOperation>,
     /// Pull strategy preference (merge or rebase)
@@ -617,6 +622,8 @@ impl AppState {
             full_file_preview: None,
             full_file_preview_truncated: false,
             full_file_preview_binary: false,
+            editor_diff: None,
+            split_diff_editor: None,
             network_operation: None,
             pull_strategy: PullStrategy::default(),
         };
@@ -755,6 +762,8 @@ impl AppState {
         }
         self.show_diff = false;
         self.current_diff = None;
+        self.editor_diff = None;
+        self.split_diff_editor = None;
         self.selected_hunk_index = None;
         self.change_context_menu_path = None;
         self.change_context_menu_cursor = Point::new(0.0, 0.0);
@@ -830,6 +839,8 @@ impl AppState {
         self.conflict_resolver = None;
         self.show_diff = false;
         self.current_diff = None;
+        self.editor_diff = None;
+        self.split_diff_editor = None;
         self.diff_presentation = DiffPresentation::Unified;
         self.selected_change_path = None;
         self.toolbar_remote_menu = None;
@@ -1232,6 +1243,8 @@ impl AppState {
                             self.selected_change_path = None;
                             self.show_diff = false;
                             self.current_diff = None;
+                            self.editor_diff = None;
+                            self.split_diff_editor = None;
                             self.selected_hunk_index = None;
                             self.change_context_menu_path = None;
                             self.change_context_menu_anchor = None;
@@ -1581,6 +1594,8 @@ impl AppState {
         self.full_file_preview = None;
         self.full_file_preview_binary = false;
         self.full_file_preview_truncated = false;
+        self.editor_diff = None;
+        self.split_diff_editor = None;
         self.sync_shell_state();
 
         let result = self.load_diff_for_file(&path);

@@ -5,6 +5,7 @@ pub mod changelist;
 pub mod commit_compare;
 pub mod commit_panel;
 pub mod diff_core;
+pub mod diff_editor;
 pub mod conflict_resolver;
 pub mod diff_file_header;
 pub mod diff_viewer;

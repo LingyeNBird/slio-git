@@ -165,6 +165,25 @@ pub mod layout {
     pub const TOOL_WINDOW_TAB_HEIGHT: f32 = 24.0;
 }
 
+pub fn app_font() -> iced::Font {
+    #[cfg(target_os = "macos")]
+    {
+        iced::Font::with_name("PingFang SC")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        iced::Font::with_name("Microsoft YaHei")
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        iced::Font::with_name("Noto Sans CJK SC")
+    }
+}
+
+pub fn code_font() -> iced::Font {
+    app_font()
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Surface {
     Root,
@@ -959,5 +978,12 @@ mod tests {
 
         assert_eq!(toolbar_field.shadow.blur_radius, 0.0);
         assert_eq!(list_row.shadow.blur_radius, 0.0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn code_font_prefers_cjk_capable_family_on_macos() {
+        assert_eq!(code_font(), iced::Font::with_name("PingFang SC"));
+        assert_ne!(code_font(), iced::Font::MONOSPACE);
     }
 }

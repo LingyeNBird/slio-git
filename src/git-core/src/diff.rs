@@ -7,7 +7,7 @@ use std::cell::{Cell, RefCell};
 use std::path::Path;
 
 /// Origin of a diff line
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiffLineOrigin {
     Context,
     Addition,
@@ -30,7 +30,7 @@ impl From<char> for DiffLineOrigin {
 
 /// A span within a diff line marking character-level changes.
 /// Used for GitHub-style inline highlighting of specific changed characters.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InlineChangeSpan {
     /// Byte offset in the line content
     pub start: usize,
@@ -967,6 +967,551 @@ pub fn enhance_hunk_with_inline_changes(hunk: &mut DiffHunk) {
     }
 }
 
+// ── IDEA-style side-by-side: full file content retrieval ───────────────────
+
+/// A single row in IDEA-style full-file side-by-side diff.
+#[derive(Debug, Clone)]
+pub struct SideBySideRow {
+    /// "equal", "insert", "delete", or "replace"
+    pub tag: &'static str,
+    pub old_lineno: Option<u32>,
+    pub new_lineno: Option<u32>,
+    pub old_text: String,
+    pub new_text: String,
+    /// Character-level inline changes for old side (only for replace rows)
+    pub old_inline: Vec<InlineChangeSpan>,
+    /// Character-level inline changes for new side (only for replace rows)
+    pub new_inline: Vec<InlineChangeSpan>,
+}
+
+/// Full-file side-by-side diff result.
+#[derive(Debug, Clone)]
+pub struct SideBySideDiff {
+    pub rows: Vec<SideBySideRow>,
+    pub old_path: String,
+    pub new_path: String,
+}
+
+/// IDE/editor-oriented block kind for split diff rendering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorDiffBlockKind {
+    Equal,
+    Insert,
+    Delete,
+    Replace,
+}
+
+/// A single logical line inside the editor-oriented diff model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorDiffLine {
+    /// Zero-based logical line index in the backing editor buffer.
+    pub index: usize,
+    /// One-based visible line number shown in the gutter.
+    pub line_number: u32,
+    pub content: String,
+    pub inline_changes: Vec<InlineChangeSpan>,
+}
+
+/// A diff block inside a hunk, expressed in editor terms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorDiffBlock {
+    pub kind: EditorDiffBlockKind,
+    pub old_range: std::ops::Range<usize>,
+    pub new_range: std::ops::Range<usize>,
+    pub old_lines: Vec<EditorDiffLine>,
+    pub new_lines: Vec<EditorDiffLine>,
+}
+
+/// Line correlation used for scroll sync between left/right editors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorLineMapEntry {
+    pub old_index: Option<usize>,
+    pub new_index: Option<usize>,
+    pub kind: EditorDiffBlockKind,
+}
+
+/// A hunk adapted for editor-backed rendering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorDiffHunk {
+    pub id: usize,
+    pub header: String,
+    pub old_range: std::ops::Range<usize>,
+    pub new_range: std::ops::Range<usize>,
+    pub blocks: Vec<EditorDiffBlock>,
+}
+
+/// Full editor-oriented diff payload for a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorDiffModel {
+    pub left_text: String,
+    pub right_text: String,
+    pub hunks: Vec<EditorDiffHunk>,
+    pub line_map: Vec<EditorLineMapEntry>,
+    pub old_path: Option<String>,
+    pub new_path: Option<String>,
+}
+
+/// Build an IDEA-style full-file side-by-side diff.
+///
+/// - `staged = false`: compares HEAD (old) vs workdir (new)
+/// - `staged = true`:  compares HEAD (old) vs index (new)
+///
+/// Diffs the full files line-by-line with the `similar` crate, pairing
+/// deletions with additions as "replace" rows with character-level inline
+/// highlights.
+pub fn build_side_by_side_diff(
+    repo: &Repository,
+    file_path: &str,
+    staged: bool,
+) -> Result<SideBySideDiff, GitError> {
+    use similar::{ChangeTag, TextDiff};
+
+    let path = Path::new(file_path);
+    let repo_lock = repo.inner.read().unwrap();
+
+    // 1. Get old content from HEAD
+    let old_content = (|| -> Option<String> {
+        let head = repo_lock.head().ok()?;
+        let commit = head.peel_to_commit().ok()?;
+        let tree = commit.tree().ok()?;
+        let entry = tree.get_path(path).ok()?;
+        let blob = repo_lock.find_blob(entry.id()).ok()?;
+        Some(String::from_utf8_lossy(blob.content()).to_string())
+    })()
+    .unwrap_or_default();
+
+    // 2. Get new content from index or workdir
+    let new_content = if staged {
+        // Read from index (stage 0 = normal staged entry)
+        let index = repo_lock.index().ok();
+        let entry = index.as_ref().and_then(|idx| idx.get_path(path, 0));
+        entry
+            .and_then(|e| repo_lock.find_blob(e.id).ok())
+            .map(|blob| String::from_utf8_lossy(blob.content()).to_string())
+            .unwrap_or_default()
+    } else {
+        drop(repo_lock);
+        read_workdir_file(repo, path).unwrap_or_default()
+    };
+
+    #[allow(clippy::needless_borrows_for_generic_args)]
+    let _ = &repo; // keep borrow alive if not dropped above
+
+    // 3. Line-level diff
+    let text_diff = TextDiff::from_lines(&old_content, &new_content);
+    let mut rows = Vec::new();
+    let mut old_lineno: u32 = 0;
+    let mut new_lineno: u32 = 0;
+
+    // Collect changes into groups for pairing delete+insert as replace
+    let changes: Vec<_> = text_diff.iter_all_changes().collect();
+    let mut i = 0;
+
+    while i < changes.len() {
+        let change = &changes[i];
+        match change.tag() {
+            ChangeTag::Equal => {
+                old_lineno += 1;
+                new_lineno += 1;
+                rows.push(SideBySideRow {
+                    tag: "equal",
+                    old_lineno: Some(old_lineno),
+                    new_lineno: Some(new_lineno),
+                    old_text: change.value().trim_end_matches('\n').to_string(),
+                    new_text: change.value().trim_end_matches('\n').to_string(),
+                    old_inline: Vec::new(),
+                    new_inline: Vec::new(),
+                });
+                i += 1;
+            }
+            ChangeTag::Delete => {
+                // Collect consecutive deletes
+                let del_start = i;
+                while i < changes.len() && changes[i].tag() == ChangeTag::Delete {
+                    i += 1;
+                }
+                // Collect consecutive inserts that follow
+                let ins_start = i;
+                while i < changes.len() && changes[i].tag() == ChangeTag::Insert {
+                    i += 1;
+                }
+                let del_count = ins_start - del_start;
+                let ins_count = i - ins_start;
+                let pair_count = del_count.min(ins_count);
+
+                // Paired lines → replace with inline diff
+                for p in 0..pair_count {
+                    old_lineno += 1;
+                    new_lineno += 1;
+                    let old_text = changes[del_start + p].value().trim_end_matches('\n').to_string();
+                    let new_text = changes[ins_start + p].value().trim_end_matches('\n').to_string();
+                    let (old_spans, new_spans) = compute_inline_changes(&old_text, &new_text);
+                    rows.push(SideBySideRow {
+                        tag: "replace",
+                        old_lineno: Some(old_lineno),
+                        new_lineno: Some(new_lineno),
+                        old_text,
+                        new_text,
+                        old_inline: old_spans,
+                        new_inline: new_spans,
+                    });
+                }
+                // Remaining unpaired deletes
+                for p in pair_count..del_count {
+                    old_lineno += 1;
+                    rows.push(SideBySideRow {
+                        tag: "delete",
+                        old_lineno: Some(old_lineno),
+                        new_lineno: None,
+                        old_text: changes[del_start + p].value().trim_end_matches('\n').to_string(),
+                        new_text: String::new(),
+                        old_inline: Vec::new(),
+                        new_inline: Vec::new(),
+                    });
+                }
+                // Remaining unpaired inserts
+                for p in pair_count..ins_count {
+                    new_lineno += 1;
+                    rows.push(SideBySideRow {
+                        tag: "insert",
+                        old_lineno: None,
+                        new_lineno: Some(new_lineno),
+                        old_text: String::new(),
+                        new_text: changes[ins_start + p].value().trim_end_matches('\n').to_string(),
+                        old_inline: Vec::new(),
+                        new_inline: Vec::new(),
+                    });
+                }
+            }
+            ChangeTag::Insert => {
+                // Lone insert (no preceding delete)
+                new_lineno += 1;
+                rows.push(SideBySideRow {
+                    tag: "insert",
+                    old_lineno: None,
+                    new_lineno: Some(new_lineno),
+                    old_text: String::new(),
+                    new_text: change.value().trim_end_matches('\n').to_string(),
+                    old_inline: Vec::new(),
+                    new_inline: Vec::new(),
+                });
+                i += 1;
+            }
+        }
+    }
+
+    Ok(SideBySideDiff {
+        rows,
+        old_path: file_path.to_string(),
+        new_path: file_path.to_string(),
+    })
+}
+
+const MAX_EDITOR_TEXT_BYTES: usize = 1_048_576; // 1 MB
+const MAX_EDITOR_TEXT_LINES: usize = 10_000;
+
+/// Build an editor-oriented diff model for a single file.
+///
+/// Returns `Ok(None)` for non-text, oversized, or empty diff inputs so the UI
+/// can continue using its existing empty-state branches.
+pub fn build_editor_diff_model(
+    repo: &Repository,
+    file_path: &str,
+    staged: bool,
+) -> Result<Option<EditorDiffModel>, GitError> {
+    let path = Path::new(file_path);
+
+    let diff = if staged {
+        diff_index_to_head(repo, path)?
+    } else {
+        diff_file_to_index(repo, path)?
+    };
+
+    let Some(file_diff) = diff.files.first() else {
+        return Ok(None);
+    };
+
+    if file_diff.hunks.is_empty() {
+        return Ok(None);
+    }
+
+    let old_bytes = read_head_bytes(repo, path).unwrap_or_default();
+    let new_bytes = if staged {
+        read_index_bytes(repo, path).unwrap_or_default()
+    } else {
+        read_workdir_bytes(repo, path).unwrap_or_default()
+    };
+
+    if text_bytes_should_fallback(&old_bytes) || text_bytes_should_fallback(&new_bytes) {
+        return Ok(None);
+    }
+
+    let left_text = String::from_utf8_lossy(&old_bytes).to_string();
+    let right_text = String::from_utf8_lossy(&new_bytes).to_string();
+    let line_map = build_editor_line_map(&left_text, &right_text);
+    let hunks = file_diff
+        .hunks
+        .iter()
+        .enumerate()
+        .map(|(id, hunk)| build_editor_hunk(id, hunk))
+        .collect();
+
+    Ok(Some(EditorDiffModel {
+        left_text,
+        right_text,
+        hunks,
+        line_map,
+        old_path: file_diff.old_path.clone(),
+        new_path: file_diff.new_path.clone(),
+    }))
+}
+
+fn text_bytes_should_fallback(bytes: &[u8]) -> bool {
+    if bytes.len() > MAX_EDITOR_TEXT_BYTES {
+        return true;
+    }
+
+    let sample_len = bytes.len().min(8192);
+    if bytes[..sample_len].contains(&0) {
+        return true;
+    }
+
+    let line_count = bytes.iter().filter(|&&byte| byte == b'\n').count()
+        + usize::from(!bytes.is_empty() && *bytes.last().unwrap_or(&b'\n') != b'\n');
+    line_count > MAX_EDITOR_TEXT_LINES
+}
+
+fn read_head_bytes(repo: &Repository, file_path: &Path) -> Option<Vec<u8>> {
+    let repo_lock = repo.inner.read().ok()?;
+    let head = repo_lock.head().ok()?;
+    let commit = head.peel_to_commit().ok()?;
+    let tree = commit.tree().ok()?;
+    let entry = tree.get_path(file_path).ok()?;
+    let blob = repo_lock.find_blob(entry.id()).ok()?;
+    Some(blob.content().to_vec())
+}
+
+fn read_index_bytes(repo: &Repository, file_path: &Path) -> Option<Vec<u8>> {
+    let repo_lock = repo.inner.read().ok()?;
+    let index = repo_lock.index().ok()?;
+    let entry = index.get_path(file_path, 0)?;
+    let blob = repo_lock.find_blob(entry.id).ok()?;
+    Some(blob.content().to_vec())
+}
+
+fn read_workdir_bytes(repo: &Repository, file_path: &Path) -> Option<Vec<u8>> {
+    let abs_path = workdir_file_path(repo, file_path);
+    std::fs::read(abs_path).ok()
+}
+
+fn build_editor_line_map(old_text: &str, new_text: &str) -> Vec<EditorLineMapEntry> {
+    use similar::{ChangeTag, TextDiff};
+
+    let diff = TextDiff::from_lines(old_text, new_text);
+    let changes: Vec<_> = diff.iter_all_changes().collect();
+    let mut map = Vec::new();
+    let mut old_index = 0usize;
+    let mut new_index = 0usize;
+    let mut i = 0usize;
+
+    while i < changes.len() {
+        match changes[i].tag() {
+            ChangeTag::Equal => {
+                map.push(EditorLineMapEntry {
+                    old_index: Some(old_index),
+                    new_index: Some(new_index),
+                    kind: EditorDiffBlockKind::Equal,
+                });
+                old_index += 1;
+                new_index += 1;
+                i += 1;
+            }
+            ChangeTag::Delete => {
+                let del_start = i;
+                while i < changes.len() && changes[i].tag() == ChangeTag::Delete {
+                    i += 1;
+                }
+                let ins_start = i;
+                while i < changes.len() && changes[i].tag() == ChangeTag::Insert {
+                    i += 1;
+                }
+
+                let del_count = ins_start - del_start;
+                let ins_count = i - ins_start;
+                let pair_count = del_count.min(ins_count);
+
+                for _ in 0..pair_count {
+                    map.push(EditorLineMapEntry {
+                        old_index: Some(old_index),
+                        new_index: Some(new_index),
+                        kind: EditorDiffBlockKind::Replace,
+                    });
+                    old_index += 1;
+                    new_index += 1;
+                }
+
+                for _ in pair_count..del_count {
+                    map.push(EditorLineMapEntry {
+                        old_index: Some(old_index),
+                        new_index: None,
+                        kind: EditorDiffBlockKind::Delete,
+                    });
+                    old_index += 1;
+                }
+
+                for _ in pair_count..ins_count {
+                    map.push(EditorLineMapEntry {
+                        old_index: None,
+                        new_index: Some(new_index),
+                        kind: EditorDiffBlockKind::Insert,
+                    });
+                    new_index += 1;
+                }
+            }
+            ChangeTag::Insert => {
+                map.push(EditorLineMapEntry {
+                    old_index: None,
+                    new_index: Some(new_index),
+                    kind: EditorDiffBlockKind::Insert,
+                });
+                new_index += 1;
+                i += 1;
+            }
+        }
+    }
+
+    map
+}
+
+fn build_editor_hunk(id: usize, hunk: &DiffHunk) -> EditorDiffHunk {
+    let mut blocks = Vec::new();
+    let mut old_index = hunk.old_start.saturating_sub(1) as usize;
+    let mut new_index = hunk.new_start.saturating_sub(1) as usize;
+    let mut cursor = 0usize;
+
+    while cursor < hunk.lines.len() {
+        match hunk.lines[cursor].origin {
+            DiffLineOrigin::Context => {
+                let old_start = old_index;
+                let new_start = new_index;
+                let mut old_lines = Vec::new();
+                let mut new_lines = Vec::new();
+
+                while cursor < hunk.lines.len()
+                    && hunk.lines[cursor].origin == DiffLineOrigin::Context
+                {
+                    let line = &hunk.lines[cursor];
+                    old_lines.push(editor_line_from_diff(line, old_index, false));
+                    new_lines.push(editor_line_from_diff(line, new_index, true));
+                    old_index += 1;
+                    new_index += 1;
+                    cursor += 1;
+                }
+
+                blocks.push(EditorDiffBlock {
+                    kind: EditorDiffBlockKind::Equal,
+                    old_range: old_start..old_index,
+                    new_range: new_start..new_index,
+                    old_lines,
+                    new_lines,
+                });
+            }
+            DiffLineOrigin::Deletion => {
+                let old_start = old_index;
+                let new_start = new_index;
+                let mut old_lines = Vec::new();
+                let mut new_lines = Vec::new();
+
+                while cursor < hunk.lines.len()
+                    && hunk.lines[cursor].origin == DiffLineOrigin::Deletion
+                {
+                    let line = &hunk.lines[cursor];
+                    old_lines.push(editor_line_from_diff(line, old_index, false));
+                    old_index += 1;
+                    cursor += 1;
+                }
+
+                while cursor < hunk.lines.len()
+                    && hunk.lines[cursor].origin == DiffLineOrigin::Addition
+                {
+                    let line = &hunk.lines[cursor];
+                    new_lines.push(editor_line_from_diff(line, new_index, true));
+                    new_index += 1;
+                    cursor += 1;
+                }
+
+                let kind = if new_lines.is_empty() {
+                    EditorDiffBlockKind::Delete
+                } else {
+                    EditorDiffBlockKind::Replace
+                };
+
+                blocks.push(EditorDiffBlock {
+                    kind,
+                    old_range: old_start..old_index,
+                    new_range: new_start..new_index,
+                    old_lines,
+                    new_lines,
+                });
+            }
+            DiffLineOrigin::Addition => {
+                let old_start = old_index;
+                let new_start = new_index;
+                let mut new_lines = Vec::new();
+
+                while cursor < hunk.lines.len()
+                    && hunk.lines[cursor].origin == DiffLineOrigin::Addition
+                {
+                    let line = &hunk.lines[cursor];
+                    new_lines.push(editor_line_from_diff(line, new_index, true));
+                    new_index += 1;
+                    cursor += 1;
+                }
+
+                blocks.push(EditorDiffBlock {
+                    kind: EditorDiffBlockKind::Insert,
+                    old_range: old_start..old_start,
+                    new_range: new_start..new_index,
+                    old_lines: Vec::new(),
+                    new_lines,
+                });
+            }
+            DiffLineOrigin::Header | DiffLineOrigin::HunkHeader => {
+                cursor += 1;
+            }
+        }
+    }
+
+    EditorDiffHunk {
+        id,
+        header: hunk.header.clone(),
+        old_range: hunk.old_start.saturating_sub(1) as usize
+            ..hunk.old_start.saturating_sub(1) as usize + hunk.old_lines as usize,
+        new_range: hunk.new_start.saturating_sub(1) as usize
+            ..hunk.new_start.saturating_sub(1) as usize + hunk.new_lines as usize,
+        blocks,
+    }
+}
+
+fn editor_line_from_diff(
+    line: &DiffLine,
+    index: usize,
+    is_new_side: bool,
+) -> EditorDiffLine {
+    let line_number = if is_new_side {
+        line.new_lineno.unwrap_or(index as u32 + 1)
+    } else {
+        line.old_lineno.unwrap_or(index as u32 + 1)
+    };
+
+    EditorDiffLine {
+        index,
+        line_number,
+        content: line.content.clone(),
+        inline_changes: line.inline_changes.clone(),
+    }
+}
+
 // ── Full file preview support (012-idea-ui-refactor) ──────────────────────
 
 const MAX_PREVIEW_BYTES: usize = 1_048_576; // 1 MB
@@ -1059,13 +1604,37 @@ pub fn build_full_file_diff(repo: &Repository, file_path: &Path) -> Result<FullF
 
 #[cfg(test)]
 mod tests {
+    use super::build_editor_diff_model;
     use super::diff_file_to_index;
+    use super::EditorDiffBlockKind;
     use super::DiffLineOrigin;
+    use crate::commit;
     use crate::index;
     use crate::repository::Repository;
     use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
+
+    fn configure_signature(repo: &Repository) {
+        let repo_lock = repo.inner.read().expect("repo lock");
+        let mut config = repo_lock.config().expect("config");
+        config
+            .set_str("user.name", "slio-git tests")
+            .expect("user.name");
+        config
+            .set_str("user.email", "tests@slio-git.local")
+            .expect("user.email");
+    }
+
+    fn commit_file(repo: &Repository, root: &Path, path: &str, content: &str, message: &str) {
+        let file_path = root.join(path);
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).expect("parent dir");
+        }
+        fs::write(&file_path, content).expect("write file");
+        index::stage_all(repo).expect("stage all");
+        commit::create_commit(repo, message, "", "").expect("create commit");
+    }
 
     #[test]
     fn diff_file_to_index_returns_targeted_file_hunks() {
@@ -1119,5 +1688,204 @@ mod tests {
             .any(|line| {
                 line.origin == DiffLineOrigin::Addition && line.content.contains("fresh line")
             }));
+    }
+
+    #[test]
+    fn build_editor_diff_model_produces_replace_block_and_line_map() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+        commit_file(
+            &repo,
+            temp_dir.path(),
+            "notes.txt",
+            "alpha\nbravo old\ncharlie\n",
+            "baseline",
+        );
+
+        fs::write(
+            temp_dir.path().join("notes.txt"),
+            "alpha\nbravo new\ncharlie\n",
+        )
+        .expect("modify file");
+
+        let model = build_editor_diff_model(&repo, "notes.txt", false)
+            .expect("build editor diff")
+            .expect("text diff model");
+
+        assert_eq!(model.old_path.as_deref(), Some("notes.txt"));
+        assert_eq!(model.new_path.as_deref(), Some("notes.txt"));
+        assert!(model.left_text.contains("bravo old"));
+        assert!(model.right_text.contains("bravo new"));
+        assert_eq!(model.hunks.len(), 1);
+
+        let replace_block = model.hunks[0]
+            .blocks
+            .iter()
+            .find(|block| block.kind == EditorDiffBlockKind::Replace)
+            .expect("replace block");
+
+        assert_eq!(replace_block.old_lines.len(), 1);
+        assert_eq!(replace_block.new_lines.len(), 1);
+        assert!(
+            replace_block.old_lines[0]
+                .inline_changes
+                .iter()
+                .any(|span| span.changed)
+        );
+        assert!(
+            model.line_map.iter().any(|entry| {
+                entry.kind == EditorDiffBlockKind::Replace
+                    && entry.old_index == Some(1)
+                    && entry.new_index == Some(1)
+            }),
+            "expected replace entry for second line"
+        );
+    }
+
+    #[test]
+    fn build_editor_diff_model_tracks_insertions_and_deletions_in_line_map() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+        commit_file(
+            &repo,
+            temp_dir.path(),
+            "notes.txt",
+            "one\ntwo\nthree\n",
+            "baseline",
+        );
+
+        fs::write(temp_dir.path().join("notes.txt"), "zero\none\nthree\n")
+            .expect("modify file");
+
+        let model = build_editor_diff_model(&repo, "notes.txt", false)
+            .expect("build editor diff")
+            .expect("text diff model");
+
+        assert!(
+            model.line_map.iter().any(|entry| {
+                entry.kind == EditorDiffBlockKind::Insert
+                    && entry.old_index.is_none()
+                    && entry.new_index == Some(0)
+            }),
+            "expected inserted first line"
+        );
+        assert!(
+            model.line_map.iter().any(|entry| {
+                entry.kind == EditorDiffBlockKind::Delete
+                    && entry.old_index == Some(1)
+                    && entry.new_index.is_none()
+            }),
+            "expected deleted second line"
+        );
+    }
+
+    #[test]
+    fn build_editor_diff_model_staged_mode_reads_index_not_workdir() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+        commit_file(
+            &repo,
+            temp_dir.path(),
+            "notes.txt",
+            "one\n",
+            "baseline",
+        );
+
+        let file_path = temp_dir.path().join("notes.txt");
+        fs::write(&file_path, "one staged\n").expect("stage candidate");
+        index::stage_all(&repo).expect("stage candidate");
+        fs::write(&file_path, "one staged\nplus unstaged\n").expect("unstaged follow-up");
+
+        let model = build_editor_diff_model(&repo, "notes.txt", true)
+            .expect("build editor diff")
+            .expect("text diff model");
+
+        assert_eq!(model.right_text, "one staged\n");
+        assert!(!model.right_text.contains("plus unstaged"));
+    }
+
+    #[test]
+    fn build_editor_diff_model_keeps_multibyte_inline_offsets_on_char_boundaries() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+        commit_file(
+            &repo,
+            temp_dir.path(),
+            "notes.txt",
+            "你好世界\n",
+            "baseline",
+        );
+
+        fs::write(temp_dir.path().join("notes.txt"), "你好同学\n").expect("modify file");
+
+        let model = build_editor_diff_model(&repo, "notes.txt", false)
+            .expect("build editor diff")
+            .expect("text diff model");
+
+        let replace_block = model.hunks[0]
+            .blocks
+            .iter()
+            .find(|block| block.kind == EditorDiffBlockKind::Replace)
+            .expect("replace block");
+        let old_line = &replace_block.old_lines[0];
+
+        let changed_span = old_line
+            .inline_changes
+            .iter()
+            .find(|span| span.changed)
+            .expect("changed inline span");
+        let end = changed_span.start + changed_span.len;
+        let changed_slice = old_line
+            .content
+            .get(changed_span.start..end)
+            .expect("valid utf-8 boundaries");
+
+        assert_eq!(changed_slice.chars().count(), 2);
+        assert_eq!(changed_slice, "世界");
+    }
+
+    #[test]
+    fn build_editor_diff_model_preserves_absolute_block_ranges_inside_hunk() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+        commit_file(
+            &repo,
+            temp_dir.path(),
+            "notes.txt",
+            "alpha\nbravo\ncharlie\ndelta\n",
+            "baseline",
+        );
+
+        fs::write(
+            temp_dir.path().join("notes.txt"),
+            "alpha\nbravo updated\ncharlie\ndelta\necho\n",
+        )
+        .expect("modify file");
+
+        let model = build_editor_diff_model(&repo, "notes.txt", false)
+            .expect("build editor diff")
+            .expect("text diff model");
+
+        let hunk = model.hunks.first().expect("hunk");
+        let replace_block = hunk
+            .blocks
+            .iter()
+            .find(|block| block.kind == EditorDiffBlockKind::Replace)
+            .expect("replace block");
+        let insert_block = hunk
+            .blocks
+            .iter()
+            .find(|block| block.kind == EditorDiffBlockKind::Insert)
+            .expect("insert block");
+
+        assert_eq!(replace_block.old_range, 1..2);
+        assert_eq!(replace_block.new_range, 1..2);
+        assert_eq!(insert_block.old_range, 4..4);
+        assert_eq!(insert_block.new_range, 4..5);
     }
 }

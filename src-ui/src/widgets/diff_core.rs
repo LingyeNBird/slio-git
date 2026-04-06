@@ -7,8 +7,8 @@
 use crate::theme;
 use crate::widgets::syntax_highlighting::{HighlightedSegment, HunkSyntaxHighlighter};
 use git_core::diff::{DiffHunk, DiffLine, DiffLineOrigin, InlineChangeSpan};
-use iced::widget::{container, scrollable, text, Column, Container, Row, Scrollable, Space, Text};
-use iced::{Alignment, Background, Border, Color, Element, Font, Length, Theme};
+use iced::widget::{container, text, Column, Container, Row, Space, Text};
+use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
 // ── Layout constants ──────────────────────────────────────────────────────
 
@@ -342,14 +342,14 @@ pub fn render_unified_line<'a, Message: Clone + 'static>(
                     .push(
                         Text::new(format_line_number(line.old_lineno))
                             .size(10)
-                            .font(Font::MONOSPACE)
+                            .font(crate::theme::code_font())
                             .color(theme::darcula::TEXT_SECONDARY)
                             .width(Length::Fixed(28.0)),
                     )
                     .push(
                         Text::new(format_line_number(line.new_lineno))
                             .size(10)
-                            .font(Font::MONOSPACE)
+                            .font(crate::theme::code_font())
                             .color(theme::darcula::TEXT_SECONDARY)
                             .width(Length::Fixed(28.0)),
                     ),
@@ -369,7 +369,7 @@ pub fn render_unified_line<'a, Message: Clone + 'static>(
                     .push(
                         Text::new(pfx)
                             .size(11)
-                            .font(Font::MONOSPACE)
+                            .font(crate::theme::code_font())
                             .color(pfx_color)
                             .width(Length::Fixed(PREFIX_WIDTH)),
                     )
@@ -405,6 +405,14 @@ pub fn render_split_half<'a, Message: Clone + 'static>(
     let pfx = prefix_char(tag, is_left);
     let pfx_color = prefix_color(tag, is_left);
 
+    // Code content — use styled_editor_horizontal (width=3, scroller=2) which
+    // reliably clips overflow. Iced's Scrollable with 0-width scrollbar does NOT clip.
+    let clipped_code = crate::widgets::scrollable::styled_editor_horizontal(
+        Container::new(code).padding([2, 4]).width(Length::Shrink),
+    )
+    .width(Length::Fill)
+    .height(Length::Fixed(DIFF_ROW_HEIGHT));
+
     Container::new(
         Row::new()
             .spacing(0)
@@ -413,7 +421,7 @@ pub fn render_split_half<'a, Message: Clone + 'static>(
                 Container::new(
                     Text::new(format_line_number(side.line_number))
                         .size(10)
-                        .font(Font::MONOSPACE)
+                        .font(crate::theme::code_font())
                         .color(theme::darcula::TEXT_DISABLED),
                 )
                 .width(Length::Fixed(SPLIT_GUTTER_WIDTH))
@@ -424,27 +432,11 @@ pub fn render_split_half<'a, Message: Clone + 'static>(
             .push(
                 Text::new(pfx)
                     .size(11)
-                    .font(Font::MONOSPACE)
+                    .font(crate::theme::code_font())
                     .color(pfx_color)
                     .width(Length::Fixed(PREFIX_WIDTH)),
             )
-            // Code content — wrapped in horizontal Scrollable with hidden
-            // scrollbar to clip overflow and prevent text bleeding into the
-            // adjacent pane.
-            .push(
-                Container::new(
-                    Scrollable::new(
-                        Container::new(code).padding([2, 4]),
-                    )
-                    .direction(scrollable::Direction::Horizontal(
-                        scrollable::Scrollbar::new().width(0).scroller_width(0),
-                    ))
-                    .width(Length::Fill)
-                    .height(Length::Fixed(DIFF_ROW_HEIGHT)),
-                )
-                .width(Length::Fill)
-                .height(Length::Fixed(DIFF_ROW_HEIGHT)),
-            ),
+            .push(clipped_code),
     )
     .height(Length::Fixed(DIFF_ROW_HEIGHT))
     .style(fill_style(code_bg))
@@ -494,7 +486,7 @@ pub fn hunk_header<'a, Message: Clone + 'static>(
         .push(
             Text::new(header_text)
                 .size(10)
-                .font(Font::MONOSPACE)
+                .font(crate::theme::code_font())
                 .wrapping(text::Wrapping::None)
                 .color(theme::darcula::TEXT_SECONDARY),
         );

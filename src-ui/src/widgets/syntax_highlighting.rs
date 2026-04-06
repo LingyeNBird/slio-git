@@ -65,6 +65,12 @@ impl FileSyntaxHighlighter {
         Self { syntax }
     }
 
+    pub fn for_path(path: &str) -> Self {
+        Self {
+            syntax: resolve_syntax_for_path(path),
+        }
+    }
+
     pub fn start_hunk(&self) -> HunkSyntaxHighlighter {
         let old = self
             .syntax
@@ -193,7 +199,7 @@ impl HighlightedSegment {
         rich_text(result_spans)
             .size(11)
             .line_height(text::LineHeight::Relative(1.30))
-            .font(Font::MONOSPACE)
+            .font(crate::theme::code_font())
             .wrapping(text::Wrapping::None)
             .width(Length::Shrink)
             .into()
@@ -212,7 +218,7 @@ fn render_segments<Message: Clone + 'static>(
     rich_text(spans)
         .size(11)
         .line_height(text::LineHeight::Relative(1.30))
-        .font(Font::MONOSPACE)
+        .font(crate::theme::code_font())
         .wrapping(config.wrapping)
         .width(config.width)
         .into()

@@ -13,8 +13,8 @@ pub mod widgets;
 use crate::components::status_icons::FileStatus;
 use crate::keyboard::{get_shortcuts, ShortcutAction};
 use crate::state::{
-    is_docked_auxiliary_view, AppState, AuxiliaryView, DiffPresentation, GitToolWindowTab,
-    ShellSection, ToolbarRemoteAction,
+    is_docked_auxiliary_view, AppState, AuxiliaryView, DiffPresentation,
+    GitToolWindowTab, ShellSection, ToolbarRemoteAction,
 };
 use iced::widget::operation::{scroll_to, AbsoluteOffset};
 use iced::widget::Id;
@@ -30,6 +30,7 @@ use crate::views::{
     tag_dialog::{self, TagDialogMessage},
 };
 use crate::widgets::conflict_resolver::{ConflictResolverMessage, ResolutionOption};
+use crate::widgets::diff_editor::DiffEditorEvent;
 use crate::widgets::{button, commit_panel, file_picker, scrollable, OptionalPush};
 use git_core::index::Change;
 use git_core::{
@@ -59,13 +60,6 @@ pub fn main() -> iced::Result {
     }
     info!("Starting slio-git UI");
 
-    #[cfg(target_os = "macos")]
-    let cjk_font = iced::Font::with_name("PingFang SC");
-    #[cfg(target_os = "windows")]
-    let cjk_font = iced::Font::with_name("Microsoft YaHei");
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let cjk_font = iced::Font::with_name("Noto Sans CJK SC");
-
     // Load embedded window icon (64x64 RGBA)
     let icon_data = include_bytes!("../assets/icon_64.rgba");
     let window_icon = iced::window::icon::from_rgba(icon_data.to_vec(), 64, 64).ok();
@@ -87,7 +81,7 @@ pub fn main() -> iced::Result {
 
     iced::application(|| (AppState::restore(), Task::none()), update, view)
         .title("slio-git")
-        .default_font(cjk_font)
+        .default_font(theme::app_font())
         .theme(app_theme)
         .window(window_settings)
         .subscription(app_subscription)
@@ -228,6 +222,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         if previous_section != ShellSection::Conflicts || !state.has_conflicts() {
                             state.navigate_to(previous_section);
                         }
+                        update_editor_diff_model(state);
                         refresh_open_auxiliary_view(state);
                         state.set_success("仓库状态已刷新", None, "repository.refresh");
                     }
@@ -413,8 +408,23 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     "workspace.select_change",
                 );
             }
+            update_editor_diff_model(state);
         }
-        Message::ToggleDiffPresentation => state.toggle_diff_presentation(),
+        Message::ToggleDiffPresentation => {
+            state.toggle_diff_presentation();
+            update_editor_diff_model(state);
+        }
+        Message::SplitDiffEditorEvent(event) => {
+            if let Some(editor) = state.split_diff_editor.as_mut() {
+                let (task, current_hunk) = editor.update(event);
+                if let Some(hunk_index) = current_hunk {
+                    if state.selected_hunk_index != Some(hunk_index) {
+                        state.selected_hunk_index = Some(hunk_index);
+                    }
+                }
+                return task.map(Message::SplitDiffEditorEvent);
+            }
+        }
         Message::ShowSettings => {
             state.open_auxiliary_view(state::AuxiliaryView::Settings);
         }
@@ -3528,6 +3538,43 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
     Task::none()
 }
 
+/// Compute the editor-oriented split diff model for the currently selected file.
+fn update_editor_diff_model(state: &mut AppState) {
+    state.editor_diff = None;
+    state.split_diff_editor = None;
+
+    if state.diff_presentation != DiffPresentation::Split {
+        return;
+    }
+
+    if state.full_file_preview.is_some() || state.full_file_preview_binary {
+        return;
+    }
+
+    let (Some(repo), Some(path)) = (&state.current_repository, &state.selected_change_path) else {
+        return;
+    };
+
+    let is_staged = state
+        .staged_changes
+        .iter()
+        .any(|change| &change.path == path && change.staged && !change.unstaged);
+
+    match git_core::diff::build_editor_diff_model(repo, path, is_staged) {
+        Ok(Some(model)) => {
+            state.editor_diff = Some(model.clone());
+            state.split_diff_editor = Some(widgets::diff_editor::SplitDiffEditorState::new(model));
+            if state.selected_hunk_index.is_none() {
+                state.selected_hunk_index = Some(0);
+            }
+        }
+        Ok(None) => {}
+        Err(error) => {
+            warn!("Failed to build editor diff model for {}: {}", path, error);
+        }
+    }
+}
+
 fn require_repository(state: &AppState) -> Result<Repository, String> {
     state
         .current_repository
@@ -4048,14 +4095,35 @@ fn select_relative_file(state: &mut AppState, delta: isize) {
 }
 
 fn navigate_hunk(state: &mut AppState, delta: isize) -> Task<Message> {
-    if let Some(offset) = state.navigate_hunk(delta) {
-        scroll_to(
-            Id::new("diff-scroll"),
-            AbsoluteOffset { x: 0.0, y: offset },
-        )
-    } else {
-        Task::none()
+    if state.diff_presentation == DiffPresentation::Split {
+        let Some(model) = state.editor_diff.as_ref() else {
+            return Task::none();
+        };
+        let total_hunks = model.hunks.len();
+        if total_hunks == 0 {
+            return Task::none();
+        }
+
+        let current = state.selected_hunk_index.unwrap_or(0) as isize;
+        let next = (current + delta).clamp(0, (total_hunks - 1) as isize) as usize;
+        state.selected_hunk_index = Some(next);
+
+        if let Some(editor) = state.split_diff_editor.as_mut() {
+            return editor.scroll_to_hunk(next).map(Message::SplitDiffEditorEvent);
+        }
+
+        return Task::none();
     }
+
+    state
+        .navigate_hunk(delta)
+        .map(|offset| {
+            scroll_to(
+                Id::new("diff-scroll"),
+                AbsoluteOffset { x: 0.0, y: offset },
+            )
+        })
+        .unwrap_or_else(Task::none)
 }
 
 fn report_async_failure(
@@ -4857,7 +4925,6 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
 }
 
 fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Message> {
-    // Check full file preview first (for new/untracked/binary files)
     if state.full_file_preview_binary {
         return widgets::panel_empty_state_compact(
             i18n.binary_file_no_preview,
@@ -4884,33 +4951,48 @@ fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<
         );
     }
 
-    // Determine if selected file is staged or unstaged for hunk action buttons
     let selected_is_staged = state
         .selected_change_path
         .as_ref()
-        .map(|p| state.staged_changes.iter().any(|c| &c.path == p))
+        .map(|path| state.staged_changes.iter().any(|change| &change.path == path))
         .unwrap_or(false);
 
     match state.diff_presentation {
         DiffPresentation::Unified => {
             let mut viewer = widgets::diff_viewer::DiffViewer::new(diff);
             if selected_is_staged {
-                viewer = viewer
-                    .with_unstage_hunk_handler(Message::UnstageHunk);
-            } else {
-                viewer = viewer
-                    .with_stage_hunk_handler(Message::StageHunk);
-            }
-            viewer.view()
-        }
-        DiffPresentation::Split => {
-            let mut viewer = widgets::split_diff_viewer::SplitDiffViewer::new(diff);
-            if selected_is_staged {
                 viewer = viewer.with_unstage_hunk_handler(Message::UnstageHunk);
             } else {
                 viewer = viewer.with_stage_hunk_handler(Message::StageHunk);
             }
             viewer.view()
+        }
+        DiffPresentation::Split => {
+            let (Some(model), Some(editor)) =
+                (state.editor_diff.as_ref(), state.split_diff_editor.as_ref())
+            else {
+                return widgets::panel_empty_state_compact(
+                    "当前文件无法切换到分栏编辑器",
+                    "二进制、超大文件或无文本差异的文件继续使用空状态分支。",
+                );
+            };
+
+            widgets::split_diff_viewer::view(
+                model,
+                editor,
+                state.selected_hunk_index,
+                Message::SplitDiffEditorEvent,
+                if selected_is_staged {
+                    None
+                } else {
+                    Some(Message::StageHunk)
+                },
+                if selected_is_staged {
+                    Some(Message::UnstageHunk)
+                } else {
+                    None
+                },
+            )
         }
     }
 }
@@ -5628,6 +5710,7 @@ pub enum Message {
     SwitchProject(PathBuf),
     SelectChange(String),
     ToggleDiffPresentation,
+    SplitDiffEditorEvent(DiffEditorEvent),
     NavigatePrevFile,
     NavigateNextFile,
     PrevHunk,
