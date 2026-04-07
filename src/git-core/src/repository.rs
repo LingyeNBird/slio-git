@@ -383,7 +383,11 @@ mod tests {
         assert_eq!(SyncStatus::Ahead(3).display_text(), "↑3");
         assert_eq!(SyncStatus::Behind(5).display_text(), "↓5");
         assert_eq!(
-            SyncStatus::Diverged { ahead: 2, behind: 4 }.display_text(),
+            SyncStatus::Diverged {
+                ahead: 2,
+                behind: 4
+            }
+            .display_text(),
             "↕2/4"
         );
         assert_eq!(SyncStatus::Synced.display_text(), "✓");
@@ -396,7 +400,11 @@ mod tests {
         // Just verify all variants return valid color arrays
         let _ = SyncStatus::Ahead(1).display_color();
         let _ = SyncStatus::Behind(1).display_color();
-        let _ = SyncStatus::Diverged { ahead: 1, behind: 1 }.display_color();
+        let _ = SyncStatus::Diverged {
+            ahead: 1,
+            behind: 1,
+        }
+        .display_color();
         let _ = SyncStatus::Synced.display_color();
         let _ = SyncStatus::NoUpstream.display_color();
         let _ = SyncStatus::Unknown.display_color();

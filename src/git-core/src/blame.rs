@@ -41,10 +41,12 @@ pub fn blame_file(repo: &Repository, file_path: &Path) -> Result<Vec<BlameEntry>
     let mut entries = Vec::new();
 
     for i in 0..blame.len() {
-        let hunk = blame.get_index(i).ok_or_else(|| GitError::OperationFailed {
-            operation: "blame_file".to_string(),
-            details: format!("Failed to get blame hunk at index {}", i),
-        })?;
+        let hunk = blame
+            .get_index(i)
+            .ok_or_else(|| GitError::OperationFailed {
+                operation: "blame_file".to_string(),
+                details: format!("Failed to get blame hunk at index {}", i),
+            })?;
 
         let commit_id = hunk.final_commit_id();
         let sig = hunk.final_signature();

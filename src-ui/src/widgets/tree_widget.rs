@@ -38,11 +38,7 @@ impl TreeNode {
     }
 
     /// Create a new group node
-    pub fn group(
-        id: impl Into<String>,
-        label: impl Into<String>,
-        children: Vec<TreeNode>,
-    ) -> Self {
+    pub fn group(id: impl Into<String>, label: impl Into<String>, children: Vec<TreeNode>) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -140,10 +136,14 @@ fn render_node<'a, Message: Clone + 'a>(
         let toggle_id = node.id.clone();
         let on_msg_toggle = on_message.clone();
         row = row.push(
-            button(Text::new(expand_icon).size(10).color(theme::darcula::TEXT_SECONDARY))
-                .style(|_, _| button::Style::default())
-                .padding(0)
-                .on_press(on_msg_toggle(TreeMessage::ToggleNode(toggle_id))),
+            button(
+                Text::new(expand_icon)
+                    .size(10)
+                    .color(theme::darcula::TEXT_SECONDARY),
+            )
+            .style(|_, _| button::Style::default())
+            .padding(0)
+            .on_press(on_msg_toggle(TreeMessage::ToggleNode(toggle_id))),
         );
     } else {
         row = row.push(Space::new().width(Length::Fixed(14.0)));
@@ -193,7 +193,14 @@ fn render_node<'a, Message: Clone + 'a>(
                     continue;
                 }
             }
-            column = render_node(column, child, depth + 1, selected_id, search_filter, on_message);
+            column = render_node(
+                column,
+                child,
+                depth + 1,
+                selected_id,
+                search_filter,
+                on_message,
+            );
         }
     }
 

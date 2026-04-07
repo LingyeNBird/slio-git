@@ -91,6 +91,9 @@ pub mod density {
     pub const STATUS_PADDING: [u16; 2] = [2, 8];
     pub const STANDARD_CONTROL_HEIGHT: f32 = 24.0;
     pub const COMPACT_CONTROL_HEIGHT: f32 = 22.0;
+    pub const CHECKBOX_SIZE: f32 = 13.0;
+    pub const CHECKBOX_SPACING: f32 = 6.0;
+    pub const CHIP_HEIGHT: f32 = 18.0;
     pub const COMPACT_CHIP_PADDING: [u16; 2] = [1, 6];
     pub const TOOL_WINDOW_PADDING: [u16; 2] = [6, 8];
 }
@@ -107,23 +110,23 @@ pub mod radius {
 /// Semantic text styles — MotionSites-aligned hierarchy.
 pub mod typography {
     /// Display / hero text.
-    pub const DISPLAY_SIZE: u16 = 15;
+    pub const DISPLAY_SIZE: u32 = 14;
     pub const DISPLAY_WEIGHT: iced::font::Weight = iced::font::Weight::Bold;
 
     /// Title — section headers, dialog headings.
-    pub const TITLE_SIZE: u16 = 13;
+    pub const TITLE_SIZE: u32 = 13;
     pub const TITLE_WEIGHT: iced::font::Weight = iced::font::Weight::Semibold;
 
     /// Body — primary content, list items, descriptions.
-    pub const BODY_SIZE: u16 = 13;
+    pub const BODY_SIZE: u32 = 12;
     pub const BODY_WEIGHT: iced::font::Weight = iced::font::Weight::Normal;
 
     /// Caption — secondary info, timestamps, metadata.
-    pub const CAPTION_SIZE: u16 = 12;
+    pub const CAPTION_SIZE: u32 = 11;
     pub const CAPTION_WEIGHT: iced::font::Weight = iced::font::Weight::Normal;
 
     /// Micro — badges, chips, compact labels.
-    pub const MICRO_SIZE: u16 = 11;
+    pub const MICRO_SIZE: u32 = 10;
     pub const MICRO_WEIGHT: iced::font::Weight = iced::font::Weight::Normal;
 }
 
@@ -564,16 +567,8 @@ pub fn button_style_for(
     move |_theme, status| {
         let passive_text = mix(darcula::TEXT_SECONDARY, darcula::TEXT_PRIMARY, 0.30);
         let (base_background, text_color, base_border) = match tone {
-            ButtonTone::Primary => (
-                darcula::ACCENT,
-                Color::WHITE,
-                darcula::ACCENT,
-            ),
-            ButtonTone::Secondary => (
-                darcula::BG_CARD_2,
-                darcula::TEXT_PRIMARY,
-                darcula::BORDER,
-            ),
+            ButtonTone::Primary => (darcula::ACCENT, Color::WHITE, darcula::ACCENT),
+            ButtonTone::Secondary => (darcula::BG_CARD_2, darcula::TEXT_PRIMARY, darcula::BORDER),
             ButtonTone::Ghost => (Color::TRANSPARENT, passive_text, Color::TRANSPARENT),
             ButtonTone::TabActive => (
                 mix(darcula::BG_CARD, darcula::ACCENT_WEAK, 0.45),
@@ -770,11 +765,7 @@ pub fn text_editor_style() -> impl Fn(&Theme, text_editor::Status) -> text_edito
     move |_theme, status| {
         let field_bg = darcula::BG_CARD_2;
         let (background, border, value) = match status {
-            text_editor::Status::Active => (
-                field_bg,
-                darcula::BORDER,
-                darcula::TEXT_PRIMARY,
-            ),
+            text_editor::Status::Active => (field_bg, darcula::BORDER, darcula::TEXT_PRIMARY),
             text_editor::Status::Hovered => (
                 mix(field_bg, Color::WHITE, 0.03),
                 darcula::ACCENT.scale_alpha(0.45),

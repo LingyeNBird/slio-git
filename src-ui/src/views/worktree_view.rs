@@ -76,11 +76,7 @@ pub fn view(state: &WorktreeState) -> Element<'_, WorktreeMessage> {
         ))
     } else {
         state.success_message.as_ref().map(|msg| {
-            widgets::status_banner::<WorktreeMessage>(
-                "完成",
-                msg.as_str(),
-                BadgeTone::Success,
-            )
+            widgets::status_banner::<WorktreeMessage>("完成", msg.as_str(), BadgeTone::Success)
         })
     };
 
@@ -95,10 +91,7 @@ pub fn view(state: &WorktreeState) -> Element<'_, WorktreeMessage> {
     }
 
     for wt in &state.worktrees {
-        let branch_label = wt
-            .branch
-            .as_deref()
-            .unwrap_or("(detached)");
+        let branch_label = wt.branch.as_deref().unwrap_or("(detached)");
         let status_label = if wt.is_main {
             "主工作树"
         } else if wt.is_locked {
@@ -156,13 +149,11 @@ pub fn view(state: &WorktreeState) -> Element<'_, WorktreeMessage> {
         );
     }
 
-    let mut content = Column::new()
-        .spacing(theme::spacing::SM)
-        .push(
-            Container::new(header)
-                .padding(theme::density::SECONDARY_BAR_PADDING)
-                .style(theme::panel_style(Surface::Toolbar)),
-        );
+    let mut content = Column::new().spacing(theme::spacing::SM).push(
+        Container::new(header)
+            .padding(theme::density::SECONDARY_BAR_PADDING)
+            .style(theme::panel_style(Surface::Toolbar)),
+    );
 
     if let Some(s) = status {
         content = content.push(s);

@@ -60,4 +60,3 @@ pub(crate) fn is_ancestor(
             details: e.to_string(),
         })
 }
-

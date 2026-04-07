@@ -206,9 +206,7 @@ pub mod i18n;
 pub mod theme;
 
 /// LSP integration types and traits for editor clients.
-pub use canvas_editor::lsp::{
-    LspClient, LspDocument, LspPosition, LspRange, LspTextChange,
-};
+pub use canvas_editor::lsp::{LspClient, LspDocument, LspPosition, LspRange, LspTextChange};
 pub use canvas_editor::{ArrowDirection, CodeEditor, CommandHistory, Message};
 pub use i18n::{Language, Translations};
 pub use theme::{Catalog, Style, StyleFn, from_iced_theme};
@@ -219,8 +217,7 @@ pub use canvas_editor::lsp_process::{LspEvent, LspProcessClient};
 #[cfg(all(feature = "lsp-process", not(target_arch = "wasm32")))]
 pub use canvas_editor::lsp_process::config::{
     LspCommand, LspLanguage, LspServerConfig, ensure_rust_analyzer_config,
-    lsp_language_for_extension, lsp_language_for_path, lsp_server_config,
-    resolve_lsp_command,
+    lsp_language_for_extension, lsp_language_for_path, lsp_server_config, resolve_lsp_command,
 };
 
 #[cfg(all(feature = "lsp-process", not(target_arch = "wasm32")))]

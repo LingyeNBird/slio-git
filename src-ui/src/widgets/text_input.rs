@@ -2,7 +2,7 @@
 
 use crate::theme;
 use crate::widgets::{button::compact_ghost, OptionalPush};
-use iced::widget::{Row, Text, TextInput};
+use iced::widget::{text, Container, Row, Text, TextInput};
 use iced::{Element, Length};
 
 pub fn styled<'a, Message: Clone + 'a>(
@@ -11,8 +11,10 @@ pub fn styled<'a, Message: Clone + 'a>(
     on_change: impl Fn(String) -> Message + 'a,
 ) -> TextInput<'a, Message> {
     TextInput::new(placeholder, value)
-        .padding([5, 8])
-        .size(12)
+        .padding([4, 8])
+        .size(theme::typography::CAPTION_SIZE)
+        .font(theme::app_font())
+        .line_height(text::LineHeight::Relative(1.0))
         .width(Length::Fill)
         .style(theme::text_input_style())
         .on_input(on_change)
@@ -24,8 +26,10 @@ pub fn styled_password<'a, Message: Clone + 'a>(
     on_change: impl Fn(String) -> Message + 'a,
 ) -> TextInput<'a, Message> {
     TextInput::new(placeholder, value)
-        .padding([5, 8])
-        .size(12)
+        .padding([4, 8])
+        .size(theme::typography::CAPTION_SIZE)
+        .font(theme::app_font())
+        .line_height(text::LineHeight::Relative(1.0))
         .width(Length::Fill)
         .secure(true)
         .style(theme::text_input_style())
@@ -42,8 +46,10 @@ pub fn search_with_clear<'a, Message: Clone + 'a>(
     on_clear: Message,
 ) -> Element<'a, Message> {
     let input = TextInput::new(placeholder, value)
-        .padding([5, 8])
-        .size(12)
+        .padding([4, 8])
+        .size(theme::typography::CAPTION_SIZE)
+        .font(theme::app_font())
+        .line_height(text::LineHeight::Relative(1.0))
         .width(Length::Fill)
         .style(theme::text_input_style())
         .on_input(on_change);
@@ -52,15 +58,20 @@ pub fn search_with_clear<'a, Message: Clone + 'a>(
 
     // IDEA-style: search icon prefix inside the input row
     let search_icon = Text::new("🔎")
-        .size(11)
+        .size(theme::typography::CAPTION_SIZE)
+        .font(theme::app_font())
+        .line_height(text::LineHeight::Relative(1.0))
         .color(theme::darcula::TEXT_SECONDARY);
 
-    Row::new()
-        .spacing(theme::spacing::XS)
-        .align_y(iced::Alignment::Center)
-        .width(Length::Fill)
-        .push(search_icon)
-        .push(input)
-        .push_maybe((!value.is_empty()).then_some(clear_button))
-        .into()
+    Container::new(
+        Row::new()
+            .spacing(theme::spacing::XS)
+            .align_y(iced::Alignment::Center)
+            .width(Length::Fill)
+            .push(search_icon)
+            .push(input)
+            .push_maybe((!value.is_empty()).then_some(clear_button)),
+    )
+    .center_y(Length::Fixed(theme::density::STANDARD_CONTROL_HEIGHT))
+    .into()
 }

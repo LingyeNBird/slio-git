@@ -161,8 +161,7 @@ impl Translations {
     /// ```
     #[must_use]
     pub fn search_placeholder(&self) -> String {
-        rust_i18n::t!("search.placeholder", locale = self.language.to_locale())
-            .into_owned()
+        rust_i18n::t!("search.placeholder", locale = self.language.to_locale()).into_owned()
     }
 
     /// Returns the placeholder text for the replace input field.
@@ -177,8 +176,7 @@ impl Translations {
     /// ```
     #[must_use]
     pub fn replace_placeholder(&self) -> String {
-        rust_i18n::t!("replace.placeholder", locale = self.language.to_locale())
-            .into_owned()
+        rust_i18n::t!("replace.placeholder", locale = self.language.to_locale()).into_owned()
     }
 
     /// Returns the label text for the case sensitive checkbox.
@@ -250,11 +248,7 @@ impl Translations {
     /// ```
     #[must_use]
     pub fn close_search_tooltip(&self) -> String {
-        rust_i18n::t!(
-            "search.close_tooltip",
-            locale = self.language.to_locale()
-        )
-        .into_owned()
+        rust_i18n::t!("search.close_tooltip", locale = self.language.to_locale()).into_owned()
     }
 
     /// Returns the tooltip text for the replace current match button.
@@ -288,8 +282,7 @@ impl Translations {
     /// ```
     #[must_use]
     pub fn replace_all_tooltip(&self) -> String {
-        rust_i18n::t!("replace.all_tooltip", locale = self.language.to_locale())
-            .into_owned()
+        rust_i18n::t!("replace.all_tooltip", locale = self.language.to_locale()).into_owned()
     }
 }
 
@@ -394,10 +387,7 @@ mod tests {
             "Risultato precedente (Maiusc+F3)"
         );
         assert_eq!(t.next_match_tooltip(), "Risultato successivo (F3 / Invio)");
-        assert_eq!(
-            t.close_search_tooltip(),
-            "Chiudi finestra di ricerca (Esc)"
-        );
+        assert_eq!(t.close_search_tooltip(), "Chiudi finestra di ricerca (Esc)");
         assert_eq!(
             t.replace_current_tooltip(),
             "Sostituisci risultato corrente"
@@ -419,10 +409,7 @@ mod tests {
             t.next_match_tooltip(),
             "Próxima correspondência (F3 / Enter)"
         );
-        assert_eq!(
-            t.close_search_tooltip(),
-            "Fechar diálogo de pesquisa (Esc)"
-        );
+        assert_eq!(t.close_search_tooltip(), "Fechar diálogo de pesquisa (Esc)");
         assert_eq!(
             t.replace_current_tooltip(),
             "Substituir correspondência atual"
@@ -444,10 +431,7 @@ mod tests {
             t.next_match_tooltip(),
             "Próxima correspondência (F3 / Enter)"
         );
-        assert_eq!(
-            t.close_search_tooltip(),
-            "Fechar diálogo de pesquisa (Esc)"
-        );
+        assert_eq!(t.close_search_tooltip(), "Fechar diálogo de pesquisa (Esc)");
         assert_eq!(
             t.replace_current_tooltip(),
             "Substituir correspondência actual"

@@ -67,16 +67,16 @@ fn hunk_strip<'a, Message: Clone + 'static>(
             ))
             .push(
                 Text::new(hunk.header.clone())
-                    .size(10)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             )
             .push(Space::new().width(Length::Fill))
-            .push_maybe(stage_message.map(|message| {
-                button::compact_ghost("暂存区块", Some(message))
-            }))
-            .push_maybe(unstage_message.map(|message| {
-                button::compact_ghost("取消暂存", Some(message))
-            })),
+            .push_maybe(
+                stage_message.map(|message| button::compact_ghost("暂存区块", Some(message))),
+            )
+            .push_maybe(
+                unstage_message.map(|message| button::compact_ghost("取消暂存", Some(message))),
+            ),
     )
     .padding(theme::density::SECONDARY_BAR_PADDING)
     .style(theme::frame_style(theme::Surface::Toolbar))

@@ -17,10 +17,12 @@ fn blame_file_returns_correct_attribution_for_single_author() {
         .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
-    let entries =
-        git_core::blame_file(&r, std::path::Path::new("hello.txt")).unwrap();
+    let entries = git_core::blame_file(&r, std::path::Path::new("hello.txt")).unwrap();
 
-    assert!(!entries.is_empty(), "blame should return at least one entry");
+    assert!(
+        !entries.is_empty(),
+        "blame should return at least one entry"
+    );
     assert_eq!(entries[0].author_name, "Codex Test");
     // All lines should be from the same commit
     let total_lines: u32 = entries.iter().map(|e| e.line_count).sum();
@@ -36,8 +38,7 @@ fn blame_file_tracks_line_changes_across_commits() {
         .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
-    let entries =
-        git_core::blame_file(&r, std::path::Path::new("file.txt")).unwrap();
+    let entries = git_core::blame_file(&r, std::path::Path::new("file.txt")).unwrap();
 
     // There should be at least 2 hunks (some from first commit, some from second)
     assert!(
@@ -97,11 +98,7 @@ fn compute_ref_labels_finds_branches_and_tags() {
     assert!(!labels.is_empty(), "should find at least one ref label");
 
     // Should find the main branch and tag
-    let all_names: Vec<String> = labels
-        .values()
-        .flatten()
-        .map(|l| l.name.clone())
-        .collect();
+    let all_names: Vec<String> = labels.values().flatten().map(|l| l.name.clone()).collect();
     assert!(
         all_names.iter().any(|n| n == "v1.0"),
         "should find tag v1.0, got {:?}",
@@ -228,8 +225,7 @@ fn is_branch_merged_detects_merged_branch() {
         .current_dir(repo.path())
         .output()
         .unwrap();
-    repo.add_and_commit("b.txt", "b", "feature commit")
-        .unwrap();
+    repo.add_and_commit("b.txt", "b", "feature commit").unwrap();
     std::process::Command::new("git")
         .args(["checkout", "main"])
         .current_dir(repo.path())
@@ -267,7 +263,11 @@ fn uncommit_to_commit_soft_resets_and_preserves_staging() {
     // Refresh and verify commits 1 and 2 remain
     let r2 = Repository::discover(repo.path()).unwrap();
     let history_after = git_core::get_history(&r2, Some(10)).unwrap();
-    assert_eq!(history_after.len(), 2, "commits 1 and 2 should remain after uncommitting commit 3");
+    assert_eq!(
+        history_after.len(),
+        2,
+        "commits 1 and 2 should remain after uncommitting commit 3"
+    );
 
     // Changes from commit 3 (c.txt) should be in staging area
     let status = git_core::index::get_status(&r2).unwrap();
@@ -293,7 +293,11 @@ fn unstash_as_branch_creates_branch_and_applies_changes() {
         .current_dir(repo.path())
         .output()
         .unwrap();
-    git_core::stash_save(&Repository::discover(repo.path()).unwrap(), Some("test stash")).unwrap();
+    git_core::stash_save(
+        &Repository::discover(repo.path()).unwrap(),
+        Some("test stash"),
+    )
+    .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let stashes = git_core::list_stashes(&r).unwrap();
@@ -357,10 +361,7 @@ fn compute_inline_changes_detects_character_diffs() {
     );
 
     // The unchanged prefix "let count = " should be marked not-changed
-    assert!(
-        !old_spans[0].changed,
-        "first span should be unchanged"
-    );
+    assert!(!old_spans[0].changed, "first span should be unchanged");
 
     // At least one span should be marked changed
     assert!(
@@ -375,8 +376,7 @@ fn compute_inline_changes_detects_character_diffs() {
 
 #[test]
 fn compute_inline_changes_identical_lines_have_no_changes() {
-    let (old_spans, new_spans) =
-        git_core::diff::compute_inline_changes("same line", "same line");
+    let (old_spans, new_spans) = git_core::diff::compute_inline_changes("same line", "same line");
 
     // All spans should be not-changed
     assert!(
@@ -391,8 +391,7 @@ fn compute_inline_changes_identical_lines_have_no_changes() {
 
 #[test]
 fn compute_inline_changes_completely_different() {
-    let (old_spans, new_spans) =
-        git_core::diff::compute_inline_changes("aaa", "zzz");
+    let (old_spans, new_spans) = git_core::diff::compute_inline_changes("aaa", "zzz");
 
     // All content should be marked changed
     let old_changed: usize = old_spans.iter().filter(|s| s.changed).map(|s| s.len).sum();
@@ -407,7 +406,8 @@ fn compute_inline_changes_completely_different() {
 fn build_full_file_diff_creates_all_addition_lines() {
     let repo = TestRepo::new().unwrap();
     repo.add_and_commit("base.txt", "base", "init").unwrap();
-    repo.write_file("new_file.txt", "line1\nline2\nline3\n").unwrap();
+    repo.write_file("new_file.txt", "line1\nline2\nline3\n")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let preview = git_core::build_full_file_diff(&r, std::path::Path::new("new_file.txt")).unwrap();
@@ -417,9 +417,10 @@ fn build_full_file_diff_creates_all_addition_lines() {
     assert_eq!(preview.diff.additions, 3);
     assert_eq!(preview.diff.hunks.len(), 1);
     assert!(
-        preview.diff.hunks[0].lines.iter().all(|l| {
-            l.origin == git_core::diff::DiffLineOrigin::Addition
-        }),
+        preview.diff.hunks[0]
+            .lines
+            .iter()
+            .all(|l| { l.origin == git_core::diff::DiffLineOrigin::Addition }),
         "all lines should be additions"
     );
 }
@@ -462,7 +463,11 @@ fn stash_save_delegates_to_with_options() {
 
     // stash_save should work (it delegates internally)
     let result = git_core::stash_save(&r, Some("delegate test"));
-    assert!(result.is_ok(), "stash_save should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "stash_save should succeed: {:?}",
+        result.err()
+    );
 
     let stashes = git_core::list_stashes(&r).unwrap();
     assert!(!stashes.is_empty(), "should have at least one stash");
@@ -508,7 +513,8 @@ fn stash_clear_removes_all_stashes() {
 #[test]
 fn validate_commit_ref_resolves_head() {
     let repo = TestRepo::new().unwrap();
-    repo.add_and_commit("a.txt", "content", "test commit").unwrap();
+    repo.add_and_commit("a.txt", "content", "test commit")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let (hash, summary) = git_core::validate_commit_ref(&r, "HEAD").unwrap();
@@ -580,21 +586,27 @@ fn branch_group_path_none_for_simple_name() {
 #[test]
 fn get_history_for_author_filters_by_name() {
     let repo = TestRepo::new().unwrap();
-    repo.add_and_commit("a.txt", "content", "commit by codex test").unwrap();
+    repo.add_and_commit("a.txt", "content", "commit by codex test")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let results = git_core::get_history_for_author(&r, "Codex", Some(10)).unwrap();
     assert!(!results.is_empty(), "should find commits by 'Codex'");
 
     let no_results = git_core::get_history_for_author(&r, "nonexistent_author", Some(10)).unwrap();
-    assert!(no_results.is_empty(), "should find no commits by unknown author");
+    assert!(
+        no_results.is_empty(),
+        "should find no commits by unknown author"
+    );
 }
 
 #[test]
 fn get_history_for_path_filters_by_file() {
     let repo = TestRepo::new().unwrap();
-    repo.add_and_commit("src/main.rs", "fn main() {}", "add main").unwrap();
-    repo.add_and_commit("README.md", "# Hello", "add readme").unwrap();
+    repo.add_and_commit("src/main.rs", "fn main() {}", "add main")
+        .unwrap();
+    repo.add_and_commit("README.md", "# Hello", "add readme")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let main_history = git_core::get_history_for_path(&r, "src/main.rs", Some(10)).unwrap();
@@ -605,7 +617,8 @@ fn get_history_for_path_filters_by_file() {
 #[test]
 fn get_history_for_date_range_filters_correctly() {
     let repo = TestRepo::new().unwrap();
-    repo.add_and_commit("a.txt", "content", "recent commit").unwrap();
+    repo.add_and_commit("a.txt", "content", "recent commit")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let now = std::time::SystemTime::now()
@@ -614,7 +627,8 @@ fn get_history_for_date_range_filters_correctly() {
         .as_secs() as i64;
 
     // Range that includes now
-    let results = git_core::get_history_for_date_range(&r, now - 3600, now + 3600, Some(10)).unwrap();
+    let results =
+        git_core::get_history_for_date_range(&r, now - 3600, now + 3600, Some(10)).unwrap();
     assert!(!results.is_empty(), "should find recent commit in range");
 
     // Range far in the past
@@ -691,7 +705,15 @@ fn create_and_delete_tag() {
     let commit_id = &history[0].id;
 
     // Create annotated tag
-    git_core::create_tag(&r, "v1.0", commit_id, "release 1.0", "Tester", "test@example.com").unwrap();
+    git_core::create_tag(
+        &r,
+        "v1.0",
+        commit_id,
+        "release 1.0",
+        "Tester",
+        "test@example.com",
+    )
+    .unwrap();
 
     let tags = git_core::list_tags(&r).unwrap();
     assert!(tags.iter().any(|t| t.name == "v1.0"), "tag should exist");
@@ -704,7 +726,10 @@ fn create_and_delete_tag() {
     // Delete tag
     git_core::delete_tag(&r, "v1.0").unwrap();
     let tags3 = git_core::list_tags(&r).unwrap();
-    assert!(!tags3.iter().any(|t| t.name == "v1.0"), "tag should be deleted");
+    assert!(
+        !tags3.iter().any(|t| t.name == "v1.0"),
+        "tag should be deleted"
+    );
 }
 
 // ── Stash apply (non-pop) ─────────────────────────────────────────────────
@@ -727,8 +752,14 @@ fn stash_apply_keeps_stash_in_list() {
     // Apply (not pop) — stash should remain
     git_core::stash_apply(&r, 0).unwrap();
     let stashes = git_core::list_stashes(&r).unwrap();
-    assert!(!stashes.is_empty(), "stash should still be in list after apply");
-    assert!(repo.path().join("b.txt").exists(), "file should be restored");
+    assert!(
+        !stashes.is_empty(),
+        "stash should still be in list after apply"
+    );
+    assert!(
+        repo.path().join("b.txt").exists(),
+        "file should be restored"
+    );
 }
 
 // ── Stash diff preview ────────────────────────────────────────────────────
@@ -750,15 +781,17 @@ fn stash_diff_returns_content() {
 
     let diff = git_core::stash_diff(&r, 0).unwrap();
     assert!(!diff.is_empty(), "stash diff should have content");
-    assert!(diff.contains("modified content") || diff.contains("a.txt"),
-        "diff should reference the changed file");
+    assert!(
+        diff.contains("modified content") || diff.contains("a.txt"),
+        "diff should reference the changed file"
+    );
 }
 
 // ── Enhance hunk with inline changes ──────────────────────────────────────
 
 #[test]
 fn enhance_hunk_pairs_deletions_with_additions() {
-    use git_core::diff::{DiffHunk, DiffLine, DiffLineOrigin, enhance_hunk_with_inline_changes};
+    use git_core::diff::{enhance_hunk_with_inline_changes, DiffHunk, DiffLine, DiffLineOrigin};
 
     let mut hunk = DiffHunk {
         header: "@@ -1,1 +1,1 @@".to_string(),
@@ -797,33 +830,46 @@ fn enhance_hunk_pairs_deletions_with_additions() {
     );
 
     // The "1" and "2" should be marked as changed
-    let del_changed: usize = hunk.lines[0].inline_changes.iter()
-        .filter(|s| s.changed).map(|s| s.len).sum();
-    let add_changed: usize = hunk.lines[1].inline_changes.iter()
-        .filter(|s| s.changed).map(|s| s.len).sum();
+    let del_changed: usize = hunk.lines[0]
+        .inline_changes
+        .iter()
+        .filter(|s| s.changed)
+        .map(|s| s.len)
+        .sum();
+    let add_changed: usize = hunk.lines[1]
+        .inline_changes
+        .iter()
+        .filter(|s| s.changed)
+        .map(|s| s.len)
+        .sum();
     assert!(del_changed > 0, "deletion should have changed chars");
     assert!(add_changed > 0, "addition should have changed chars");
 }
 
 #[test]
 fn enhance_hunk_skips_context_lines() {
-    use git_core::diff::{DiffHunk, DiffLine, DiffLineOrigin, enhance_hunk_with_inline_changes};
+    use git_core::diff::{enhance_hunk_with_inline_changes, DiffHunk, DiffLine, DiffLineOrigin};
 
     let mut hunk = DiffHunk {
         header: "@@".to_string(),
-        old_start: 1, old_lines: 1, new_start: 1, new_lines: 1,
-        lines: vec![
-            DiffLine {
-                content: "unchanged line".to_string(),
-                origin: DiffLineOrigin::Context,
-                old_lineno: Some(1), new_lineno: Some(1),
-                inline_changes: Vec::new(),
-            },
-        ],
+        old_start: 1,
+        old_lines: 1,
+        new_start: 1,
+        new_lines: 1,
+        lines: vec![DiffLine {
+            content: "unchanged line".to_string(),
+            origin: DiffLineOrigin::Context,
+            old_lineno: Some(1),
+            new_lineno: Some(1),
+            inline_changes: Vec::new(),
+        }],
     };
 
     enhance_hunk_with_inline_changes(&mut hunk);
-    assert!(hunk.lines[0].inline_changes.is_empty(), "context lines should not get inline changes");
+    assert!(
+        hunk.lines[0].inline_changes.is_empty(),
+        "context lines should not get inline changes"
+    );
 }
 
 // ── Full file preview truncation ──────────────────────────────────────────
@@ -854,7 +900,8 @@ fn build_full_file_diff_truncates_large_files() {
 #[test]
 fn history_entry_includes_committer_info() {
     let repo = TestRepo::new().unwrap();
-    repo.add_and_commit("a.txt", "content", "test commit").unwrap();
+    repo.add_and_commit("a.txt", "content", "test commit")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let history = git_core::get_history(&r, Some(1)).unwrap();
@@ -888,10 +935,7 @@ fn force_push_fails_gracefully_without_remote() {
 
 #[test]
 fn inline_changes_merge_adjacent_same_status_spans() {
-    let (old_spans, _) = git_core::diff::compute_inline_changes(
-        "abcdef",
-        "abcXYZ",
-    );
+    let (old_spans, _) = git_core::diff::compute_inline_changes("abcdef", "abcXYZ");
     // "abc" unchanged, "def" changed → should be exactly 2 spans, not 6
     assert!(
         old_spans.len() <= 3,
@@ -916,11 +960,7 @@ fn compute_ref_labels_includes_local_branches() {
     let r = Repository::discover(repo.path()).unwrap();
     let labels = git_core::compute_ref_labels(&r).unwrap();
 
-    let all_names: Vec<String> = labels
-        .values()
-        .flatten()
-        .map(|l| l.name.clone())
-        .collect();
+    let all_names: Vec<String> = labels.values().flatten().map(|l| l.name.clone()).collect();
     assert!(
         all_names.iter().any(|n| n == "feature-x"),
         "should find feature-x branch, got {:?}",
@@ -945,9 +985,12 @@ fn is_branch_merged_nonexistent_branch_errors() {
 #[test]
 fn search_history_finds_matching_commits() {
     let repo = TestRepo::new().unwrap();
-    repo.add_and_commit("a.txt", "a", "feat: add login").unwrap();
-    repo.add_and_commit("b.txt", "b", "fix: typo in readme").unwrap();
-    repo.add_and_commit("c.txt", "c", "feat: add logout").unwrap();
+    repo.add_and_commit("a.txt", "a", "feat: add login")
+        .unwrap();
+    repo.add_and_commit("b.txt", "b", "fix: typo in readme")
+        .unwrap();
+    repo.add_and_commit("c.txt", "c", "feat: add logout")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let results = git_core::search_history(&r, "feat", Some(10)).unwrap();
@@ -973,12 +1016,20 @@ fn search_history_finds_matching_commits() {
 fn full_file_preview_line_numbers_start_at_one() {
     let repo = TestRepo::new().unwrap();
     repo.add_and_commit("x.txt", "base", "init").unwrap();
-    repo.write_file("new.py", "import os\nprint('hello')\n").unwrap();
+    repo.write_file("new.py", "import os\nprint('hello')\n")
+        .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
     let preview = git_core::build_full_file_diff(&r, std::path::Path::new("new.py")).unwrap();
 
     let first_line = &preview.diff.hunks[0].lines[0];
-    assert_eq!(first_line.new_lineno, Some(1), "first line should be line 1");
-    assert!(first_line.content.contains("import"), "first line should have content");
+    assert_eq!(
+        first_line.new_lineno,
+        Some(1),
+        "first line should be line 1"
+    );
+    assert!(
+        first_line.content.contains("import"),
+        "first line should have content"
+    );
 }

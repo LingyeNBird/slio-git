@@ -40,7 +40,12 @@ impl VisualLine {
         start_col: usize,
         end_col: usize,
     ) -> Self {
-        Self { logical_line, segment_index, start_col, end_col }
+        Self {
+            logical_line,
+            segment_index,
+            start_col,
+            end_col,
+        }
     }
 
     /// Returns whether this is the first segment of the logical line.
@@ -96,7 +101,12 @@ impl WrappingCalculator {
         full_char_width: f32,
         char_width: f32,
     ) -> Self {
-        Self { wrap_enabled, wrap_column, full_char_width, char_width }
+        Self {
+            wrap_enabled,
+            wrap_column,
+            full_char_width,
+            char_width,
+        }
     }
 
     /// Calculates all visual lines from the text buffer.
@@ -119,9 +129,7 @@ impl WrappingCalculator {
         if !self.wrap_enabled {
             // No wrapping: one visual line per logical line
             return (0..text_buffer.line_count())
-                .map(|line| {
-                    VisualLine::new(line, 0, 0, text_buffer.line_len(line))
-                })
+                .map(|line| VisualLine::new(line, 0, 0, text_buffer.line_len(line)))
                 .collect();
         }
 
@@ -150,11 +158,8 @@ impl WrappingCalculator {
 
             for (i, c) in line_content.chars().enumerate() {
                 // Compute pixel width for the current character
-                let char_width = super::measure_char_width(
-                    c,
-                    self.full_char_width,
-                    self.char_width,
-                );
+                let char_width =
+                    super::measure_char_width(c, self.full_char_width, self.char_width);
 
                 // If adding the current character exceeds wrap width, wrap at the previous char.
                 // Ensure at least one character per segment even if a single char exceeds wrap_width.
@@ -210,11 +215,7 @@ impl WrappingCalculator {
     ) -> Option<usize> {
         visual_lines
             .iter()
-            .position(|vl| {
-                vl.logical_line == line
-                    && col >= vl.start_col
-                    && col < vl.end_col
-            })
+            .position(|vl| vl.logical_line == line && col >= vl.start_col && col < vl.end_col)
             .or_else(|| {
                 // Handle cursor at end of line (col == end_col)
                 visual_lines.iter().position(|vl| {
@@ -251,10 +252,8 @@ mod tests {
 
     #[test]
     fn test_wrap_at_fixed_column() {
-        let buffer =
-            TextBuffer::new("this is a very long line that should be wrapped");
-        let calc =
-            WrappingCalculator::new(true, Some(10), FONT_SIZE, CHAR_WIDTH);
+        let buffer = TextBuffer::new("this is a very long line that should be wrapped");
+        let calc = WrappingCalculator::new(true, Some(10), FONT_SIZE, CHAR_WIDTH);
         let visual_lines = calc.calculate_visual_lines(&buffer, 800.0, 60.0);
 
         // Line is 47 chars, should wrap into 5 segments (10+10+10+10+7)
@@ -269,10 +268,8 @@ mod tests {
 
     #[test]
     fn test_logical_to_visual_mapping() {
-        let buffer =
-            TextBuffer::new("short\nthis is a very long line that wraps\nend");
-        let calc =
-            WrappingCalculator::new(true, Some(15), FONT_SIZE, CHAR_WIDTH);
+        let buffer = TextBuffer::new("short\nthis is a very long line that wraps\nend");
+        let calc = WrappingCalculator::new(true, Some(15), FONT_SIZE, CHAR_WIDTH);
         let visual_lines = calc.calculate_visual_lines(&buffer, 800.0, 60.0);
 
         // First line (short) - no wrap
@@ -303,8 +300,7 @@ mod tests {
     #[test]
     fn test_wrap_empty_lines() {
         let buffer = TextBuffer::new("line1\n\nline3");
-        let calc =
-            WrappingCalculator::new(true, Some(10), FONT_SIZE, CHAR_WIDTH);
+        let calc = WrappingCalculator::new(true, Some(10), FONT_SIZE, CHAR_WIDTH);
         let visual_lines = calc.calculate_visual_lines(&buffer, 800.0, 60.0);
 
         assert_eq!(visual_lines.len(), 3);
@@ -316,8 +312,7 @@ mod tests {
     fn test_wrap_very_long_line() {
         let long_text = "a".repeat(100);
         let buffer = TextBuffer::new(&long_text);
-        let calc =
-            WrappingCalculator::new(true, Some(20), FONT_SIZE, CHAR_WIDTH);
+        let calc = WrappingCalculator::new(true, Some(20), FONT_SIZE, CHAR_WIDTH);
         let visual_lines = calc.calculate_visual_lines(&buffer, 800.0, 60.0);
 
         // 100 chars / 20 per line = 5 lines
@@ -343,8 +338,7 @@ mod tests {
         // 6 CJK characters = 6 * 14.0 = 84.0 pixels. Matches exactly.
         let text = "你好世界你好"; // 6 chars
         let buffer = TextBuffer::new(text);
-        let calc =
-            WrappingCalculator::new(true, Some(10), FONT_SIZE, CHAR_WIDTH); // 84.0 px
+        let calc = WrappingCalculator::new(true, Some(10), FONT_SIZE, CHAR_WIDTH); // 84.0 px
         let visual_lines = calc.calculate_visual_lines(&buffer, 800.0, 60.0);
 
         assert_eq!(visual_lines.len(), 1);

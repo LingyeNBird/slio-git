@@ -6,7 +6,7 @@
 use crate::theme::{self, BadgeTone, Surface};
 use crate::views::commit_dialog::{CommitDialogMessage, CommitDialogState};
 use crate::widgets::{self, button, OptionalPush};
-use iced::widget::{text, text_editor, Checkbox, Column, Container, Row, Space, Text};
+use iced::widget::{text, text_editor, Column, Container, Row, Space, Text};
 use iced::{Alignment, Element, Length};
 
 /// Build an embedded commit panel view backed by commit-dialog state.
@@ -23,7 +23,12 @@ pub fn view<'a>(
         ))
     } else if let Some(error) = state.error.as_ref() {
         Some(build_compact_status("失败", error, BadgeTone::Danger))
-    } else { state.success_message.as_ref().map(|message| build_compact_status("完成", message, BadgeTone::Success)) };
+    } else {
+        state
+            .success_message
+            .as_ref()
+            .map(|message| build_compact_status("完成", message, BadgeTone::Success))
+    };
 
     let commit_label = if state.is_committing {
         "提交中..."
@@ -38,7 +43,7 @@ pub fn view<'a>(
     let editor = text_editor(&state.message_editor)
         .placeholder("输入提交消息...")
         .padding([8, 10])
-        .size(f32::from(theme::typography::BODY_SIZE))
+        .size(theme::typography::BODY_SIZE as f32)
         .height(Length::Fill)
         .style(theme::text_editor_style())
         .on_action(CommitDialogMessage::MessageEdited);
@@ -53,12 +58,7 @@ pub fn view<'a>(
     let amend_checkbox: Element<'_, CommitDialogMessage> = if state.is_committing {
         Space::new().width(Length::Shrink).into()
     } else {
-        Checkbox::new(state.is_amend)
-            .size(14)
-            .label("修正提交")
-            .style(theme::checkbox_style())
-            .on_toggle(CommitDialogMessage::SetAmendMode)
-            .into()
+        widgets::compact_checkbox(state.is_amend, "修正提交", CommitDialogMessage::SetAmendMode)
     };
 
     let ai_button: Element<'_, CommitDialogMessage> = if llm_enabled {
@@ -95,11 +95,7 @@ pub fn view<'a>(
     Column::new()
         .spacing(0)
         .push_maybe(status_panel)
-        .push(
-            Container::new(editor)
-                .padding([4, 6])
-                .height(Length::Fill),
-        )
+        .push(Container::new(editor).padding([4, 6]).height(Length::Fill))
         .push(
             Container::new(actions)
                 .padding([4, 6])
@@ -127,7 +123,9 @@ fn build_compact_status<'a, Message: 'a>(
             .push(widgets::compact_chip::<Message>(label.into(), tone))
             .push(
                 Text::new(detail.into())
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
+                    .line_height(text::LineHeight::Relative(1.0))
+                    .font(theme::app_font())
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY),

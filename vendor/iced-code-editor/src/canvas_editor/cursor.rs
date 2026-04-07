@@ -69,11 +69,7 @@ impl CodeEditor {
 
                 // Find current visual line
                 if let Some(current_visual) =
-                    WrappingCalculator::logical_to_visual(
-                        &visual_lines,
-                        line,
-                        col,
-                    )
+                    WrappingCalculator::logical_to_visual(&visual_lines, line, col)
                 {
                     let target_visual = match direction {
                         ArrowDirection::Up => {
@@ -103,27 +99,20 @@ impl CodeEditor {
                     let new_col = if target_vl.logical_line == line {
                         // Same logical line, different segment
                         // Calculate relative position in current segment
-                        let offset_in_current =
-                            col.saturating_sub(current_vl.start_col);
+                        let offset_in_current = col.saturating_sub(current_vl.start_col);
                         // Apply to target segment, ensuring we stay within bounds
-                        let target_col =
-                            target_vl.start_col + offset_in_current;
+                        let target_col = target_vl.start_col + offset_in_current;
                         // Clamp to segment bounds: stay strictly within [start_col, end_col)
                         // but make sure we don't go to exactly end_col unless it's the last segment
                         if target_col >= target_vl.end_col {
-                            target_vl
-                                .end_col
-                                .saturating_sub(1)
-                                .max(target_vl.start_col)
+                            target_vl.end_col.saturating_sub(1).max(target_vl.start_col)
                         } else {
                             target_col
                         }
                     } else {
                         // Different logical line
-                        let target_line_len =
-                            self.buffer.line_len(target_vl.logical_line);
-                        (target_vl.start_col + col.min(target_vl.len()))
-                            .min(target_line_len)
+                        let target_line_len = self.buffer.line_len(target_vl.logical_line);
+                        (target_vl.start_col + col.min(target_vl.len())).min(target_line_len)
                     };
 
                     self.cursor = (target_vl.logical_line, new_col);
@@ -159,10 +148,7 @@ impl CodeEditor {
     /// 1. Whether the click is inside the gutter area.
     /// 2. Visual line mapping after wrapping.
     /// 3. CJK character widths (wide characters use FONT_SIZE, narrow use CHAR_WIDTH).
-    pub(crate) fn calculate_cursor_from_point(
-        &self,
-        point: Point,
-    ) -> Option<(usize, usize)> {
+    pub(crate) fn calculate_cursor_from_point(&self, point: Point) -> Option<(usize, usize)> {
         // Account for gutter width
         if point.x < self.gutter_width() {
             return None; // Clicked in gutter
@@ -185,8 +171,7 @@ impl CodeEditor {
         let visual_line = &visual_lines[visual_line_idx];
 
         // Calculate column within the segment, accounting for horizontal scroll
-        let x_in_text =
-            point.x - self.gutter_width() - 5.0 + self.horizontal_scroll_offset;
+        let x_in_text = point.x - self.gutter_width() - 5.0 + self.horizontal_scroll_offset;
 
         // Use correct width calculation for CJK support
         let line_content = self.buffer.line(visual_line.logical_line);
@@ -200,11 +185,7 @@ impl CodeEditor {
             .skip(visual_line.start_col)
             .take(visual_line.end_col - visual_line.start_col)
         {
-            let char_width = super::measure_char_width(
-                c,
-                self.full_char_width,
-                self.char_width,
-            );
+            let char_width = super::measure_char_width(c, self.full_char_width, self.char_width);
 
             if current_width + char_width / 2.0 > x_in_text {
                 break;
@@ -237,11 +218,8 @@ impl CodeEditor {
         // trigger repeated visual line calculation.
         let visual_lines = self.visual_lines_cached(self.viewport_width);
 
-        let cursor_visual = WrappingCalculator::logical_to_visual(
-            &visual_lines,
-            self.cursor.0,
-            self.cursor.1,
-        );
+        let cursor_visual =
+            WrappingCalculator::logical_to_visual(&visual_lines, self.cursor.0, self.cursor.1);
 
         let cursor_y = if let Some(visual_idx) = cursor_visual {
             visual_idx as f32 * self.line_height
@@ -261,13 +239,9 @@ impl CodeEditor {
         let new_v_scroll = if cursor_y < viewport_top + top_margin {
             // Cursor is above viewport - scroll up
             Some((cursor_y - top_margin).max(0.0))
-        } else if cursor_y + self.line_height > viewport_bottom - bottom_margin
-        {
+        } else if cursor_y + self.line_height > viewport_bottom - bottom_margin {
             // Cursor is below viewport - scroll down
-            Some(
-                cursor_y + self.line_height + bottom_margin
-                    - self.viewport_height,
-            )
+            Some(cursor_y + self.line_height + bottom_margin - self.viewport_height)
         } else {
             None
         };
@@ -275,7 +249,10 @@ impl CodeEditor {
         let vertical_task = if let Some(new_scroll) = new_v_scroll {
             scroll_to(
                 self.scrollable_id.clone(),
-                scrollable::AbsoluteOffset { x: 0.0, y: new_scroll },
+                scrollable::AbsoluteOffset {
+                    x: 0.0,
+                    y: new_scroll,
+                },
             )
         } else {
             Task::none()
@@ -294,19 +271,14 @@ impl CodeEditor {
                     .collect();
                 self.gutter_width()
                     + 5.0
-                    + measure_text_width(
-                        &prefix,
-                        self.full_char_width,
-                        self.char_width,
-                    )
+                    + measure_text_width(&prefix, self.full_char_width, self.char_width)
             } else {
                 self.gutter_width() + 5.0
             };
 
             let left_boundary = self.gutter_width() + self.char_width;
             let right_boundary = self.viewport_width - self.char_width * 2.0;
-            let cursor_viewport_x =
-                cursor_content_x - self.horizontal_scroll_offset;
+            let cursor_viewport_x = cursor_content_x - self.horizontal_scroll_offset;
 
             let new_h_offset = if cursor_viewport_x < left_boundary {
                 (cursor_content_x - left_boundary).max(0.0)
@@ -319,7 +291,10 @@ impl CodeEditor {
             if (new_h_offset - self.horizontal_scroll_offset).abs() > 0.5 {
                 scroll_to(
                     self.horizontal_scrollable_id.clone(),
-                    scrollable::AbsoluteOffset { x: new_h_offset, y: 0.0 },
+                    scrollable::AbsoluteOffset {
+                        x: new_h_offset,
+                        y: 0.0,
+                    },
                 )
             } else {
                 Task::none()
@@ -415,8 +390,10 @@ mod tests {
 
     #[test]
     fn test_page_down_at_end() {
-        let content =
-            (0..10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let content = (0..10)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let mut editor = CodeEditor::new(&content, "py");
 
         editor.page_down();
@@ -453,15 +430,13 @@ mod tests {
         //
         // Case 1: Click inside "你", at less than half its width.
         // Expect col 0
-        editor
-            .handle_mouse_click(Point::new((half_width - 2.0) + padding, 10.0));
+        editor.handle_mouse_click(Point::new((half_width - 2.0) + padding, 10.0));
 
         assert_eq!(editor.cursor, (0, 0));
 
         // Case 2: Click inside "你", at more than half its width.
         // Expect col 1
-        editor
-            .handle_mouse_click(Point::new((half_width + 2.0) + padding, 10.0));
+        editor.handle_mouse_click(Point::new((half_width + 2.0) + padding, 10.0));
         assert_eq!(editor.cursor, (0, 1));
 
         // Case 3: Click inside "好", at less than half its width.

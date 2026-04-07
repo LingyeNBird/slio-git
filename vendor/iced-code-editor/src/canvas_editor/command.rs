@@ -46,12 +46,7 @@ impl InsertCharCommand {
     /// * `col` - Column position where to insert
     /// * `ch` - Character to insert
     /// * `cursor` - Current cursor position
-    pub fn new(
-        line: usize,
-        col: usize,
-        ch: char,
-        cursor: (usize, usize),
-    ) -> Self {
+    pub fn new(line: usize, col: usize, ch: char, cursor: (usize, usize)) -> Self {
         Self {
             line,
             col,
@@ -63,11 +58,7 @@ impl InsertCharCommand {
 }
 
 impl Command for InsertCharCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         buffer.insert_char(self.line, self.col, self.ch);
         *cursor = self.cursor_after;
     }
@@ -100,15 +91,8 @@ impl DeleteCharCommand {
     /// * `line` - Line index
     /// * `col` - Column position
     /// * `cursor` - Current cursor position
-    pub fn new(
-        buffer: &TextBuffer,
-        line: usize,
-        col: usize,
-        cursor: (usize, usize),
-    ) -> Self {
-        let (deleted_char, merged_line, merged_content, cursor_after) = if col
-            > 0
-        {
+    pub fn new(buffer: &TextBuffer, line: usize, col: usize, cursor: (usize, usize)) -> Self {
+        let (deleted_char, merged_line, merged_content, cursor_after) = if col > 0 {
             // Deleting character before cursor
             let line_str = buffer.line(line);
             let ch = line_str.chars().nth(col - 1);
@@ -117,7 +101,12 @@ impl DeleteCharCommand {
             // Merging with previous line
             let prev_line_len = buffer.line_len(line - 1);
             let current_line_content = buffer.line(line).to_string();
-            (None, true, Some(current_line_content), (line - 1, prev_line_len))
+            (
+                None,
+                true,
+                Some(current_line_content),
+                (line - 1, prev_line_len),
+            )
         } else {
             // At beginning of document, nothing to delete
             (None, false, None, cursor)
@@ -136,11 +125,7 @@ impl DeleteCharCommand {
 }
 
 impl Command for DeleteCharCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         buffer.delete_char(self.line, self.col);
         *cursor = self.cursor_after;
     }
@@ -183,26 +168,20 @@ impl DeleteForwardCommand {
     /// * `line` - Line index
     /// * `col` - Column position
     /// * `cursor` - Current cursor position
-    pub fn new(
-        buffer: &TextBuffer,
-        line: usize,
-        col: usize,
-        cursor: (usize, usize),
-    ) -> Self {
+    pub fn new(buffer: &TextBuffer, line: usize, col: usize, cursor: (usize, usize)) -> Self {
         let line_len = buffer.line_len(line);
-        let (deleted_char, merged_next_line, next_line_content) =
-            if col < line_len {
-                // Deleting character at cursor
-                let ch = buffer.line(line).chars().nth(col);
-                (ch, false, None)
-            } else if line + 1 < buffer.line_count() {
-                // Merging with next line
-                let next_content = buffer.line(line + 1).to_string();
-                (None, true, Some(next_content))
-            } else {
-                // At end of document
-                (None, false, None)
-            };
+        let (deleted_char, merged_next_line, next_line_content) = if col < line_len {
+            // Deleting character at cursor
+            let ch = buffer.line(line).chars().nth(col);
+            (ch, false, None)
+        } else if line + 1 < buffer.line_count() {
+            // Merging with next line
+            let next_content = buffer.line(line + 1).to_string();
+            (None, true, Some(next_content))
+        } else {
+            // At end of document
+            (None, false, None)
+        };
 
         Self {
             line,
@@ -216,11 +195,7 @@ impl DeleteForwardCommand {
 }
 
 impl Command for DeleteForwardCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         buffer.delete_forward(self.line, self.col);
         *cursor = self.cursor_before; // Cursor doesn't move on delete forward
     }
@@ -266,16 +241,17 @@ impl InsertNewlineCommand {
     /// * `col` - Column position where to split
     /// * `cursor` - Current cursor position
     pub fn new(line: usize, col: usize, cursor: (usize, usize)) -> Self {
-        Self { line, col, cursor_before: cursor, cursor_after: (line + 1, 0) }
+        Self {
+            line,
+            col,
+            cursor_before: cursor,
+            cursor_after: (line + 1, 0),
+        }
     }
 }
 
 impl Command for InsertNewlineCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         buffer.insert_newline(self.line, self.col);
         *cursor = self.cursor_after;
     }
@@ -308,12 +284,7 @@ impl InsertTextCommand {
     /// * `col` - Column position where to insert
     /// * `text` - Text to insert
     /// * `cursor` - Current cursor position
-    pub fn new(
-        line: usize,
-        col: usize,
-        text: String,
-        cursor: (usize, usize),
-    ) -> Self {
+    pub fn new(line: usize, col: usize, text: String, cursor: (usize, usize)) -> Self {
         // Calculate final cursor position
         let lines: Vec<&str> = text.split('\n').collect();
         let cursor_after = if lines.len() == 1 {
@@ -323,16 +294,18 @@ impl InsertTextCommand {
             (line + lines.len() - 1, last_line_len)
         };
 
-        Self { line, col, text, cursor_before: cursor, cursor_after }
+        Self {
+            line,
+            col,
+            text,
+            cursor_before: cursor,
+            cursor_after,
+        }
     }
 }
 
 impl Command for InsertTextCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         let mut current_line = self.line;
         let mut current_col = self.col;
 
@@ -440,16 +413,17 @@ impl DeleteRangeCommand {
             }
         }
 
-        Self { start, end, deleted_text, cursor_before: cursor }
+        Self {
+            start,
+            end,
+            deleted_text,
+            cursor_before: cursor,
+        }
     }
 }
 
 impl Command for DeleteRangeCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         // Delete from start to end
         if self.start == self.end {
             *cursor = self.start;
@@ -512,7 +486,9 @@ pub struct CompositeCommand {
 impl CompositeCommand {
     /// Creates a new composite command.
     pub fn new(_description: String) -> Self {
-        Self { commands: Vec::new() }
+        Self {
+            commands: Vec::new(),
+        }
     }
 
     /// Adds a command to this composite.
@@ -527,11 +503,7 @@ impl CompositeCommand {
 }
 
 impl Command for CompositeCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         for cmd in &mut self.commands {
             cmd.execute(buffer, cursor);
         }
@@ -575,8 +547,7 @@ impl ReplaceTextCommand {
         // Extract the old text being replaced
         let line = buffer.line(position.0);
         let chars: Vec<char> = line.chars().collect();
-        let old_text: String =
-            chars.iter().skip(position.1).take(old_text_len).collect();
+        let old_text: String = chars.iter().skip(position.1).take(old_text_len).collect();
 
         let cursor_after = (position.0, position.1 + new_text.chars().count());
 
@@ -591,11 +562,7 @@ impl ReplaceTextCommand {
 }
 
 impl Command for ReplaceTextCommand {
-    fn execute(
-        &mut self,
-        buffer: &mut TextBuffer,
-        cursor: &mut (usize, usize),
-    ) {
+    fn execute(&mut self, buffer: &mut TextBuffer, cursor: &mut (usize, usize)) {
         // Optimized replacement using replace_range
         buffer.replace_range(
             self.position.0,
@@ -674,8 +641,7 @@ mod tests {
     fn test_insert_text_command() {
         let mut buffer = TextBuffer::new("hello");
         let mut cursor = (0, 5);
-        let mut cmd =
-            InsertTextCommand::new(0, 5, " world".to_string(), cursor);
+        let mut cmd = InsertTextCommand::new(0, 5, " world".to_string(), cursor);
 
         cmd.execute(&mut buffer, &mut cursor);
         assert_eq!(buffer.line(0), "hello world");
@@ -724,13 +690,7 @@ mod tests {
     fn test_replace_text_command() {
         let mut buffer = TextBuffer::new("hello world");
         let mut cursor = (0, 0);
-        let mut cmd = ReplaceTextCommand::new(
-            &buffer,
-            (0, 0),
-            5,
-            "goodbye".to_string(),
-            cursor,
-        );
+        let mut cmd = ReplaceTextCommand::new(&buffer, (0, 0), 5, "goodbye".to_string(), cursor);
 
         cmd.execute(&mut buffer, &mut cursor);
         assert_eq!(buffer.line(0), "goodbye world");
@@ -747,13 +707,7 @@ mod tests {
         let mut cursor = (0, 4);
 
         // Replace "bar" (3 chars) with "x" (1 char)
-        let mut cmd = ReplaceTextCommand::new(
-            &buffer,
-            (0, 4),
-            3,
-            "x".to_string(),
-            cursor,
-        );
+        let mut cmd = ReplaceTextCommand::new(&buffer, (0, 4), 3, "x".to_string(), cursor);
 
         cmd.execute(&mut buffer, &mut cursor);
         assert_eq!(buffer.line(0), "foo x baz");

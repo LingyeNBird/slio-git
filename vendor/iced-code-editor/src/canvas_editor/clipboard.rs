@@ -27,8 +27,7 @@ impl CodeEditor {
                 return;
             }
 
-            let mut cmd =
-                DeleteRangeCommand::new(&self.buffer, start, end, self.cursor);
+            let mut cmd = DeleteRangeCommand::new(&self.buffer, start, end, self.cursor);
             cmd.execute(&mut self.buffer, &mut self.cursor);
             self.history.push(Box::new(cmd));
             self.clear_selection();
@@ -43,8 +42,7 @@ impl CodeEditor {
         }
 
         let (line, col) = self.cursor;
-        let mut cmd =
-            InsertTextCommand::new(line, col, text.to_string(), self.cursor);
+        let mut cmd = InsertTextCommand::new(line, col, text.to_string(), self.cursor);
         cmd.execute(&mut self.buffer, &mut self.cursor);
         self.history.push(Box::new(cmd));
     }

@@ -74,11 +74,7 @@ pub fn group<'a, Message: 'a>(
 
     if !title_str.is_empty() {
         let mut header = Column::new().spacing(2);
-        header = header.push(
-            Text::new(title_str)
-                .size(10)
-                .color(group_title_color(tone)),
-        );
+        header = header.push(Text::new(title_str).size(10).color(group_title_color(tone)));
         if !detail_str.is_empty() {
             header = header.push(
                 Text::new(detail_str)
@@ -139,13 +135,9 @@ pub fn action_row<'a, Message: Clone + 'a>(
         row = row.push(crate::widgets::compact_chip::<Message>(label, badge_tone));
     }
 
-    let button = Button::new(
-        Container::new(row)
-            .padding([4, 8])
-            .width(Length::Fill),
-    )
-    .width(Length::Fill)
-    .style(action_button_style(tone, enabled));
+    let button = Button::new(Container::new(row).padding([4, 8]).width(Length::Fill))
+        .width(Length::Fill)
+        .style(action_button_style(tone, enabled));
 
     if let Some(message) = on_press {
         button.on_press(message).into()

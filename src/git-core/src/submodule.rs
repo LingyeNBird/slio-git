@@ -33,10 +33,12 @@ pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleChange>, GitErr
     info!("Listing submodules");
 
     let repo_lock = repo.inner.read().unwrap();
-    let submodules = repo_lock.submodules().map_err(|e| GitError::OperationFailed {
-        operation: "list_submodules".to_string(),
-        details: format!("Failed to enumerate submodules: {}", e),
-    })?;
+    let submodules = repo_lock
+        .submodules()
+        .map_err(|e| GitError::OperationFailed {
+            operation: "list_submodules".to_string(),
+            details: format!("Failed to enumerate submodules: {}", e),
+        })?;
 
     let mut changes = Vec::new();
 
@@ -55,9 +57,11 @@ pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleChange>, GitErr
 
         // Build summary
         let summary = match (&old_commit, &new_commit) {
-            (Some(old), Some(new)) if old != new => {
-                Some(format!("{}..{}", &old[..7.min(old.len())], &new[..7.min(new.len())]))
-            }
+            (Some(old), Some(new)) if old != new => Some(format!(
+                "{}..{}",
+                &old[..7.min(old.len())],
+                &new[..7.min(new.len())]
+            )),
             (None, Some(new)) => Some(format!("new: {}", &new[..7.min(new.len())])),
             _ => None,
         };

@@ -57,11 +57,7 @@ impl<'a, Message: Clone + 'static> DiffViewer<'a, Message> {
             .into()
     }
 
-    fn render_file(
-        &self,
-        file_diff: &'a FileDiff,
-        show_header: bool,
-    ) -> Element<'a, Message> {
+    fn render_file(&self, file_diff: &'a FileDiff, show_header: bool) -> Element<'a, Message> {
         let hl = syntax_highlighting::FileSyntaxHighlighter::for_file_diff(file_diff);
         let editor = self.render_editor(file_diff, hl);
 
@@ -122,17 +118,25 @@ impl<'a, Message: Clone + 'static> DiffViewer<'a, Message> {
             for arow in &aligned {
                 // In unified mode, render each line individually preserving +/- prefixes
                 if let Some(left) = &arow.left {
-                    if arow.tag == diff_core::ChunkTag::Replace || arow.tag == diff_core::ChunkTag::Delete {
+                    if arow.tag == diff_core::ChunkTag::Replace
+                        || arow.tag == diff_core::ChunkTag::Delete
+                    {
                         // Render deletion line
                         let fake_line = to_diff_line(left);
-                        lines = lines.push(diff_core::render_unified_line(&fake_line, arow.tag, &mut hl));
+                        lines = lines.push(diff_core::render_unified_line(
+                            &fake_line, arow.tag, &mut hl,
+                        ));
                     }
                 }
                 if let Some(right) = &arow.right {
-                    if arow.tag == diff_core::ChunkTag::Replace || arow.tag == diff_core::ChunkTag::Insert {
+                    if arow.tag == diff_core::ChunkTag::Replace
+                        || arow.tag == diff_core::ChunkTag::Insert
+                    {
                         // Render addition line
                         let fake_line = to_diff_line(right);
-                        lines = lines.push(diff_core::render_unified_line(&fake_line, arow.tag, &mut hl));
+                        lines = lines.push(diff_core::render_unified_line(
+                            &fake_line, arow.tag, &mut hl,
+                        ));
                     }
                 }
                 if arow.tag == diff_core::ChunkTag::Equal {
@@ -144,17 +148,17 @@ impl<'a, Message: Clone + 'static> DiffViewer<'a, Message> {
                             new_lineno: arow.right.as_ref().and_then(|r| r.line_number),
                             inline_changes: Vec::new(),
                         };
-                        lines = lines.push(diff_core::render_unified_line(&fake_line, arow.tag, &mut hl));
+                        lines = lines.push(diff_core::render_unified_line(
+                            &fake_line, arow.tag, &mut hl,
+                        ));
                     }
                 }
             }
         }
 
         Container::new(
-            scrollable::styled_editor_horizontal(
-                Container::new(lines).width(Length::Shrink),
-            )
-            .width(Length::Fill),
+            scrollable::styled_editor_horizontal(Container::new(lines).width(Length::Shrink))
+                .width(Length::Fill),
         )
         .width(Length::Fill)
         .style(diff_core::editor_surface_style())
@@ -183,15 +187,23 @@ pub fn file_preview<'a, Message: Clone + 'static>(file_diff: &'a FileDiff) -> El
         let aligned = diff_core::build_aligned_rows(hunk);
         for arow in &aligned {
             if let Some(left) = &arow.left {
-                if arow.tag == diff_core::ChunkTag::Replace || arow.tag == diff_core::ChunkTag::Delete {
+                if arow.tag == diff_core::ChunkTag::Replace
+                    || arow.tag == diff_core::ChunkTag::Delete
+                {
                     let fake_line = to_diff_line(left);
-                    lines = lines.push(diff_core::render_unified_line(&fake_line, arow.tag, &mut hl));
+                    lines = lines.push(diff_core::render_unified_line(
+                        &fake_line, arow.tag, &mut hl,
+                    ));
                 }
             }
             if let Some(right) = &arow.right {
-                if arow.tag == diff_core::ChunkTag::Replace || arow.tag == diff_core::ChunkTag::Insert {
+                if arow.tag == diff_core::ChunkTag::Replace
+                    || arow.tag == diff_core::ChunkTag::Insert
+                {
                     let fake_line = to_diff_line(right);
-                    lines = lines.push(diff_core::render_unified_line(&fake_line, arow.tag, &mut hl));
+                    lines = lines.push(diff_core::render_unified_line(
+                        &fake_line, arow.tag, &mut hl,
+                    ));
                 }
             }
             if arow.tag == diff_core::ChunkTag::Equal {
@@ -203,17 +215,17 @@ pub fn file_preview<'a, Message: Clone + 'static>(file_diff: &'a FileDiff) -> El
                         new_lineno: arow.right.as_ref().and_then(|r| r.line_number),
                         inline_changes: Vec::new(),
                     };
-                    lines = lines.push(diff_core::render_unified_line(&fake_line, arow.tag, &mut hl));
+                    lines = lines.push(diff_core::render_unified_line(
+                        &fake_line, arow.tag, &mut hl,
+                    ));
                 }
             }
         }
     }
 
     Container::new(
-        scrollable::styled_editor_horizontal(
-            Container::new(lines).width(Length::Shrink),
-        )
-        .width(Length::Fill),
+        scrollable::styled_editor_horizontal(Container::new(lines).width(Length::Shrink))
+            .width(Length::Fill),
     )
     .width(Length::Fill)
     .style(diff_core::editor_surface_style())

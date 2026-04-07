@@ -1397,7 +1397,7 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
             .align_y(Alignment::Center)
             .push(
                 Text::new("分支")
-                    .size(13)
+                    .size(theme::typography::TITLE_SIZE)
                     .color(theme::darcula::TEXT_PRIMARY),
             )
             .push_maybe(current_branch.map(|branch| {
@@ -1407,7 +1407,10 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
                 )
             }))
             .push(Space::new().width(Length::Fill))
-            .push(button::compact_ghost("关闭", Some(BranchPopupMessage::Close))),
+            .push(button::compact_ghost(
+                "关闭",
+                Some(BranchPopupMessage::Close),
+            )),
     )
     .padding([6, 12])
     .width(Length::Fill)
@@ -1441,7 +1444,10 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
                 (!state.new_branch_name.trim().is_empty() && !state.is_loading)
                     .then(|| BranchPopupMessage::CreateBranch(state.new_branch_name.clone())),
             ))
-            .push(button::compact_ghost("刷新", Some(BranchPopupMessage::Refresh))),
+            .push(button::compact_ghost(
+                "刷新",
+                Some(BranchPopupMessage::Refresh),
+            )),
     )
     .padding([4, 12])
     .width(Length::Fill);
@@ -1498,10 +1504,8 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
 
     // IDEA-style: Smart checkout confirmation dialog overlay
     if let Some(target_branch) = &state.smart_checkout_branch {
-        let dialog = build_smart_checkout_dialog(
-            target_branch,
-            &state.smart_checkout_affected_files,
-        );
+        let dialog =
+            build_smart_checkout_dialog(target_branch, &state.smart_checkout_affected_files);
         return stack![
             base,
             opaque(
@@ -1512,7 +1516,9 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
                         .center_x(Length::Fill)
                         .center_y(Length::Fill)
                         .style(|_: &Theme| container::Style {
-                            background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
+                            background: Some(Background::Color(Color::from_rgba(
+                                0.0, 0.0, 0.0, 0.5
+                            ))),
                             ..Default::default()
                         })
                 )
@@ -1542,7 +1548,7 @@ fn build_smart_checkout_dialog<'a>(
             .align_y(Alignment::Center)
             .push(
                 Text::new("Git 签出问题")
-                    .size(14)
+                    .size(theme::typography::TITLE_SIZE)
                     .color(theme::darcula::TEXT_PRIMARY),
             )
             .push(Space::new().width(Length::Fill))
@@ -1562,7 +1568,7 @@ fn build_smart_checkout_dialog<'a>(
              可以暂存 (stash) 这些更改，签出目标分支，然后自动恢复。",
             target_branch
         ))
-        .size(12)
+        .size(theme::typography::BODY_SIZE)
         .color(theme::darcula::TEXT_PRIMARY)
         .wrapping(text::Wrapping::WordOrGlyph),
     )
@@ -1571,7 +1577,7 @@ fn build_smart_checkout_dialog<'a>(
     // ── Affected file list (matches IDEA's ChangesBrowser / SimplePathsBrowser) ──
     let file_list_content: Element<'a, BranchPopupMessage> = if affected_files.is_empty() {
         Text::new("（无法获取受影响的文件列表）")
-            .size(11)
+            .size(theme::typography::CAPTION_SIZE)
             .color(theme::darcula::TEXT_DISABLED)
             .into()
     } else {
@@ -1579,7 +1585,7 @@ fn build_smart_checkout_dialog<'a>(
         for file in affected_files {
             col = col.push(
                 Text::new(file.as_str())
-                    .size(12)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             );
         }
@@ -1595,7 +1601,7 @@ fn build_smart_checkout_dialog<'a>(
                     .align_y(Alignment::Center)
                     .push(
                         Text::new("受影响的文件")
-                            .size(10)
+                            .size(theme::typography::MICRO_SIZE)
                             .color(theme::darcula::TEXT_DISABLED),
                     )
                     .push(widgets::compact_chip::<BranchPopupMessage>(
@@ -1604,12 +1610,10 @@ fn build_smart_checkout_dialog<'a>(
                     )),
             )
             .push(
-                Container::new(
-                    scrollable::styled(file_list_content).height(Length::Fixed(120.0)),
-                )
-                .padding([4, 6])
-                .width(Length::Fill)
-                .style(theme::panel_style(Surface::Editor)),
+                Container::new(scrollable::styled(file_list_content).height(Length::Fixed(120.0)))
+                    .padding([4, 6])
+                    .width(Length::Fill)
+                    .style(theme::panel_style(Surface::Editor)),
             ),
     )
     .padding([4, 14]);
@@ -1673,7 +1677,7 @@ fn build_status_panel<'a>(state: &'a BranchPopupState) -> Option<Element<'a, Bra
                     .push(widgets::loading_spinner::<BranchPopupMessage>())
                     .push(
                         Text::new("正在刷新分支列表...")
-                            .size(12)
+                            .size(theme::typography::CAPTION_SIZE)
                             .color(theme::darcula::TEXT_SECONDARY),
                     ),
             )
@@ -1769,7 +1773,7 @@ fn build_flat_branch_section<'a>(
     if branches.is_empty() {
         list = list.push(
             Text::new("没有匹配项")
-                .size(12)
+                .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         );
     } else {
@@ -1791,7 +1795,7 @@ fn build_tree_branch_section<'a>(
     let list = if branches.is_empty() {
         Column::new().width(Length::Fill).push(
             Text::new("没有匹配项")
-                .size(12)
+                .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         )
     } else {
@@ -1825,7 +1829,7 @@ fn build_branch_section_shell<'a>(
                     .align_y(Alignment::Center)
                     .push(
                         Text::new(title.to_uppercase())
-                            .size(10)
+                            .size(theme::typography::MICRO_SIZE)
                             .color(theme::darcula::TEXT_SECONDARY),
                     )
                     .push(widgets::info_chip::<BranchPopupMessage>(
@@ -1895,18 +1899,20 @@ fn build_folder_row<'a>(
                 expanded.then_some(theme::darcula::SEPARATOR.scale_alpha(0.72)),
             ))
             .push(
-                Container::new(Text::new(if expanded { "▾" } else { "▸" }).size(11).color(
-                    if expanded {
-                        theme::darcula::TEXT_PRIMARY
-                    } else {
-                        theme::darcula::TEXT_SECONDARY
-                    },
-                ))
+                Container::new(
+                    Text::new(if expanded { "▾" } else { "▸" })
+                        .size(theme::typography::CAPTION_SIZE)
+                        .color(if expanded {
+                            theme::darcula::TEXT_PRIMARY
+                        } else {
+                            theme::darcula::TEXT_SECONDARY
+                        }),
+                )
                 .width(Length::Fixed(12.0)),
             )
             .push(
                 Text::new(folder.label.clone())
-                    .size(12)
+                    .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(if expanded {
@@ -1982,7 +1988,7 @@ fn build_branch_row<'a>(
         .push(tree_indent(depth))
         .push(
             Text::new(if branch.is_head { "●" } else { "○" })
-                .size(10)
+                .size(theme::typography::MICRO_SIZE)
                 .color(if branch.is_head {
                     theme::darcula::SUCCESS
                 } else {
@@ -1991,7 +1997,7 @@ fn build_branch_row<'a>(
         )
         .push(
             Text::new(display_label)
-                .size(12)
+                .size(theme::typography::BODY_SIZE)
                 .color(label_color),
         );
 
@@ -2005,7 +2011,7 @@ fn build_branch_row<'a>(
         row = row.push(
             Container::new(
                 Text::new("当前")
-                    .size(9)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::SUCCESS),
             )
             .padding([1, 4])
@@ -2027,7 +2033,7 @@ fn build_branch_row<'a>(
     if let Some(upstream) = &branch.upstream {
         row = row.push(
             Text::new(upstream.as_str())
-                .size(10)
+                .size(theme::typography::MICRO_SIZE)
                 .color(meta_color),
         );
     }
@@ -2035,13 +2041,11 @@ fn build_branch_row<'a>(
     // Submenu arrow
     row = row.push(
         Text::new("›")
-            .size(12)
+            .size(theme::typography::CAPTION_SIZE)
             .color(theme::darcula::TEXT_DISABLED),
     );
 
-    let row_content = Container::new(row)
-        .padding([3, 8])
-        .width(Length::Fill);
+    let row_content = Container::new(row).padding([3, 8]).width(Length::Fill);
 
     // Strip + button in a nested Row so that strip's height(Fill) is resolved
     // against the button's Shrink height (avoids circular Fill dependency inside
@@ -2108,12 +2112,12 @@ fn build_branch_context_menu_overlay<'a>(
                         .width(Length::Fill)
                         .push(
                             Text::new("分支动作".to_uppercase())
-                                .size(10)
+                                .size(theme::typography::MICRO_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
                         .push(
                             Text::new(truncate_branch_name(&selected_branch.name))
-                                .size(14)
+                                .size(theme::typography::TITLE_SIZE)
                                 .width(Length::Fill)
                                 .wrapping(text::Wrapping::WordOrGlyph),
                         ),
@@ -2155,7 +2159,7 @@ fn build_branch_context_menu_overlay<'a>(
         )
         .push_maybe(branch_meta_summary(selected_branch).map(|meta| {
             Text::new(meta)
-                .size(10)
+                .size(theme::typography::CAPTION_SIZE)
                 .width(Length::Fill)
                 .wrapping(text::Wrapping::WordOrGlyph)
                 .color(theme::darcula::TEXT_SECONDARY)
@@ -2172,7 +2176,7 @@ fn build_branch_context_menu_overlay<'a>(
                     parts.push(format!("跟踪 {upstream}"));
                 }
                 Text::new(parts.join(" · "))
-                    .size(10)
+                    .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY)
@@ -2262,7 +2266,10 @@ fn build_selected_branch_summary<'a>(
                 Row::new()
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
-                    .push(Text::new(truncate_branch_name(&selected_branch.name)).size(14))
+                    .push(
+                        Text::new(truncate_branch_name(&selected_branch.name))
+                            .size(theme::typography::TITLE_SIZE),
+                    )
                     .push(widgets::info_chip::<BranchPopupMessage>(
                         if selected_branch.is_remote {
                             "远程"
@@ -2282,19 +2289,19 @@ fn build_selected_branch_summary<'a>(
             )
             .push_maybe(branch_meta_summary(selected_branch).map(|meta| {
                 Text::new(meta)
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY)
             }))
             .push_maybe(selected_remote_name.as_ref().map(|remote| {
                 Text::new(format!("默认远程：{remote}"))
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY)
             }))
             .push_maybe(upstream_ref.as_ref().map(|upstream| {
                 Text::new(format!("跟踪关系：{upstream}"))
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY)
             })),
     )
@@ -2312,7 +2319,7 @@ fn build_selected_commit_history_panel<'a>(
     let history_rows = if state.branch_history_entries.is_empty() {
         Column::new().push(
             Text::new("当前没有可显示的提交历史。")
-                .size(12)
+                .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         )
     } else {
@@ -2333,7 +2340,7 @@ fn build_selected_commit_history_panel<'a>(
                 Row::new()
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
-                    .push(Text::new("提交时间线").size(13))
+                    .push(Text::new("提交时间线").size(theme::typography::TITLE_SIZE))
                     .push(widgets::info_chip::<BranchPopupMessage>(
                         history_count.to_string(),
                         BadgeTone::Neutral,
@@ -2354,7 +2361,7 @@ fn build_selected_commit_history_panel<'a>(
             )
             .push(
                 Text::new("查看此分支的最近提交记录，帮助判断操作基准点。")
-                    .size(10)
+                    .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY),
@@ -2519,7 +2526,7 @@ fn build_selected_commit_detail_panel<'a>(
             )
             .push(
                 Text::new(commit_subject(&info.message))
-                    .size(13)
+                    .size(theme::typography::TITLE_SIZE)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph),
             )
@@ -2531,7 +2538,7 @@ fn build_selected_commit_detail_panel<'a>(
                     format_timestamp(info.author_time),
                     info.parent_ids.len()
                 ))
-                .size(11)
+                .size(theme::typography::CAPTION_SIZE)
                 .width(Length::Fill)
                 .wrapping(text::Wrapping::WordOrGlyph)
                 .color(theme::darcula::TEXT_SECONDARY),
@@ -2539,7 +2546,7 @@ fn build_selected_commit_detail_panel<'a>(
             .push(
                 scrollable::styled(
                     Text::new(&info.message)
-                        .size(12)
+                        .size(theme::typography::BODY_SIZE)
                         .width(Length::Fill)
                         .wrapping(text::Wrapping::WordOrGlyph),
                 )
@@ -2550,7 +2557,7 @@ fn build_selected_commit_detail_panel<'a>(
             .push(scrollable::styled_horizontal(mutation_row).width(Length::Fill))
             .push_maybe((!action_notes.is_empty()).then(|| {
                 Text::new(action_notes.join(" · "))
-                    .size(10)
+                    .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
                     .color(theme::darcula::TEXT_SECONDARY)
@@ -2576,12 +2583,12 @@ fn build_pending_commit_action_panel<'a>(
                         .spacing(theme::spacing::XS)
                         .push(
                             Text::new("•")
-                                .size(11)
+                                .size(theme::typography::CAPTION_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
                         .push(
                             Text::new(item)
-                                .size(11)
+                                .size(theme::typography::CAPTION_SIZE)
                                 .width(Length::Fill)
                                 .wrapping(text::Wrapping::WordOrGlyph)
                                 .color(theme::darcula::TEXT_SECONDARY),
@@ -2600,7 +2607,7 @@ fn build_pending_commit_action_panel<'a>(
                 ))
                 .push(
                     Text::new(&confirmation.summary)
-                        .size(12)
+                        .size(theme::typography::BODY_SIZE)
                         .width(Length::Fill)
                         .wrapping(text::Wrapping::WordOrGlyph),
                 )
@@ -2663,13 +2670,15 @@ fn build_in_progress_commit_action_panel<'a>(
                         .spacing(2)
                         .push(
                             Text::new("进行中")
-                                .size(9)
+                                .size(theme::typography::MICRO_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
-                        .push(Text::new(format!("{label} 暂停")).size(15))
+                        .push(
+                            Text::new(format!("{label} 暂停")).size(theme::typography::TITLE_SIZE),
+                        )
                         .push(
                             Text::new("在界面中直接继续或中止当前 rebase/cherry-pick 操作。")
-                                .size(11)
+                                .size(theme::typography::CAPTION_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         ),
                 )
@@ -2692,13 +2701,13 @@ fn build_in_progress_commit_action_panel<'a>(
                 )
                 .push(
                     Text::new(summary)
-                        .size(12)
+                        .size(theme::typography::BODY_SIZE)
                         .width(Length::Fill)
                         .wrapping(text::Wrapping::WordOrGlyph),
                 )
                 .push(
                     Text::new(detail)
-                        .size(11)
+                        .size(theme::typography::CAPTION_SIZE)
                         .width(Length::Fill)
                         .wrapping(text::Wrapping::WordOrGlyph)
                         .color(theme::darcula::TEXT_SECONDARY),
@@ -2756,12 +2765,12 @@ fn build_commit_context_menu_overlay<'a>(
                         .width(Length::Fill)
                         .push(
                             Text::new("提交动作")
-                                .size(10)
+                                .size(theme::typography::MICRO_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
                         .push(
                             Text::new(commit_subject(&info.message))
-                                .size(14)
+                                .size(theme::typography::TITLE_SIZE)
                                 .width(Length::Fill)
                                 .wrapping(text::Wrapping::WordOrGlyph),
                         ),
@@ -2804,7 +2813,7 @@ fn build_commit_context_menu_overlay<'a>(
                 info.author_email,
                 format_timestamp(info.author_time)
             ))
-            .size(10)
+            .size(theme::typography::CAPTION_SIZE)
             .width(Length::Fill)
             .wrapping(text::Wrapping::WordOrGlyph)
             .color(theme::darcula::TEXT_SECONDARY),
@@ -3054,13 +3063,13 @@ fn build_branch_commit_row<'a>(
                     .align_y(Alignment::Center)
                     .push(
                         Text::new(commit_subject(&entry.message))
-                            .size(12)
+                            .size(theme::typography::BODY_SIZE)
                             .width(Length::Fill)
                             .wrapping(text::Wrapping::WordOrGlyph),
                     )
                     .push(
                         Text::new(short_commit_id(&entry.id))
-                            .size(10)
+                            .size(theme::typography::MICRO_SIZE)
                             .color(theme::darcula::TEXT_DISABLED),
                     ),
             )
@@ -3070,7 +3079,7 @@ fn build_branch_commit_row<'a>(
                     entry.author_name,
                     format_timestamp(entry.timestamp)
                 ))
-                .size(10)
+                .size(theme::typography::CAPTION_SIZE)
                 .width(Length::Fill)
                 .wrapping(text::Wrapping::WordOrGlyph)
                 .color(theme::darcula::TEXT_SECONDARY),
@@ -3641,10 +3650,10 @@ fn build_inline_action_panel<'a>(
         Container::new(
             Column::new()
                 .spacing(theme::spacing::SM)
-                .push(Text::new(title).size(12))
+                .push(Text::new(title).size(theme::typography::BODY_SIZE))
                 .push(
                     Text::new("输入名称后立即执行，不需要再跳到别的面板。")
-                        .size(10)
+                        .size(theme::typography::CAPTION_SIZE)
                         .color(theme::darcula::TEXT_SECONDARY),
                 )
                 .push(text_input::styled(
@@ -3686,7 +3695,7 @@ fn build_comparison_panel<'a>(
                     Row::new()
                         .spacing(theme::spacing::XS)
                         .align_y(Alignment::Center)
-                        .push(Text::new(title).size(12))
+                        .push(Text::new(title).size(theme::typography::BODY_SIZE))
                         .push(Space::new().width(Length::Fill))
                         .push(button::compact_ghost(
                             "清空",
@@ -3695,7 +3704,7 @@ fn build_comparison_panel<'a>(
                 )
                 .push_maybe(state.comparison_summary.as_ref().map(|summary| {
                     Text::new(summary)
-                        .size(10)
+                        .size(theme::typography::CAPTION_SIZE)
                         .color(theme::darcula::TEXT_SECONDARY)
                         .width(Length::Fill)
                         .wrapping(text::Wrapping::WordOrGlyph)
@@ -3782,7 +3791,7 @@ fn build_sync_indicators<'a>(branch: &Branch) -> Option<Element<'a, BranchPopupM
         sync_state.incoming.map(|count| {
             Container::new(
                 Text::new(format!("↓{}", shrink_to_99(count)))
-                    .size(10)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::INCOMING),
             )
             .into()
@@ -3792,7 +3801,7 @@ fn build_sync_indicators<'a>(branch: &Branch) -> Option<Element<'a, BranchPopupM
         sync_state.outgoing.map(|count| {
             Container::new(
                 Text::new(format!("↑{}", shrink_to_99(count)))
-                    .size(10)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::OUTGOING),
             )
             .into()

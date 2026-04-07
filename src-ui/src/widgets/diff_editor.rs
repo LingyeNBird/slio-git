@@ -188,17 +188,16 @@ impl SplitDiffEditorState {
         };
 
         let sync_task = match &message {
-            EditorMessage::Scrolled(viewport) if !should_skip_sync => self
-                .synced_scroll_task(pane, viewport.absolute_offset().y),
+            EditorMessage::Scrolled(viewport) if !should_skip_sync => {
+                self.synced_scroll_task(pane, viewport.absolute_offset().y)
+            }
             _ => iced::Task::none(),
         };
 
         let current_hunk = match &message {
-            EditorMessage::Scrolled(viewport) => {
-                self.emit_current_hunk_change(Some(
-                    self.current_hunk_for_scroll(pane, viewport.absolute_offset().y),
-                ))
-            }
+            EditorMessage::Scrolled(viewport) => self.emit_current_hunk_change(Some(
+                self.current_hunk_for_scroll(pane, viewport.absolute_offset().y),
+            )),
             _ => None,
         };
 
@@ -276,10 +275,12 @@ impl SplitDiffEditorState {
         .width(Length::Fill)
         .height(Length::Fill);
 
-        let editor_view = editor.view().map(move |editor_message| DiffEditorEvent::Editor {
-            pane,
-            message: editor_message,
-        });
+        let editor_view = editor
+            .view()
+            .map(move |editor_message| DiffEditorEvent::Editor {
+                pane,
+                message: editor_message,
+            });
 
         Container::new(Stack::new().push(background).push(editor_view))
             .width(Length::Fill)
@@ -364,7 +365,11 @@ impl SplitDiffEditorState {
         let target_anchor = self
             .map_anchor_between_panes(pane, source_anchor)
             .unwrap_or_else(|| {
-                scale_anchor_line(source_anchor, source_total_lines, self.line_count(target_pane))
+                scale_anchor_line(
+                    source_anchor,
+                    source_total_lines,
+                    self.line_count(target_pane),
+                )
             });
 
         let target_editor = self.editor(target_pane);
@@ -377,14 +382,9 @@ impl SplitDiffEditorState {
         ))
     }
 
-    fn map_anchor_between_panes(
-        &self,
-        pane: DiffEditorPane,
-        source_anchor: f32,
-    ) -> Option<f32> {
-        map_anchor_line(&self.model.hunks, pane, source_anchor).or_else(|| {
-            map_anchor_line_from_line_map(&self.model.line_map, pane, source_anchor)
-        })
+    fn map_anchor_between_panes(&self, pane: DiffEditorPane, source_anchor: f32) -> Option<f32> {
+        map_anchor_line(&self.model.hunks, pane, source_anchor)
+            .or_else(|| map_anchor_line_from_line_map(&self.model.line_map, pane, source_anchor))
     }
 
     fn scroll_to_anchor_lines(
@@ -577,7 +577,12 @@ impl<Message> canvas::Program<Message> for DiffDecorationCanvas {
             + 1;
 
         for line_index in start_line..end_line.min(self.decorations.lines.len()) {
-            let Some(line) = self.decorations.lines.get(line_index).and_then(|line| line.as_ref()) else {
+            let Some(line) = self
+                .decorations
+                .lines
+                .get(line_index)
+                .and_then(|line| line.as_ref())
+            else {
                 continue;
             };
 
@@ -620,9 +625,7 @@ impl<Message> canvas::Program<Message> for DiffDecorationCanvas {
                     continue;
                 }
 
-                let inline_x = gutter_width
-                    + CODE_PADDING_X
-                    - self.horizontal_scroll_offset
+                let inline_x = gutter_width + CODE_PADDING_X - self.horizontal_scroll_offset
                     + measure_text_width(prefix, self.full_char_width, self.char_width);
                 let inline_width =
                     measure_text_width(changed, self.full_char_width, self.char_width);
@@ -803,7 +806,11 @@ impl canvas::Program<DiffEditorEvent> for OverviewMapCanvas {
         let drawable_height = (bounds.height - OVERVIEW_PADDING_Y * 2.0).max(1.0);
         let track_x = 2.0;
         let track_width = (bounds.width - 4.0).max(1.0);
-        let static_key = (self.blocks.as_ptr() as usize, self.blocks.len(), self.total_lines);
+        let static_key = (
+            self.blocks.as_ptr() as usize,
+            self.blocks.len(),
+            self.total_lines,
+        );
         if state.static_key.get() != Some(static_key) {
             state.static_cache.clear();
             state.static_key.set(Some(static_key));
@@ -909,7 +916,7 @@ fn build_editor(content: &str, path_hint: Option<&str>) -> CodeEditor {
     let syntax = syntax_for_path(path_hint);
     let mut editor = CodeEditor::new(content, syntax);
     editor.set_font(theme::code_font());
-    editor.set_font_size(11.0, true);
+    editor.set_font_size(theme::typography::CAPTION_SIZE as f32, true);
     editor.set_wrap_enabled(false);
     editor.set_line_numbers_enabled(true);
     editor.set_search_replace_enabled(false);
@@ -1021,7 +1028,10 @@ fn logical_line_count(text: &str) -> usize {
 
 fn block_colors(kind: EditorDiffBlockKind) -> (iced::Color, iced::Color) {
     let tag = block_kind_to_chunk(kind);
-    (diff_core::chunk_code_bg(tag), diff_core::chunk_gutter_bg(tag))
+    (
+        diff_core::chunk_code_bg(tag),
+        diff_core::chunk_gutter_bg(tag),
+    )
 }
 
 fn inline_color(kind: EditorDiffBlockKind) -> iced::Color {
@@ -1286,7 +1296,11 @@ fn anchor_line_for_fraction(fraction: f32, total_lines: usize) -> f32 {
     }
 }
 
-fn scale_anchor_line(anchor_line: f32, source_total_lines: usize, target_total_lines: usize) -> f32 {
+fn scale_anchor_line(
+    anchor_line: f32,
+    source_total_lines: usize,
+    target_total_lines: usize,
+) -> f32 {
     if source_total_lines <= 1 || target_total_lines <= 1 {
         return 0.0;
     }
@@ -1376,7 +1390,8 @@ fn overview_rect(
 ) -> OverviewRect {
     let total = total_lines.max(1) as f32;
     let y = range.start as f32 / total * drawable_height;
-    let height = (((range.end.max(range.start + 1) - range.start) as f32 / total) * drawable_height)
+    let height = (((range.end.max(range.start + 1) - range.start) as f32 / total)
+        * drawable_height)
         .max(MIN_OVERVIEW_BLOCK_HEIGHT);
 
     OverviewRect {

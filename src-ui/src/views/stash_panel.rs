@@ -100,7 +100,12 @@ impl StashPanelState {
             Some(self.new_stash_message.as_str())
         };
 
-        match git_core::stash_save_with_options(repo, message, self.include_untracked, self.keep_index) {
+        match git_core::stash_save_with_options(
+            repo,
+            message,
+            self.include_untracked,
+            self.keep_index,
+        ) {
             Ok(_) => {
                 self.success_message = Some(if let Some(message) = message {
                     format!("已保存储藏：{message}")
@@ -294,7 +299,6 @@ fn build_stashes_list(state: &StashPanelState) -> Element<'_, StashPanelMessage>
 }
 
 fn build_stash_input(state: &StashPanelState) -> Element<'_, StashPanelMessage> {
-    use iced::widget::Checkbox;
     Container::new(
         Column::new()
             .spacing(theme::spacing::SM)
@@ -311,20 +315,16 @@ fn build_stash_input(state: &StashPanelState) -> Element<'_, StashPanelMessage> 
             .push(
                 Row::new()
                     .spacing(theme::spacing::MD)
-                    .push(
-                        Checkbox::new(state.include_untracked)
-                            .label("包含未跟踪文件")
-                            .size(14)
-                            .style(crate::theme::checkbox_style())
-                            .on_toggle(|_| StashPanelMessage::ToggleIncludeUntracked),
-                    )
-                    .push(
-                        Checkbox::new(state.keep_index)
-                            .label("保留暂存区")
-                            .size(14)
-                            .style(crate::theme::checkbox_style())
-                            .on_toggle(|_| StashPanelMessage::SetKeepIndex(!state.keep_index)),
-                    ),
+                    .push(widgets::compact_checkbox(
+                        state.include_untracked,
+                        "包含未跟踪文件",
+                        |_| StashPanelMessage::ToggleIncludeUntracked,
+                    ))
+                    .push(widgets::compact_checkbox(
+                        state.keep_index,
+                        "保留暂存区",
+                        |_| StashPanelMessage::SetKeepIndex(!state.keep_index),
+                    )),
             ),
     )
     .padding([12, 12])
@@ -350,7 +350,9 @@ fn build_action_buttons(state: &StashPanelState) -> Element<'_, StashPanelMessag
             ))
             .push(button::ghost(
                 "应用到新分支",
-                state.selected_stash.map(StashPanelMessage::ShowUnstashDialog),
+                state
+                    .selected_stash
+                    .map(StashPanelMessage::ShowUnstashDialog),
             ))
             .push(button::ghost(
                 "丢弃",

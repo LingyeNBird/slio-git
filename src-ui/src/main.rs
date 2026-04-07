@@ -13,11 +13,9 @@ pub mod widgets;
 use crate::components::status_icons::FileStatus;
 use crate::keyboard::{get_shortcuts, ShortcutAction};
 use crate::state::{
-    is_docked_auxiliary_view, AppState, AuxiliaryView, DiffPresentation,
-    GitToolWindowTab, ShellSection, ToolbarRemoteAction,
+    is_docked_auxiliary_view, AppState, AuxiliaryView, DiffPresentation, GitToolWindowTab,
+    ShellSection, ToolbarRemoteAction,
 };
-use iced::widget::operation::{scroll_to, AbsoluteOffset};
-use iced::widget::Id;
 use crate::theme::BadgeTone;
 use crate::views::main_window::MainWindow;
 use crate::views::{
@@ -37,7 +35,11 @@ use git_core::{
     diff::{ConflictHunk, ConflictHunkType, ConflictLineType, ConflictResolution, ThreeWayDiff},
     Repository,
 };
-use iced::widget::{container, mouse_area, opaque, stack, text, Button, Column, Container, Row, Space, Text};
+use iced::widget::operation::{scroll_to, AbsoluteOffset};
+use iced::widget::Id;
+use iced::widget::{
+    container, mouse_area, opaque, stack, text, Button, Column, Container, Row, Space, Text,
+};
 use iced::{
     time, Alignment, Background, Border, Color, Element, Length, Point, Subscription, Task, Theme,
 };
@@ -434,6 +436,9 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 SettingsMessage::Close => state.close_auxiliary_view(),
                 SettingsMessage::SaveAndClose => {
                     state.git_settings.apply_message(&msg);
+                    if let Err(e) = state.git_settings.save() {
+                        log::warn!("Failed to persist git settings: {}", e);
+                    }
                     state.close_auxiliary_view();
                     state.set_success("设置已保存", None, "settings.save");
                 }
@@ -619,7 +624,8 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::RevertFile(path) => {
             if let Some(repo) = state.current_repository.as_ref() {
-                if let Err(error) = git_core::index::discard_file(repo, std::path::Path::new(&path)) {
+                if let Err(error) = git_core::index::discard_file(repo, std::path::Path::new(&path))
+                {
                     report_async_failure(
                         state,
                         "回滚文件失败",
@@ -1138,8 +1144,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             CommitDialogMessage::ToggleRecentMessages => {
                 // Load recent messages from history file
                 if let Some(repo) = &state.current_repository {
-                    state.recent_commit_messages =
-                        git_core::load_recent_messages(repo.path());
+                    state.recent_commit_messages = git_core::load_recent_messages(repo.path());
                 }
             }
             CommitDialogMessage::SelectRecentMessage(index) => {
@@ -2604,8 +2609,8 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         .collect();
                     let mut sorted = positions.clone();
                     sorted.sort();
-                    let is_contiguous = sorted.len() >= 2
-                        && sorted.windows(2).all(|w| w[1] == w[0] + 1);
+                    let is_contiguous =
+                        sorted.len() >= 2 && sorted.windows(2).all(|w| w[1] == w[0] + 1);
 
                     if !is_contiguous {
                         state.set_error_with_source(
@@ -2665,7 +2670,11 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             Ok(()) => {
                                 state.set_success(
                                     "推送成功",
-                                    Some(format!("已推送到 {} 的 {}", &commit_id[..7.min(commit_id.len())], remote)),
+                                    Some(format!(
+                                        "已推送到 {} 的 {}",
+                                        &commit_id[..7.min(commit_id.len())],
+                                        remote
+                                    )),
                                     "workspace.push.up_to",
                                 );
                             }
@@ -2920,10 +2929,16 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             RemoteDialogMessage::ExecutePush => {
                 if let Ok(repo) = require_repository(state) {
-                    let remote = state.remote_dialog.selected_remote.clone()
+                    let remote = state
+                        .remote_dialog
+                        .selected_remote
+                        .clone()
                         .or_else(|| state.remote_dialog.preferred_remote.clone())
                         .unwrap_or_else(|| "origin".to_string());
-                    let branch = state.remote_dialog.current_branch_name.clone()
+                    let branch = state
+                        .remote_dialog
+                        .current_branch_name
+                        .clone()
                         .unwrap_or_else(|| "main".to_string());
 
                     state.remote_dialog.is_loading = true;
@@ -2938,10 +2953,8 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     state.remote_dialog.is_loading = false;
                     match result {
                         Ok(()) => {
-                            state.remote_dialog.success_message = Some(format!(
-                                "已推送 {} → {}/{}",
-                                branch, remote, branch
-                            ));
+                            state.remote_dialog.success_message =
+                                Some(format!("已推送 {} → {}/{}", branch, remote, branch));
                             let _ = refresh_repository_after_action(state, &repo, false);
                         }
                         Err(e) => {
@@ -2987,10 +3000,16 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             RemoteDialogMessage::ExecutePull => {
                 if let Ok(repo) = require_repository(state) {
-                    let remote = state.remote_dialog.selected_remote.clone()
+                    let remote = state
+                        .remote_dialog
+                        .selected_remote
+                        .clone()
                         .or_else(|| state.remote_dialog.preferred_remote.clone())
                         .unwrap_or_else(|| "origin".to_string());
-                    let branch = state.remote_dialog.current_branch_name.clone()
+                    let branch = state
+                        .remote_dialog
+                        .current_branch_name
+                        .clone()
                         .unwrap_or_else(|| "main".to_string());
 
                     state.remote_dialog.is_loading = true;
@@ -3001,10 +3020,8 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     state.remote_dialog.is_loading = false;
                     match result {
                         Ok(()) => {
-                            state.remote_dialog.success_message = Some(format!(
-                                "已拉取 {}/{} → {}",
-                                remote, branch, branch
-                            ));
+                            state.remote_dialog.success_message =
+                                Some(format!("已拉取 {}/{} → {}", remote, branch, branch));
                             let _ = refresh_repository_after_action(state, &repo, false);
                         }
                         Err(e) => {
@@ -3298,8 +3315,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                 }
                             }
                             Err(e) => {
-                                state.stash_panel.error =
-                                    Some(format!("应用到新分支失败: {e}"));
+                                state.stash_panel.error = Some(format!("应用到新分支失败: {e}"));
                             }
                         }
                     }
@@ -4109,7 +4125,9 @@ fn navigate_hunk(state: &mut AppState, delta: isize) -> Task<Message> {
         state.selected_hunk_index = Some(next);
 
         if let Some(editor) = state.split_diff_editor.as_mut() {
-            return editor.scroll_to_hunk(next).map(Message::SplitDiffEditorEvent);
+            return editor
+                .scroll_to_hunk(next)
+                .map(Message::SplitDiffEditorEvent);
         }
 
         return Task::none();
@@ -4117,12 +4135,7 @@ fn navigate_hunk(state: &mut AppState, delta: isize) -> Task<Message> {
 
     state
         .navigate_hunk(delta)
-        .map(|offset| {
-            scroll_to(
-                Id::new("diff-scroll"),
-                AbsoluteOffset { x: 0.0, y: offset },
-            )
-        })
+        .map(|offset| scroll_to(Id::new("diff-scroll"), AbsoluteOffset { x: 0.0, y: offset }))
         .unwrap_or_else(Task::none)
 }
 
@@ -4339,9 +4352,8 @@ fn view(state: &AppState) -> Element<'_, Message> {
             .on_press(Message::OpenRepository),
         );
 
-        project_list = project_list.push(
-            iced::widget::rule::horizontal(1).style(theme::separator_rule_style()),
-        );
+        project_list = project_list
+            .push(iced::widget::rule::horizontal(1).style(theme::separator_rule_style()));
 
         // Recent projects header
         if !state.project_history.is_empty() {
@@ -4386,25 +4398,24 @@ fn view(state: &AppState) -> Element<'_, Message> {
             );
         }
 
-        let dropdown = Container::new(
-            widgets::scrollable::styled(project_list).height(Length::Shrink),
-        )
-        .width(Length::Fixed(320.0))
-        .max_height(400.0)
-        .style(|_| iced::widget::container::Style {
-            background: Some(iced::Background::Color(theme::darcula::BG_PANEL)),
-            border: iced::Border {
-                width: 1.0,
-                color: theme::darcula::BORDER,
-                radius: 8.0.into(),
-            },
-            shadow: iced::Shadow {
-                color: iced::Color::from_rgba(0.0, 0.0, 0.0, 0.4),
-                offset: iced::Vector::new(0.0, 4.0),
-                blur_radius: 16.0,
-            },
-            ..Default::default()
-        });
+        let dropdown =
+            Container::new(widgets::scrollable::styled(project_list).height(Length::Shrink))
+                .width(Length::Fixed(320.0))
+                .max_height(400.0)
+                .style(|_| iced::widget::container::Style {
+                    background: Some(iced::Background::Color(theme::darcula::BG_PANEL)),
+                    border: iced::Border {
+                        width: 1.0,
+                        color: theme::darcula::BORDER,
+                        radius: 8.0.into(),
+                    },
+                    shadow: iced::Shadow {
+                        color: iced::Color::from_rgba(0.0, 0.0, 0.0, 0.4),
+                        offset: iced::Vector::new(0.0, 4.0),
+                        blur_radius: 16.0,
+                    },
+                    ..Default::default()
+                });
 
         let overlay = Container::new(
             Column::new()
@@ -4474,14 +4485,10 @@ fn view(state: &AppState) -> Element<'_, Message> {
         )
         .on_press(Message::ShowBranches); // toggle off
 
-        return iced::widget::stack([
-            main_view,
-            backdrop.into(),
-            overlay.into(),
-        ])
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into();
+        return iced::widget::stack([main_view, backdrop.into(), overlay.into()])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
     }
 
     main_view
@@ -4513,12 +4520,10 @@ fn build_body<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Mess
                 rebase_editor::view(&state.rebase_editor).map(Message::RebaseEditorMessage)
             }
             AuxiliaryView::Worktrees => {
-                views::worktree_view::view(&state.worktree_state)
-                    .map(Message::WorktreeMessage)
+                views::worktree_view::view(&state.worktree_state).map(Message::WorktreeMessage)
             }
             AuxiliaryView::Settings => {
-                views::settings_view::view(&state.git_settings)
-                    .map(Message::SettingsMessage)
+                views::settings_view::view(&state.git_settings).map(Message::SettingsMessage)
             }
             AuxiliaryView::Commit => build_changes_body(state, i18n),
             AuxiliaryView::History => build_log_body(state),
@@ -4650,17 +4655,19 @@ fn build_changes_body<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<
     .height(Length::Fill)
     .style(theme::panel_style(theme::Surface::Panel));
 
-    let commit_panel = commit_panel::view(&state.commit_dialog, &state.recent_commit_messages, state.git_settings.llm_enabled).map(Message::CommitDialogMessage);
+    let commit_panel = commit_panel::view(
+        &state.commit_dialog,
+        &state.recent_commit_messages,
+        state.git_settings.llm_enabled,
+    )
+    .map(Message::CommitDialogMessage);
 
     let right_panel = Column::new()
         .spacing(0)
         .height(Length::Fill)
         .push(diff_panel.height(Length::FillPortion(10)))
         .push(iced::widget::rule::horizontal(1))
-        .push(
-            Container::new(commit_panel)
-                .height(Length::FillPortion(2)),
-        );
+        .push(Container::new(commit_panel).height(Length::FillPortion(2)));
 
     Row::new()
         .spacing(theme::spacing::XS)
@@ -4900,12 +4907,18 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
             .push(button::tab(
                 "统一",
                 state.diff_presentation == DiffPresentation::Unified,
-                state.current_diff.is_some().then_some(Message::ToggleDiffPresentation),
+                state
+                    .current_diff
+                    .is_some()
+                    .then_some(Message::ToggleDiffPresentation),
             ))
             .push(button::tab(
                 "分栏",
                 state.diff_presentation == DiffPresentation::Split,
-                state.current_diff.is_some().then_some(Message::ToggleDiffPresentation),
+                state
+                    .current_diff
+                    .is_some()
+                    .then_some(Message::ToggleDiffPresentation),
             ))
             .push_maybe(state.current_diff.as_ref().and_then(|diff| {
                 let total_hunks: usize = diff.files.iter().map(|f| f.hunks.len()).sum();
@@ -4937,24 +4950,23 @@ fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<
     }
 
     if !state.show_diff || state.current_diff.is_none() {
-        return widgets::panel_empty_state_compact(
-            i18n.diff_empty,
-            i18n.diff_empty_detail,
-        );
+        return widgets::panel_empty_state_compact(i18n.diff_empty, i18n.diff_empty_detail);
     }
 
     let diff = state.current_diff.as_ref().expect("diff checked");
     if diff.files.is_empty() {
-        return widgets::panel_empty_state_compact(
-            i18n.no_changes,
-            i18n.diff_empty_detail,
-        );
+        return widgets::panel_empty_state_compact(i18n.no_changes, i18n.diff_empty_detail);
     }
 
     let selected_is_staged = state
         .selected_change_path
         .as_ref()
-        .map(|path| state.staged_changes.iter().any(|change| &change.path == path))
+        .map(|path| {
+            state
+                .staged_changes
+                .iter()
+                .any(|change| &change.path == path)
+        })
         .unwrap_or(false);
 
     match state.diff_presentation {
@@ -5750,7 +5762,10 @@ pub enum Message {
     CancelNetworkOperation,
     TogglePullStrategy,
     ForcePushCurrent,
-    SetUpstreamAndPush { branch: String, remote: String },
+    SetUpstreamAndPush {
+        branch: String,
+        remote: String,
+    },
 }
 
 #[cfg(test)]
@@ -5761,8 +5776,8 @@ mod tests {
     #[test]
     fn open_commit_dialog_navigates_to_changes_tab() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
-        let repo = git_core::Repository::init(temp_dir.path())
-            .expect("repository should initialize");
+        let repo =
+            git_core::Repository::init(temp_dir.path()).expect("repository should initialize");
         let mut state = AppState::new();
         state.set_repository(repo);
         state.switch_git_tool_window_tab(GitToolWindowTab::Log);

@@ -478,52 +478,33 @@ fn build_rebase_controls(state: &RebaseEditorState) -> Element<'_, RebaseEditorM
         let selected = state.selected_todo_index;
         let has_selected = selected.is_some();
         let can_move_up = selected.is_some_and(|i| i > 0);
-        let can_move_down =
-            selected.is_some_and(|i| i + 1 < state.todo_list.len());
+        let can_move_down = selected.is_some_and(|i| i + 1 < state.todo_list.len());
 
         scrollable::styled_horizontal(
             Row::new()
                 .spacing(theme::spacing::XS)
                 .push(button::toolbar_icon(
                     "↑",
-                    can_move_up.then(|| {
-                        RebaseEditorMessage::MoveTodoUp(selected.unwrap())
-                    }),
+                    can_move_up.then(|| RebaseEditorMessage::MoveTodoUp(selected.unwrap())),
                 ))
                 .push(button::toolbar_icon(
                     "↓",
-                    can_move_down.then(|| {
-                        RebaseEditorMessage::MoveTodoDown(selected.unwrap())
-                    }),
+                    can_move_down.then(|| RebaseEditorMessage::MoveTodoDown(selected.unwrap())),
                 ))
-                .push(
-                    Text::new("│")
-                        .size(12)
-                        .color(theme::darcula::SEPARATOR),
-                )
+                .push(Text::new("│").size(12).color(theme::darcula::SEPARATOR))
                 .push(button::toolbar_icon(
                     "Pick",
                     (has_selected && state.todo_is_editable).then(|| {
-                        RebaseEditorMessage::SetTodoAction(
-                            selected.unwrap(),
-                            "pick".to_string(),
-                        )
+                        RebaseEditorMessage::SetTodoAction(selected.unwrap(), "pick".to_string())
                     }),
                 ))
                 .push(button::toolbar_icon(
                     "Edit",
                     (has_selected && state.todo_is_editable).then(|| {
-                        RebaseEditorMessage::SetTodoAction(
-                            selected.unwrap(),
-                            "edit".to_string(),
-                        )
+                        RebaseEditorMessage::SetTodoAction(selected.unwrap(), "edit".to_string())
                     }),
                 ))
-                .push(
-                    Text::new("│")
-                        .size(12)
-                        .color(theme::darcula::SEPARATOR),
-                )
+                .push(Text::new("│").size(12).color(theme::darcula::SEPARATOR))
                 .push(button::primary(
                     "开始交互式变基",
                     (!state.is_loading).then_some(RebaseEditorMessage::StartRebase),
@@ -880,12 +861,9 @@ pub fn view(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage> {
             Column::new().into()
         };
 
-    let context_panel: Option<Element<'_, RebaseEditorMessage>> = (!state
-        .base_branch
-        .trim()
-        .is_empty())
-    .then(|| {
-        Container::new(
+    let context_panel: Option<Element<'_, RebaseEditorMessage>> =
+        (!state.base_branch.trim().is_empty()).then(|| {
+            Container::new(
             Column::new()
                 .spacing(theme::spacing::XS)
                 .push(widgets::section_header(
@@ -923,7 +901,7 @@ pub fn view(state: &RebaseEditorState) -> Element<'_, RebaseEditorMessage> {
         .padding([12, 12])
         .style(theme::panel_style(Surface::Panel))
         .into()
-    });
+        });
 
     Container::new(
         scrollable::styled(
@@ -1196,7 +1174,10 @@ mod tests {
         state.todo_list = vec![make_todo("pick", "abc", "test")];
 
         state.cycle_todo_action(0);
-        assert_eq!(state.todo_list[0].action, "pick", "should not change when not editable");
+        assert_eq!(
+            state.todo_list[0].action, "pick",
+            "should not change when not editable"
+        );
 
         state.move_todo_up(0);
         state.move_todo_down(0);

@@ -27,8 +27,7 @@ impl Branch {
     pub fn compute_group_path(&mut self) {
         let display_name = if self.is_remote {
             // For remote branches like "origin/feature/auth", skip the remote name
-            self.name.split_once('/').map(|x| x.1)
-                .unwrap_or(&self.name)
+            self.name.split_once('/').map(|x| x.1).unwrap_or(&self.name)
         } else {
             &self.name
         };
@@ -36,7 +35,12 @@ impl Branch {
         let parts: Vec<&str> = display_name.split('/').collect();
         if parts.len() > 1 {
             // All but the last part form the group path
-            self.group_path = Some(parts[..parts.len() - 1].iter().map(|s| s.to_string()).collect());
+            self.group_path = Some(
+                parts[..parts.len() - 1]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            );
         } else {
             self.group_path = None;
         }
@@ -58,9 +62,12 @@ impl Repository {
             .map_err(|_| GitError::BranchNotFound {
                 name: name.to_string(),
             })?;
-        let branch_oid = branch.get().target().ok_or_else(|| GitError::BranchNotFound {
-            name: name.to_string(),
-        })?;
+        let branch_oid = branch
+            .get()
+            .target()
+            .ok_or_else(|| GitError::BranchNotFound {
+                name: name.to_string(),
+            })?;
         let head_oid = repo_lock
             .head()
             .ok()
@@ -69,12 +76,13 @@ impl Repository {
                 operation: "is_branch_merged".to_string(),
                 details: "No HEAD reference found".to_string(),
             })?;
-        let merge_base = repo_lock
-            .merge_base(branch_oid, head_oid)
-            .map_err(|e| GitError::OperationFailed {
-                operation: "is_branch_merged".to_string(),
-                details: e.to_string(),
-            })?;
+        let merge_base =
+            repo_lock
+                .merge_base(branch_oid, head_oid)
+                .map_err(|e| GitError::OperationFailed {
+                    operation: "is_branch_merged".to_string(),
+                    details: e.to_string(),
+                })?;
         Ok(merge_base == branch_oid)
     }
 
@@ -292,12 +300,21 @@ impl Repository {
 
     /// Smart checkout — stash changes, checkout, then pop stash.
     pub fn smart_checkout_branch(&self, name: &str) -> Result<(), GitError> {
-        info!("Smart checking out branch '{}' (stash → checkout → unstash)", name);
+        info!(
+            "Smart checking out branch '{}' (stash → checkout → unstash)",
+            name
+        );
         let repo_path = self.command_cwd();
 
         // Step 1: stash including untracked files
         let stash_output = Command::new("git")
-            .args(["stash", "push", "-m", "slio-git: smart checkout auto-stash", "--include-untracked"])
+            .args([
+                "stash",
+                "push",
+                "-m",
+                "slio-git: smart checkout auto-stash",
+                "--include-untracked",
+            ])
             .current_dir(&repo_path)
             .output()
             .map_err(|e| GitError::OperationFailed {

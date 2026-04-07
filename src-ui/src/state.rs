@@ -609,7 +609,7 @@ impl AppState {
             toolbar_remote_menu: None,
             show_project_dropdown: false,
             show_branch_dropdown: false,
-            git_settings: Default::default(),
+            git_settings: crate::views::settings_view::GitSettings::load(),
             auto_refresh: AutoRefreshState::default(),
             file_display_mode: FileDisplayMode::default(),
             log_tabs: vec![LogTab::all()],
@@ -751,7 +751,10 @@ impl AppState {
         self.current_repository = Some(repo);
         self.remember_project(project_entry);
         // Persist immediately so the project list survives crashes
-        let active_path = self.current_repository.as_ref().map(|r| r.path().to_path_buf());
+        let active_path = self
+            .current_repository
+            .as_ref()
+            .map(|r| r.path().to_path_buf());
         self.persist_workspace_memory(active_path.as_deref());
         self.reset_auto_refresh_state();
         self.is_loading = false;
@@ -1298,11 +1301,8 @@ impl AppState {
             .selected_files
             .retain(|path| self.staged_changes.iter().any(|c| &c.path == path));
         if self.commit_dialog.selected_files.is_empty() && !self.staged_changes.is_empty() {
-            self.commit_dialog.selected_files = self
-                .staged_changes
-                .iter()
-                .map(|c| c.path.clone())
-                .collect();
+            self.commit_dialog.selected_files =
+                self.staged_changes.iter().map(|c| c.path.clone()).collect();
         }
         self.commit_dialog.ensure_preview_target();
     }
@@ -2225,7 +2225,10 @@ mod tests {
         state.auxiliary_view = Some(super::AuxiliaryView::Branches);
         state.switch_git_tool_window_tab(super::GitToolWindowTab::Log);
         assert!(state.auxiliary_view.is_none());
-        assert_eq!(state.shell.git_tool_window_tab, super::GitToolWindowTab::Log);
+        assert_eq!(
+            state.shell.git_tool_window_tab,
+            super::GitToolWindowTab::Log
+        );
     }
 
     #[test]
@@ -2254,7 +2257,10 @@ mod tests {
         // Simulate what the toolbar Commit button handler does.
         state.navigate_to(super::ShellSection::Changes);
         state.switch_git_tool_window_tab(super::GitToolWindowTab::Changes);
-        assert_eq!(state.shell.git_tool_window_tab, super::GitToolWindowTab::Changes);
+        assert_eq!(
+            state.shell.git_tool_window_tab,
+            super::GitToolWindowTab::Changes
+        );
         assert_eq!(state.view_mode, super::ViewMode::Repository);
     }
 

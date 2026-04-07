@@ -857,12 +857,23 @@ pub fn resolve_conflict_hunk(hunk: &ConflictHunk, resolution: &ConflictResolutio
 const MIN_INLINE_MATCH_LEN: usize = 3;
 const MAX_INLINE_CHARS: usize = 20_000;
 
-pub fn compute_inline_changes(old_line: &str, new_line: &str) -> (Vec<InlineChangeSpan>, Vec<InlineChangeSpan>) {
+pub fn compute_inline_changes(
+    old_line: &str,
+    new_line: &str,
+) -> (Vec<InlineChangeSpan>, Vec<InlineChangeSpan>) {
     // Meld threshold: skip inline diff for very long lines
     if old_line.len() + new_line.len() > MAX_INLINE_CHARS {
         return (
-            vec![InlineChangeSpan { start: 0, len: old_line.len(), changed: true }],
-            vec![InlineChangeSpan { start: 0, len: new_line.len(), changed: true }],
+            vec![InlineChangeSpan {
+                start: 0,
+                len: old_line.len(),
+                changed: true,
+            }],
+            vec![InlineChangeSpan {
+                start: 0,
+                len: new_line.len(),
+                changed: true,
+            }],
         );
     }
 
@@ -885,25 +896,50 @@ pub fn compute_inline_changes(old_line: &str, new_line: &str) -> (Vec<InlineChan
                 let at_start = old_pos == 0 && new_pos == 0;
                 let at_end_old = old_pos + len == old_line.len();
                 let at_end_new = new_pos + len == new_line.len();
-                let too_short = len < MIN_INLINE_MATCH_LEN && !at_start && !(at_end_old && at_end_new);
+                let too_short =
+                    len < MIN_INLINE_MATCH_LEN && !at_start && !(at_end_old && at_end_new);
 
                 if too_short {
                     // Mark as changed on both sides
-                    old_spans.push(InlineChangeSpan { start: old_pos, len, changed: true });
-                    new_spans.push(InlineChangeSpan { start: new_pos, len, changed: true });
+                    old_spans.push(InlineChangeSpan {
+                        start: old_pos,
+                        len,
+                        changed: true,
+                    });
+                    new_spans.push(InlineChangeSpan {
+                        start: new_pos,
+                        len,
+                        changed: true,
+                    });
                 } else {
-                    old_spans.push(InlineChangeSpan { start: old_pos, len, changed: false });
-                    new_spans.push(InlineChangeSpan { start: new_pos, len, changed: false });
+                    old_spans.push(InlineChangeSpan {
+                        start: old_pos,
+                        len,
+                        changed: false,
+                    });
+                    new_spans.push(InlineChangeSpan {
+                        start: new_pos,
+                        len,
+                        changed: false,
+                    });
                 }
                 old_pos += len;
                 new_pos += len;
             }
             ChangeTag::Delete => {
-                old_spans.push(InlineChangeSpan { start: old_pos, len, changed: true });
+                old_spans.push(InlineChangeSpan {
+                    start: old_pos,
+                    len,
+                    changed: true,
+                });
                 old_pos += len;
             }
             ChangeTag::Insert => {
-                new_spans.push(InlineChangeSpan { start: new_pos, len, changed: true });
+                new_spans.push(InlineChangeSpan {
+                    start: new_pos,
+                    len,
+                    changed: true,
+                });
                 new_pos += len;
             }
         }
@@ -1143,8 +1179,14 @@ pub fn build_side_by_side_diff(
                 for p in 0..pair_count {
                     old_lineno += 1;
                     new_lineno += 1;
-                    let old_text = changes[del_start + p].value().trim_end_matches('\n').to_string();
-                    let new_text = changes[ins_start + p].value().trim_end_matches('\n').to_string();
+                    let old_text = changes[del_start + p]
+                        .value()
+                        .trim_end_matches('\n')
+                        .to_string();
+                    let new_text = changes[ins_start + p]
+                        .value()
+                        .trim_end_matches('\n')
+                        .to_string();
                     let (old_spans, new_spans) = compute_inline_changes(&old_text, &new_text);
                     rows.push(SideBySideRow {
                         tag: "replace",
@@ -1163,7 +1205,10 @@ pub fn build_side_by_side_diff(
                         tag: "delete",
                         old_lineno: Some(old_lineno),
                         new_lineno: None,
-                        old_text: changes[del_start + p].value().trim_end_matches('\n').to_string(),
+                        old_text: changes[del_start + p]
+                            .value()
+                            .trim_end_matches('\n')
+                            .to_string(),
                         new_text: String::new(),
                         old_inline: Vec::new(),
                         new_inline: Vec::new(),
@@ -1177,7 +1222,10 @@ pub fn build_side_by_side_diff(
                         old_lineno: None,
                         new_lineno: Some(new_lineno),
                         old_text: String::new(),
-                        new_text: changes[ins_start + p].value().trim_end_matches('\n').to_string(),
+                        new_text: changes[ins_start + p]
+                            .value()
+                            .trim_end_matches('\n')
+                            .to_string(),
                         old_inline: Vec::new(),
                         new_inline: Vec::new(),
                     });
@@ -1493,11 +1541,7 @@ fn build_editor_hunk(id: usize, hunk: &DiffHunk) -> EditorDiffHunk {
     }
 }
 
-fn editor_line_from_diff(
-    line: &DiffLine,
-    index: usize,
-    is_new_side: bool,
-) -> EditorDiffLine {
+fn editor_line_from_diff(line: &DiffLine, index: usize, is_new_side: bool) -> EditorDiffLine {
     let line_number = if is_new_side {
         line.new_lineno.unwrap_or(index as u32 + 1)
     } else {
@@ -1540,7 +1584,10 @@ pub struct FullFilePreview {
 /// Build a FileDiff that shows the entire file content as additions.
 /// Used when there's no diff to display (new/untracked files).
 /// Respects MAX_PREVIEW_BYTES / MAX_PREVIEW_LINES limits.
-pub fn build_full_file_diff(repo: &Repository, file_path: &Path) -> Result<FullFilePreview, GitError> {
+pub fn build_full_file_diff(
+    repo: &Repository,
+    file_path: &Path,
+) -> Result<FullFilePreview, GitError> {
     let abs_path = repo.path().join(file_path);
 
     if file_is_binary(&abs_path) {
@@ -1606,8 +1653,8 @@ pub fn build_full_file_diff(repo: &Repository, file_path: &Path) -> Result<FullF
 mod tests {
     use super::build_editor_diff_model;
     use super::diff_file_to_index;
-    use super::EditorDiffBlockKind;
     use super::DiffLineOrigin;
+    use super::EditorDiffBlockKind;
     use crate::commit;
     use crate::index;
     use crate::repository::Repository;
@@ -1727,12 +1774,10 @@ mod tests {
 
         assert_eq!(replace_block.old_lines.len(), 1);
         assert_eq!(replace_block.new_lines.len(), 1);
-        assert!(
-            replace_block.old_lines[0]
-                .inline_changes
-                .iter()
-                .any(|span| span.changed)
-        );
+        assert!(replace_block.old_lines[0]
+            .inline_changes
+            .iter()
+            .any(|span| span.changed));
         assert!(
             model.line_map.iter().any(|entry| {
                 entry.kind == EditorDiffBlockKind::Replace
@@ -1756,8 +1801,7 @@ mod tests {
             "baseline",
         );
 
-        fs::write(temp_dir.path().join("notes.txt"), "zero\none\nthree\n")
-            .expect("modify file");
+        fs::write(temp_dir.path().join("notes.txt"), "zero\none\nthree\n").expect("modify file");
 
         let model = build_editor_diff_model(&repo, "notes.txt", false)
             .expect("build editor diff")
@@ -1786,13 +1830,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("temp dir");
         let repo = Repository::init(temp_dir.path()).expect("init repo");
         configure_signature(&repo);
-        commit_file(
-            &repo,
-            temp_dir.path(),
-            "notes.txt",
-            "one\n",
-            "baseline",
-        );
+        commit_file(&repo, temp_dir.path(), "notes.txt", "one\n", "baseline");
 
         let file_path = temp_dir.path().join("notes.txt");
         fs::write(&file_path, "one staged\n").expect("stage candidate");

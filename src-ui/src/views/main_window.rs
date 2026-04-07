@@ -3,8 +3,8 @@
 use crate::components::rail_icons::{self, RailIcon};
 use crate::i18n::I18n;
 use crate::state::{
-    AppState, AuxiliaryView, FeedbackLevel, GitToolWindowTab, ShellSection,
-    StatusSeverity, ToolbarRemoteAction, ToolbarRemoteMenuState,
+    AppState, AuxiliaryView, FeedbackLevel, GitToolWindowTab, ShellSection, StatusSeverity,
+    ToolbarRemoteAction, ToolbarRemoteMenuState,
 };
 use crate::theme::{self, BadgeTone, ButtonTone, Surface};
 use crate::views;
@@ -14,13 +14,14 @@ use iced::widget::{rule, stack, text, Button, Column, Container, Row, Space, Tex
 use iced::{Alignment, Element, Length};
 use std::path::PathBuf;
 
-
-
 #[derive(Debug, Clone)]
 struct ChromeBadges {
     branch_badge: Option<(String, BadgeTone)>,
     sync_badge: Option<(String, BadgeTone)>,
 }
+
+const CONTEXT_FOCUS_LABEL: &str = "当前焦点";
+const MAX_CHROME_BRANCH_NAME_LENGTH: usize = 28;
 
 #[derive(Debug, Clone)]
 struct StatusBarContent {
@@ -305,9 +306,11 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             Row::new()
                 .spacing(4)
                 .align_y(Alignment::Center)
-                .push(
-                    Self::inline_icon(RailIcon::Repository, theme::darcula::TEXT_SECONDARY, 12.0),
-                )
+                .push(Self::inline_icon(
+                    RailIcon::Repository,
+                    theme::darcula::TEXT_SECONDARY,
+                    12.0,
+                ))
                 .push(Text::new(&context.repository_name).size(12))
                 .push(Text::new("▾").size(9).color(theme::darcula::TEXT_DISABLED)),
         )
@@ -320,24 +323,21 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                 Row::new()
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
-                    .width(Length::Fill)
                     .push(Self::inline_icon(
                         RailIcon::Branch,
                         theme::darcula::BRAND,
                         12.0,
                     ))
                     .push(
-                        Text::new(&context.branch_name)
+                        Text::new(Self::toolbar_branch_label(&context.branch_name))
                             .size(11)
-                            .width(Length::Fill)
-                            .wrapping(text::Wrapping::WordOrGlyph),
+                            .wrapping(text::Wrapping::None),
                     )
                     .push_maybe(badges.branch_badge.as_ref().map(|(label, tone)| {
                         widgets::compact_chip::<Message>(label.clone(), *tone)
                     })),
             )
             .padding(theme::density::TOOLBAR_PADDING)
-            .width(Length::Fill)
             .style(theme::panel_style(Surface::ToolbarField)),
         )
         .style(theme::button_style(ButtonTone::Ghost))
@@ -392,19 +392,20 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
                 .on_press(on_show_settings.clone()),
             );
 
-        let primary_bar = Container::new(
-            Row::new()
-                .spacing(theme::spacing::SM)
-                .align_y(Alignment::Center)
-                .push(context_switchers)
-                .push_maybe(badges.sync_badge.as_ref().map(|(label, tone)| {
-                    widgets::compact_chip::<Message>(label.clone(), *tone)
-                }))
-                .push(Space::new().width(Length::Fill))
-                .push(quick_actions),
-        )
-        .padding([10, 16])
-        .style(theme::frame_style(Surface::Toolbar));
+        let primary_bar =
+            Container::new(
+                Row::new()
+                    .spacing(theme::spacing::SM)
+                    .align_y(Alignment::Center)
+                    .push(context_switchers)
+                    .push_maybe(badges.sync_badge.as_ref().map(|(label, tone)| {
+                        widgets::compact_chip::<Message>(label.clone(), *tone)
+                    }))
+                    .push(Space::new().width(Length::Fill))
+                    .push(quick_actions),
+            )
+            .padding([10, 16])
+            .style(theme::frame_style(Surface::Toolbar));
 
         let remote_menu: Option<Element<'a, Message>> =
             state.toolbar_remote_menu.as_ref().map(|menu| {
@@ -635,6 +636,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
         sync_hint: Option<&str>,
         sync_label: &str,
     ) -> ChromeBadges {
+        let secondary_label = secondary_label.filter(|label| *label != CONTEXT_FOCUS_LABEL);
         let branch_badge = state_hint
             .map(|label| (label.to_string(), BadgeTone::Warning))
             .or_else(|| secondary_label.map(|label| (label.to_string(), BadgeTone::Accent)))
@@ -647,6 +649,25 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             branch_badge,
             sync_badge,
         }
+    }
+
+    fn toolbar_branch_label(branch_name: &str) -> String {
+        if branch_name.chars().count() <= MAX_CHROME_BRANCH_NAME_LENGTH {
+            return branch_name.to_string();
+        }
+
+        let keep = (MAX_CHROME_BRANCH_NAME_LENGTH.saturating_sub(3)) / 2;
+        let prefix: String = branch_name.chars().take(keep).collect();
+        let suffix: String = branch_name
+            .chars()
+            .rev()
+            .take(keep)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+
+        format!("{prefix}...{suffix}")
     }
 
     fn editor_tab_strip(
@@ -1000,6 +1021,33 @@ mod tests {
             Some((label, BadgeTone::Warning)) if label == "有冲突"
         ));
         assert!(badges.sync_badge.is_none());
+    }
+
+    #[test]
+    fn pick_branch_badges_ignores_current_focus_secondary_label() {
+        let badges = MainWindow::<()>::pick_branch_badges(
+            Some("当前焦点"),
+            None,
+            Some("跟踪 origin/main"),
+            "✓",
+        );
+
+        assert!(matches!(
+            badges.branch_badge.as_ref(),
+            Some((label, BadgeTone::Neutral)) if label == "跟踪 origin/main"
+        ));
+    }
+
+    #[test]
+    fn toolbar_branch_label_truncates_long_names_without_losing_suffix() {
+        let label = MainWindow::<()>::toolbar_branch_label(
+            "feature/really-long-topic-name-with-ticket-CXNY-3856",
+        );
+
+        assert!(label.starts_with("feature/real"));
+        assert!(label.ends_with("et-CXNY-3856"));
+        assert!(label.contains("..."));
+        assert!(label.chars().count() <= MAX_CHROME_BRANCH_NAME_LENGTH);
     }
 
     #[test]

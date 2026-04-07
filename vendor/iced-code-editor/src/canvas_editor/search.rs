@@ -141,12 +141,7 @@ impl SearchState {
 
     /// Updates the matches list based on current query and options.
     pub fn update_matches(&mut self, buffer: &TextBuffer) {
-        self.matches = find_matches(
-            buffer,
-            &self.query,
-            self.case_sensitive,
-            Some(MAX_MATCHES),
-        );
+        self.matches = find_matches(buffer, &self.query, self.case_sensitive, Some(MAX_MATCHES));
 
         // Update current match index
         if self.matches.is_empty() {
@@ -156,8 +151,7 @@ impl SearchState {
         } else if let Some(idx) = self.current_match_index {
             // Clamp to valid range
             if idx >= self.matches.len() {
-                self.current_match_index =
-                    Some(self.matches.len().saturating_sub(1));
+                self.current_match_index = Some(self.matches.len().saturating_sub(1));
             }
         }
     }
@@ -201,7 +195,8 @@ impl SearchState {
     /// Returns the current match position if available.
     #[must_use]
     pub fn current_match(&self) -> Option<SearchMatch> {
-        self.current_match_index.and_then(|idx| self.matches.get(idx).copied())
+        self.current_match_index
+            .and_then(|idx| self.matches.get(idx).copied())
     }
 
     /// Returns the number of matches found.
@@ -229,10 +224,8 @@ impl SearchState {
             .enumerate()
             .min_by_key(|(_, m)| {
                 // Calculate Manhattan distance, weighing lines more than columns
-                let line_dist =
-                    (m.line as isize - cursor_line as isize).unsigned_abs();
-                let col_dist =
-                    (m.col as isize - cursor_col as isize).unsigned_abs();
+                let line_dist = (m.line as isize - cursor_line as isize).unsigned_abs();
+                let col_dist = (m.col as isize - cursor_col as isize).unsigned_abs();
                 line_dist * 1000 + col_dist
             })
             .map(|(i, _)| i);
@@ -269,8 +262,9 @@ pub fn find_matches(
     // Use parallel search for larger files
     // Threshold can be tuned, but PARALLEL_SEARCH_THRESHOLD lines is a reasonable start to offset thread creation overhead
     if line_count > PARALLEL_SEARCH_THRESHOLD {
-        let num_threads =
-            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+        let num_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
 
         if num_threads > 1 {
             let chunk_size = line_count.div_ceil(num_threads);
@@ -287,14 +281,7 @@ pub fn find_matches(
                     }
 
                     handles.push(s.spawn(move || {
-                        find_matches_in_range(
-                            buffer,
-                            query,
-                            case_sensitive,
-                            start,
-                            end,
-                            limit,
-                        )
+                        find_matches_in_range(buffer, query, case_sensitive, start, end, limit)
                     }));
                 }
 
@@ -391,9 +378,7 @@ fn find_matches_in_range(
 
         // Find all occurrences in this line
         let mut start_pos = 0;
-        while let Some(relative_pos) =
-            search_line[start_pos..].find(search_query.as_ref())
-        {
+        while let Some(relative_pos) = search_line[start_pos..].find(search_query.as_ref()) {
             let absolute_pos = start_pos + relative_pos;
 
             // Convert byte position to character position
@@ -408,7 +393,10 @@ fn find_matches_in_range(
                 search_line[..absolute_pos].chars().count()
             };
 
-            matches.push(SearchMatch { line: line_idx, col });
+            matches.push(SearchMatch {
+                line: line_idx,
+                col,
+            });
 
             // Move past this match to find next occurrence
             // Use search_query.len() to avoid overlapping matches and ensure we land on UTF-8 character boundary

@@ -492,17 +492,12 @@ fn build_action_buttons(state: &RemoteDialogState) -> Element<'_, RemoteDialogMe
 /// Build the remote dialog view.
 /// IDEA-style Push dialog — compact, clear visual hierarchy
 fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
-    use iced::widget::Checkbox;
-
     let remote_name = state
         .selected_remote
         .as_deref()
         .or(state.preferred_remote.as_deref())
         .unwrap_or("origin");
-    let branch = state
-        .current_branch_name
-        .as_deref()
-        .unwrap_or("main");
+    let branch = state.current_branch_name.as_deref().unwrap_or("main");
     let target_display = if state.target_branch.is_empty() {
         branch
     } else {
@@ -519,7 +514,10 @@ fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
                     .color(theme::darcula::TEXT_PRIMARY),
             )
             .push(iced::widget::Space::new().width(Length::Fill))
-            .push(button::compact_ghost("关闭", Some(RemoteDialogMessage::Close))),
+            .push(button::compact_ghost(
+                "关闭",
+                Some(RemoteDialogMessage::Close),
+            )),
     )
     .padding([6, 14])
     .width(Length::Fill)
@@ -558,40 +556,36 @@ fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
     let options = Container::new(
         Column::new()
             .spacing(6)
-            .push(
-                Checkbox::new(state.force_push)
-                    .label("强制推送 (--force-with-lease)")
-                    .size(14)
-                    .spacing(6)
-                    .style(theme::checkbox_style())
-                    .on_toggle(|_| RemoteDialogMessage::ToggleForcePush),
-            )
-            .push(
-                Checkbox::new(state.push_tags)
-                    .label("推送标签")
-                    .size(14)
-                    .spacing(6)
-                    .style(theme::checkbox_style())
-                    .on_toggle(|_| RemoteDialogMessage::TogglePushTags),
-            )
-            .push(
-                Checkbox::new(state.set_upstream)
-                    .label("设置上游分支")
-                    .size(14)
-                    .spacing(6)
-                    .style(theme::checkbox_style())
-                    .on_toggle(|_| RemoteDialogMessage::ToggleSetUpstream),
-            ),
+            .push(widgets::compact_checkbox(
+                state.force_push,
+                "强制推送 (--force-with-lease)",
+                |_| RemoteDialogMessage::ToggleForcePush,
+            ))
+            .push(widgets::compact_checkbox(
+                state.push_tags,
+                "推送标签",
+                |_| RemoteDialogMessage::TogglePushTags,
+            ))
+            .push(widgets::compact_checkbox(
+                state.set_upstream,
+                "设置上游分支",
+                |_| RemoteDialogMessage::ToggleSetUpstream,
+            )),
     )
     .padding([8, 14]);
 
     // ── Status ──
     let status: Option<Element<'_, RemoteDialogMessage>> = if let Some(error) = &state.error {
-        Some(build_status_panel::<RemoteDialogMessage>("失败", error, BadgeTone::Danger))
+        Some(build_status_panel::<RemoteDialogMessage>(
+            "失败",
+            error,
+            BadgeTone::Danger,
+        ))
     } else {
-        state.success_message.as_ref().map(|msg| {
-            build_status_panel::<RemoteDialogMessage>("完成", msg, BadgeTone::Success)
-        })
+        state
+            .success_message
+            .as_ref()
+            .map(|msg| build_status_panel::<RemoteDialogMessage>("完成", msg, BadgeTone::Success))
     };
 
     // ── Footer ──
@@ -631,17 +625,12 @@ fn build_push_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
 
 /// IDEA-style Pull dialog — compact, clear visual hierarchy
 fn build_pull_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
-    use iced::widget::Checkbox;
-
     let remote_name = state
         .selected_remote
         .as_deref()
         .or(state.preferred_remote.as_deref())
         .unwrap_or("origin");
-    let branch = state
-        .current_branch_name
-        .as_deref()
-        .unwrap_or("main");
+    let branch = state.current_branch_name.as_deref().unwrap_or("main");
     let pull_target = if state.pull_branch.is_empty() {
         branch
     } else {
@@ -658,7 +647,10 @@ fn build_pull_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
                     .color(theme::darcula::TEXT_PRIMARY),
             )
             .push(iced::widget::Space::new().width(Length::Fill))
-            .push(button::compact_ghost("关闭", Some(RemoteDialogMessage::Close))),
+            .push(button::compact_ghost(
+                "关闭",
+                Some(RemoteDialogMessage::Close),
+            )),
     )
     .padding([6, 14])
     .width(Length::Fill)
@@ -696,48 +688,41 @@ fn build_pull_panel(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessag
     let options = Container::new(
         Column::new()
             .spacing(6)
-            .push(
-                Checkbox::new(state.pull_rebase)
-                    .label("变基 (--rebase)")
-                    .size(14)
-                    .spacing(6)
-                    .style(theme::checkbox_style())
-                    .on_toggle(|_| RemoteDialogMessage::TogglePullRebase),
-            )
-            .push(
-                Checkbox::new(state.pull_ff_only)
-                    .label("仅快进 (--ff-only)")
-                    .size(14)
-                    .spacing(6)
-                    .style(theme::checkbox_style())
-                    .on_toggle(|_| RemoteDialogMessage::TogglePullFfOnly),
-            )
-            .push(
-                Checkbox::new(state.pull_no_ff)
-                    .label("禁止快进 (--no-ff)")
-                    .size(14)
-                    .spacing(6)
-                    .style(theme::checkbox_style())
-                    .on_toggle(|_| RemoteDialogMessage::TogglePullNoFf),
-            )
-            .push(
-                Checkbox::new(state.pull_squash)
-                    .label("压缩 (--squash)")
-                    .size(14)
-                    .spacing(6)
-                    .style(theme::checkbox_style())
-                    .on_toggle(|_| RemoteDialogMessage::TogglePullSquash),
-            ),
+            .push(widgets::compact_checkbox(
+                state.pull_rebase,
+                "变基 (--rebase)",
+                |_| RemoteDialogMessage::TogglePullRebase,
+            ))
+            .push(widgets::compact_checkbox(
+                state.pull_ff_only,
+                "仅快进 (--ff-only)",
+                |_| RemoteDialogMessage::TogglePullFfOnly,
+            ))
+            .push(widgets::compact_checkbox(
+                state.pull_no_ff,
+                "禁止快进 (--no-ff)",
+                |_| RemoteDialogMessage::TogglePullNoFf,
+            ))
+            .push(widgets::compact_checkbox(
+                state.pull_squash,
+                "压缩 (--squash)",
+                |_| RemoteDialogMessage::TogglePullSquash,
+            )),
     )
     .padding([8, 14]);
 
     // ── Status ──
     let status: Option<Element<'_, RemoteDialogMessage>> = if let Some(error) = &state.error {
-        Some(build_status_panel::<RemoteDialogMessage>("失败", error, BadgeTone::Danger))
+        Some(build_status_panel::<RemoteDialogMessage>(
+            "失败",
+            error,
+            BadgeTone::Danger,
+        ))
     } else {
-        state.success_message.as_ref().map(|msg| {
-            build_status_panel::<RemoteDialogMessage>("完成", msg, BadgeTone::Success)
-        })
+        state
+            .success_message
+            .as_ref()
+            .map(|msg| build_status_panel::<RemoteDialogMessage>("完成", msg, BadgeTone::Success))
     };
 
     // ── Footer ──
@@ -834,12 +819,12 @@ pub fn view(state: &RemoteDialogState) -> Element<'_, RemoteDialogMessage> {
                 state.current_branch_display.clone(),
                 BadgeTone::Accent,
             ))
-            .push_maybe(
-                state
-                    .selected_remote
-                    .as_ref()
-                    .map(|remote| widgets::info_chip::<RemoteDialogMessage>(format!("已选 {remote}"), BadgeTone::Success)),
-            ),
+            .push_maybe(state.selected_remote.as_ref().map(|remote| {
+                widgets::info_chip::<RemoteDialogMessage>(
+                    format!("已选 {remote}"),
+                    BadgeTone::Success,
+                )
+            })),
     )
     .padding([6, 14])
     .width(Length::Fill)

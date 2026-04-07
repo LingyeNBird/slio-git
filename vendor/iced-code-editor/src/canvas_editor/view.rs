@@ -98,10 +98,7 @@ impl CodeEditor {
     /// # Returns
     ///
     /// A configured scrollable widget containing the canvas
-    fn create_canvas_with_scrollable(
-        &self,
-        canvas_height: f32,
-    ) -> Scrollable<'_, Message> {
+    fn create_canvas_with_scrollable(&self, canvas_height: f32) -> Scrollable<'_, Message> {
         let canvas = Canvas::new(self)
             .width(Length::Fill)
             .height(Length::Fixed(canvas_height));
@@ -123,10 +120,7 @@ impl CodeEditor {
     /// # Returns
     ///
     /// `Some(element)` if a horizontal scrollbar is needed, `None` otherwise
-    fn create_horizontal_scrollbar(
-        &self,
-        max_content_width: f32,
-    ) -> Option<Element<'_, Message>> {
+    fn create_horizontal_scrollbar(&self, max_content_width: f32) -> Option<Element<'_, Message>> {
         if self.wrap_enabled || max_content_width <= self.viewport_width {
             return None;
         }
@@ -135,7 +129,9 @@ impl CodeEditor {
         let scroller_color = self.style.scroller_color;
 
         let h_scrollable = Scrollable::new(
-            Space::new().width(Length::Fixed(max_content_width)).height(0.0),
+            Space::new()
+                .width(Length::Fixed(max_content_width))
+                .height(0.0),
         )
         .id(self.horizontal_scrollable_id.clone())
         .width(Length::Fill)
@@ -198,21 +194,17 @@ impl CodeEditor {
     /// # Returns
     ///
     /// Some(container) if line numbers are enabled, None otherwise
-    fn create_gutter_container(
-        &self,
-    ) -> Option<container::Container<'_, Message>> {
+    fn create_gutter_container(&self) -> Option<container::Container<'_, Message>> {
         if self.line_numbers_enabled {
             let gutter_background = self.style.gutter_background;
             Some(
-                container(
-                    Space::new().width(Length::Fill).height(Length::Fill),
-                )
-                .width(Length::Fixed(GUTTER_WIDTH))
-                .height(Length::Fill)
-                .style(move |_| container::Style {
-                    background: Some(Background::Color(gutter_background)),
-                    ..container::Style::default()
-                }),
+                container(Space::new().width(Length::Fill).height(Length::Fill))
+                    .width(Length::Fixed(GUTTER_WIDTH))
+                    .height(Length::Fill)
+                    .style(move |_| container::Style {
+                        background: Some(Background::Color(gutter_background)),
+                        ..container::Style::default()
+                    }),
             )
         } else {
             None
@@ -224,9 +216,7 @@ impl CodeEditor {
     /// # Returns
     ///
     /// The code background container widget
-    fn create_code_background_container(
-        &self,
-    ) -> container::Container<'_, Message> {
+    fn create_code_background_container(&self) -> container::Container<'_, Message> {
         let background_color = self.style.background;
         container(Space::new().width(Length::Fill).height(Length::Fill))
             .width(Length::Fill)
@@ -262,24 +252,16 @@ impl CodeEditor {
     /// # Returns
     ///
     /// A rectangle representing the cursor position for IME
-    fn calculate_ime_cursor_rect(
-        &self,
-        visual_lines: &[wrapping::VisualLine],
-    ) -> Rectangle {
+    fn calculate_ime_cursor_rect(&self, visual_lines: &[wrapping::VisualLine]) -> Rectangle {
         let ime_enabled = self.is_focused() && self.has_canvas_focus;
 
         if !ime_enabled {
-            return Rectangle::new(
-                iced::Point::new(0.0, 0.0),
-                Size::new(0.0, 0.0),
-            );
+            return Rectangle::new(iced::Point::new(0.0, 0.0), Size::new(0.0, 0.0));
         }
 
-        if let Some(cursor_visual) = WrappingCalculator::logical_to_visual(
-            visual_lines,
-            self.cursor.0,
-            self.cursor.1,
-        ) {
+        if let Some(cursor_visual) =
+            WrappingCalculator::logical_to_visual(visual_lines, self.cursor.0, self.cursor.1)
+        {
             let vl = &visual_lines[cursor_visual];
             let line_content = self.buffer.line(vl.logical_line);
             let prefix_len = self.cursor.1.saturating_sub(vl.start_col);
@@ -290,18 +272,13 @@ impl CodeEditor {
                 .collect();
             let cursor_x = self.gutter_width()
                 + 5.0
-                + super::measure_text_width(
-                    &prefix_text,
-                    self.full_char_width,
-                    self.char_width,
-                )
+                + super::measure_text_width(&prefix_text, self.full_char_width, self.char_width)
                 - self.horizontal_scroll_offset;
 
             // Calculate visual Y position relative to the viewport
             // We subtract viewport_scroll because the content is scrolled up/down
             // but the cursor position sent to IME must be relative to the visible area
-            let cursor_y = (cursor_visual as f32 * self.line_height)
-                - self.viewport_scroll;
+            let cursor_y = (cursor_visual as f32 * self.line_height) - self.viewport_scroll;
 
             Rectangle::new(
                 iced::Point::new(cursor_x, cursor_y + 2.0),
@@ -324,12 +301,11 @@ impl CodeEditor {
     fn create_ime_layer(&self, cursor_rect: Rectangle) -> Element<'_, Message> {
         let ime_enabled = self.is_focused() && self.has_canvas_focus;
 
-        let preedit =
-            self.ime_preedit.as_ref().map(|p| input_method::Preedit {
-                content: p.content.clone(),
-                selection: p.selection.clone(),
-                text_size: None,
-            });
+        let preedit = self.ime_preedit.as_ref().map(|p| input_method::Preedit {
+            content: p.content.clone(),
+            selection: p.selection.clone(),
+            text_size: None,
+        });
 
         let ime_layer = ImeRequester::new(ime_enabled, cursor_rect, preedit);
         iced::Element::new(ime_layer)
@@ -350,8 +326,9 @@ impl CodeEditor {
         let background_row = self.create_background_layer();
 
         // Build editor stack: backgrounds + scrollable
-        let mut editor_stack =
-            iced::widget::Stack::new().push(background_row).push(scrollable);
+        let mut editor_stack = iced::widget::Stack::new()
+            .push(background_row)
+            .push(scrollable);
 
         // Add IME layer for input method support.
         // The IME requester needs the cursor rect in viewport coordinates, which
@@ -362,8 +339,7 @@ impl CodeEditor {
 
         // Add search dialog overlay if open
         if self.search_state.is_open {
-            let search_dialog =
-                search_dialog::view(&self.search_state, &self.translations);
+            let search_dialog = search_dialog::view(&self.search_state, &self.translations);
 
             // Position the dialog in top-right corner with 20px margin
             let positioned_dialog = container(
@@ -386,10 +362,11 @@ impl CodeEditor {
 
         // When wrap is disabled, add a horizontal scrollbar below the editor
         let max_content_width = self.max_content_width();
-        if let Some(h_scrollbar) =
-            self.create_horizontal_scrollbar(max_content_width)
-        {
-            Column::new().push(editor_container).push(h_scrollbar).into()
+        if let Some(h_scrollbar) = self.create_horizontal_scrollbar(max_content_width) {
+            Column::new()
+                .push(editor_container)
+                .push(h_scrollbar)
+                .into()
         } else {
             editor_container.into()
         }

@@ -708,12 +708,12 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
     } else {
         "当前为 detached HEAD，不能直接与当前分支比较".to_string()
     };
-    let _compare_with_worktree_detail = if let Some(branch_name) = state.current_branch_name.as_ref()
-    {
-        format!("把这条提交和当前工作树直接做比较，基于 {branch_name} 继续判断")
-    } else {
-        "当前为 detached HEAD，仍可查看工作树差异，但不能继续围绕当前分支操作".to_string()
-    };
+    let _compare_with_worktree_detail =
+        if let Some(branch_name) = state.current_branch_name.as_ref() {
+            format!("把这条提交和当前工作树直接做比较，基于 {branch_name} 继续判断")
+        } else {
+            "当前为 detached HEAD，仍可查看工作树差异，但不能继续围绕当前分支操作".to_string()
+        };
     let cherry_pick_detail = if !commit_detail_ready {
         "提交详情还没加载完成，请稍后再试".to_string()
     } else if is_merge_commit {
@@ -877,9 +877,8 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                 history_context_action_row(
                     "推送到此提交",
                     push_to_here_detail,
-                    (!state.is_loading && has_current_branch && has_upstream).then_some(
-                        HistoryMessage::PushUpToCommit(entry.id.clone()),
-                    ),
+                    (!state.is_loading && has_current_branch && has_upstream)
+                        .then_some(HistoryMessage::PushUpToCommit(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
             ],
@@ -936,12 +935,10 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
         ));
 
     // IDEA-style: compact menu with just the action list, no verbose header
-    let menu = Container::new(
-        scrollable::styled(actions).height(Length::Shrink),
-    )
-    .padding([6, 8])
-    .width(Length::Fixed(HISTORY_CONTEXT_MENU_WIDTH))
-    .style(widgets::menu::panel_style);
+    let menu = Container::new(scrollable::styled(actions).height(Length::Shrink))
+        .padding([6, 8])
+        .width(Length::Fixed(HISTORY_CONTEXT_MENU_WIDTH))
+        .style(widgets::menu::panel_style);
 
     build_history_context_menu_layer(anchor, menu.into())
 }
@@ -1084,10 +1081,7 @@ fn build_commit_detail(info: &git_core::commit::CommitInfo) -> Element<'_, Histo
                     .push(Space::new().width(Length::Fill)),
             )
             .push(iced::widget::rule::horizontal(1))
-            .push(
-                scrollable::styled(Text::new(&info.message).size(13))
-                    .height(Length::Fill),
-            )
+            .push(scrollable::styled(Text::new(&info.message).size(13)).height(Length::Fill))
             .push(iced::widget::rule::horizontal(1))
             .push(
                 Column::new()
@@ -1096,10 +1090,7 @@ fn build_commit_detail(info: &git_core::commit::CommitInfo) -> Element<'_, Histo
                         "作者",
                         format!("{} <{}>", info.author_name, info.author_email),
                     ))
-                    .push(detail_meta_row(
-                        "时间",
-                        format_timestamp(info.author_time),
-                    ))
+                    .push(detail_meta_row("时间", format_timestamp(info.author_time)))
                     .push(detail_meta_row(
                         "父提交",
                         format!("{}", info.parent_ids.len()),
@@ -1157,14 +1148,10 @@ pub fn view_with_tabs<'a>(
 
         if tab.is_closable {
             tab_content = tab_content.push(
-                Button::new(
-                    Text::new("×")
-                        .size(10)
-                        .color(theme::darcula::TEXT_DISABLED),
-                )
-                .style(theme::button_style(theme::ButtonTone::Ghost))
-                .padding(0)
-                .on_press(HistoryMessage::CloseLogTab(i)),
+                Button::new(Text::new("×").size(10).color(theme::darcula::TEXT_DISABLED))
+                    .style(theme::button_style(theme::ButtonTone::Ghost))
+                    .padding(0)
+                    .on_press(HistoryMessage::CloseLogTab(i)),
             );
         }
 
@@ -1174,12 +1161,10 @@ pub fn view_with_tabs<'a>(
             theme::darcula::BG_SOFT
         };
 
-        let tab_button = Button::new(
-            Container::new(tab_content).padding([6, 12]),
-        )
-        .style(theme::button_style(theme::ButtonTone::Ghost))
-        .padding(0)
-        .on_press(HistoryMessage::SelectLogTab(i));
+        let tab_button = Button::new(Container::new(tab_content).padding([6, 12]))
+            .style(theme::button_style(theme::ButtonTone::Ghost))
+            .padding(0)
+            .on_press(HistoryMessage::SelectLogTab(i));
 
         tab_row = tab_row.push(tab_button);
         tab_row = tab_row.push(Space::new().width(Length::Fixed(1.0)));
@@ -1187,14 +1172,10 @@ pub fn view_with_tabs<'a>(
 
     // Add "+" button
     tab_row = tab_row.push(
-        Button::new(
-            Text::new("+")
-                .size(12)
-                .color(theme::darcula::TEXT_DISABLED),
-        )
-        .style(theme::button_style(theme::ButtonTone::Ghost))
-        .padding([6, 10])
-        .on_press(HistoryMessage::NewLogTab),
+        Button::new(Text::new("+").size(12).color(theme::darcula::TEXT_DISABLED))
+            .style(theme::button_style(theme::ButtonTone::Ghost))
+            .padding([6, 10])
+            .on_press(HistoryMessage::NewLogTab),
     );
 
     let main_content = view(state);
@@ -1253,7 +1234,11 @@ fn build_branches_dashboard<'a>(
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
-            .push(Text::new("分支").size(11).color(theme::darcula::TEXT_SECONDARY)),
+            .push(
+                Text::new("分支")
+                    .size(11)
+                    .color(theme::darcula::TEXT_SECONDARY),
+            ),
     )
     .padding([6, 8]);
 

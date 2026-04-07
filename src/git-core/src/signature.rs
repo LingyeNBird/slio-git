@@ -128,9 +128,7 @@ pub fn verify_commit_signature(
                 .find(|l| l.contains("GOODSIG"))
                 .and_then(|l| l.split_whitespace().nth(3))
                 .map(|s| s.to_string())
-                .or_else(|| {
-                    commit.author().name().map(|n| n.to_string())
-                });
+                .or_else(|| commit.author().name().map(|n| n.to_string()));
 
             let kid = stderr
                 .lines()

@@ -140,11 +140,8 @@ impl CodeEditor {
             let line_num = visual_line.logical_line + 1;
             let line_num_text = format!("{}", line_num);
             // Calculate actual text width and center in gutter
-            let text_width = measure_text_width(
-                &line_num_text,
-                ctx.full_char_width,
-                ctx.char_width,
-            );
+            let text_width =
+                measure_text_width(&line_num_text, ctx.full_char_width, ctx.char_width);
             let x_pos = (ctx.gutter_width - text_width) / 2.0;
             frame.fill_text(canvas::Text {
                 content: line_num_text,
@@ -232,13 +229,10 @@ impl CodeEditor {
             // Highlight the full line to get correct token colors
             let full_line_ranges = highlighter
                 .highlight_line(full_line_content, syntax_set)
-                .unwrap_or_else(|_| {
-                    vec![(Style::default(), full_line_content)]
-                });
+                .unwrap_or_else(|_| vec![(Style::default(), full_line_content)]);
 
             // Extract only the ranges that fall within our segment
-            let mut x_offset =
-                ctx.gutter_width + 5.0 - ctx.horizontal_scroll_offset;
+            let mut x_offset = ctx.gutter_width + 5.0 - ctx.horizontal_scroll_offset;
             let mut char_pos = 0;
 
             for (style, text) in full_line_ranges {
@@ -246,17 +240,13 @@ impl CodeEditor {
                 let text_end = char_pos + text_len;
 
                 // Check if this token intersects with our segment
-                if text_end > visual_line.start_col
-                    && char_pos < visual_line.end_col
-                {
+                if text_end > visual_line.start_col && char_pos < visual_line.end_col {
                     // Calculate the intersection
                     let segment_start = char_pos.max(visual_line.start_col);
                     let segment_end = text_end.min(visual_line.end_col);
 
-                    let text_start_offset =
-                        segment_start.saturating_sub(char_pos);
-                    let text_end_offset =
-                        text_start_offset + (segment_end - segment_start);
+                    let text_start_offset = segment_start.saturating_sub(char_pos);
+                    let text_end_offset = text_start_offset + (segment_end - segment_start);
 
                     // Convert character offsets to byte offsets for UTF-8 slicing
                     let start_byte = text
@@ -269,14 +259,9 @@ impl CodeEditor {
                         .map_or(text.len(), |(idx, _)| idx);
 
                     let segment_text = &text[start_byte..end_byte];
-                    let display_text =
-                        expand_tabs(segment_text, super::TAB_WIDTH)
-                            .into_owned();
-                    let display_width = measure_text_width(
-                        &display_text,
-                        ctx.full_char_width,
-                        ctx.char_width,
-                    );
+                    let display_text = expand_tabs(segment_text, super::TAB_WIDTH).into_owned();
+                    let display_width =
+                        measure_text_width(&display_text, ctx.full_char_width, ctx.char_width);
 
                     let color = Color::from_rgb(
                         f32::from(style.foreground.r) / 255.0,
@@ -300,8 +285,7 @@ impl CodeEditor {
             }
         } else {
             // Fallback to plain text
-            let display_text =
-                expand_tabs(line_segment, super::TAB_WIDTH).into_owned();
+            let display_text = expand_tabs(line_segment, super::TAB_WIDTH).into_owned();
             frame.fill_text(canvas::Text {
                 content: display_text,
                 position: Point::new(
@@ -368,15 +352,24 @@ impl CodeEditor {
                 .take(match_range.len())
             {
                 // Determine if this is the current match
-                let is_current =
-                    self.search_state.current_match_index == Some(match_idx);
+                let is_current = self.search_state.current_match_index == Some(match_idx);
 
                 let highlight_color = if is_current {
                     // Orange for current match
-                    Color { r: 1.0, g: 0.6, b: 0.0, a: 0.4 }
+                    Color {
+                        r: 1.0,
+                        g: 0.6,
+                        b: 0.0,
+                        a: 0.4,
+                    }
                 } else {
                     // Yellow for other matches
-                    Color { r: 1.0, g: 1.0, b: 0.0, a: 0.3 }
+                    Color {
+                        r: 1.0,
+                        g: 1.0,
+                        b: 0.0,
+                        a: 0.3,
+                    }
                 };
 
                 // Convert logical position to visual line
@@ -391,8 +384,7 @@ impl CodeEditor {
                     search_match.col + query_len,
                 );
 
-                if let (Some(start_v), Some(end_v)) = (start_visual, end_visual)
-                {
+                if let (Some(start_v), Some(end_v)) = (start_visual, end_visual) {
                     if start_v == end_v {
                         // Match within same visual line
                         let y = start_v as f32 * ctx.line_height;
@@ -442,29 +434,23 @@ impl CodeEditor {
                                 vl.end_col
                             };
 
-                            let line_content =
-                                self.buffer.line(vl.logical_line);
+                            let line_content = self.buffer.line(vl.logical_line);
 
-                            let (x_start, sel_width) =
-                                calculate_segment_geometry(
-                                    line_content,
-                                    vl.start_col,
-                                    sel_start_col,
-                                    sel_end_col,
-                                    ctx.gutter_width + 5.0,
-                                    ctx.full_char_width,
-                                    ctx.char_width,
-                                );
-                            let x_start =
-                                x_start - ctx.horizontal_scroll_offset;
+                            let (x_start, sel_width) = calculate_segment_geometry(
+                                line_content,
+                                vl.start_col,
+                                sel_start_col,
+                                sel_end_col,
+                                ctx.gutter_width + 5.0,
+                                ctx.full_char_width,
+                                ctx.char_width,
+                            );
+                            let x_start = x_start - ctx.horizontal_scroll_offset;
                             let x_end = x_start + sel_width;
 
                             frame.fill_rectangle(
                                 Point::new(x_start, y + 2.0),
-                                Size::new(
-                                    x_end - x_start,
-                                    ctx.line_height - 4.0,
-                                ),
+                                Size::new(x_end - x_start, ctx.line_height - 4.0),
                                 highlight_color,
                             );
                         }
@@ -480,31 +466,25 @@ impl CodeEditor {
     ///
     /// * `frame` - The canvas frame to draw on
     /// * `ctx` - Rendering context containing visual lines and metrics
-    fn draw_selection_highlight(
-        &self,
-        frame: &mut canvas::Frame,
-        ctx: &RenderContext,
-    ) {
+    fn draw_selection_highlight(&self, frame: &mut canvas::Frame, ctx: &RenderContext) {
         if let Some((start, end)) = self.get_selection_range()
             && start != end
         {
-            let selection_color = Color { r: 0.3, g: 0.5, b: 0.8, a: 0.3 };
+            let selection_color = Color {
+                r: 0.3,
+                g: 0.5,
+                b: 0.8,
+                a: 0.3,
+            };
 
             if start.0 == end.0 {
                 // Single line selection - need to handle wrapped segments
-                let start_visual = WrappingCalculator::logical_to_visual(
-                    ctx.visual_lines,
-                    start.0,
-                    start.1,
-                );
-                let end_visual = WrappingCalculator::logical_to_visual(
-                    ctx.visual_lines,
-                    end.0,
-                    end.1,
-                );
+                let start_visual =
+                    WrappingCalculator::logical_to_visual(ctx.visual_lines, start.0, start.1);
+                let end_visual =
+                    WrappingCalculator::logical_to_visual(ctx.visual_lines, end.0, end.1);
 
-                if let (Some(start_v), Some(end_v)) = (start_visual, end_visual)
-                {
+                if let (Some(start_v), Some(end_v)) = (start_visual, end_visual) {
                     if start_v == end_v {
                         // Selection within same visual line
                         let y = start_v as f32 * ctx.line_height;
@@ -544,32 +524,25 @@ impl CodeEditor {
                             } else {
                                 vl.start_col
                             };
-                            let sel_end_col =
-                                if v_idx == end_v { end.1 } else { vl.end_col };
+                            let sel_end_col = if v_idx == end_v { end.1 } else { vl.end_col };
 
-                            let line_content =
-                                self.buffer.line(vl.logical_line);
+                            let line_content = self.buffer.line(vl.logical_line);
 
-                            let (x_start, sel_width) =
-                                calculate_segment_geometry(
-                                    line_content,
-                                    vl.start_col,
-                                    sel_start_col,
-                                    sel_end_col,
-                                    ctx.gutter_width + 5.0,
-                                    ctx.full_char_width,
-                                    ctx.char_width,
-                                );
-                            let x_start =
-                                x_start - ctx.horizontal_scroll_offset;
+                            let (x_start, sel_width) = calculate_segment_geometry(
+                                line_content,
+                                vl.start_col,
+                                sel_start_col,
+                                sel_end_col,
+                                ctx.gutter_width + 5.0,
+                                ctx.full_char_width,
+                                ctx.char_width,
+                            );
+                            let x_start = x_start - ctx.horizontal_scroll_offset;
                             let x_end = x_start + sel_width;
 
                             frame.fill_rectangle(
                                 Point::new(x_start, y + 2.0),
-                                Size::new(
-                                    x_end - x_start,
-                                    ctx.line_height - 4.0,
-                                ),
+                                Size::new(x_end - x_start, ctx.line_height - 4.0),
                                 selection_color,
                             );
                         }
@@ -577,19 +550,12 @@ impl CodeEditor {
                 }
             } else {
                 // Multi-line selection
-                let start_visual = WrappingCalculator::logical_to_visual(
-                    ctx.visual_lines,
-                    start.0,
-                    start.1,
-                );
-                let end_visual = WrappingCalculator::logical_to_visual(
-                    ctx.visual_lines,
-                    end.0,
-                    end.1,
-                );
+                let start_visual =
+                    WrappingCalculator::logical_to_visual(ctx.visual_lines, start.0, start.1);
+                let end_visual =
+                    WrappingCalculator::logical_to_visual(ctx.visual_lines, end.0, end.1);
 
-                if let (Some(start_v), Some(end_v)) = (start_visual, end_visual)
-                {
+                if let (Some(start_v), Some(end_v)) = (start_visual, end_visual) {
                     for (v_idx, vl) in ctx
                         .visual_lines
                         .iter()
@@ -599,19 +565,17 @@ impl CodeEditor {
                     {
                         let y = v_idx as f32 * ctx.line_height;
 
-                        let sel_start_col =
-                            if vl.logical_line == start.0 && v_idx == start_v {
-                                start.1
-                            } else {
-                                vl.start_col
-                            };
+                        let sel_start_col = if vl.logical_line == start.0 && v_idx == start_v {
+                            start.1
+                        } else {
+                            vl.start_col
+                        };
 
-                        let sel_end_col =
-                            if vl.logical_line == end.0 && v_idx == end_v {
-                                end.1
-                            } else {
-                                vl.end_col
-                            };
+                        let sel_end_col = if vl.logical_line == end.0 && v_idx == end_v {
+                            end.1
+                        } else {
+                            vl.end_col
+                        };
 
                         let line_content = self.buffer.line(vl.logical_line);
 
@@ -654,10 +618,7 @@ impl CodeEditor {
         // 3. Use `WrappingCalculator` to map logical (line, col) to visual (x, y)
         //    for correct cursor positioning with line wrapping.
         // -------------------------------------------------------------------------
-        if self.show_cursor
-            && self.cursor_visible
-            && self.has_focus()
-            && self.ime_preedit.is_some()
+        if self.show_cursor && self.cursor_visible && self.has_focus() && self.ime_preedit.is_some()
         {
             // [Branch A] IME preedit rendering mode
             // ---------------------------------------------------------------------
@@ -691,18 +652,20 @@ impl CodeEditor {
                 let cursor_y = cursor_visual as f32 * ctx.line_height;
 
                 if let Some(preedit) = self.ime_preedit.as_ref() {
-                    let preedit_width = measure_text_width(
-                        &preedit.content,
-                        ctx.full_char_width,
-                        ctx.char_width,
-                    );
+                    let preedit_width =
+                        measure_text_width(&preedit.content, ctx.full_char_width, ctx.char_width);
 
                     // 1. Draw preedit background (light translucent)
                     // This indicates the text is not committed yet
                     frame.fill_rectangle(
                         Point::new(cursor_x, cursor_y + 2.0),
                         Size::new(preedit_width, ctx.line_height - 4.0),
-                        Color { r: 1.0, g: 1.0, b: 1.0, a: 0.08 },
+                        Color {
+                            r: 1.0,
+                            g: 1.0,
+                            b: 1.0,
+                            a: 0.08,
+                        },
                     );
 
                     // 2. Draw preedit selection (if any)
@@ -712,11 +675,9 @@ impl CodeEditor {
                         && range.start != range.end
                     {
                         // Validate indices before slicing to prevent panic
-                        if let Some((start, end)) = validate_selection_indices(
-                            &preedit.content,
-                            range.start,
-                            range.end,
-                        ) {
+                        if let Some((start, end)) =
+                            validate_selection_indices(&preedit.content, range.start, range.end)
+                        {
                             let selected_prefix = &preedit.content[..start];
                             let selected_text = &preedit.content[start..end];
 
@@ -735,7 +696,12 @@ impl CodeEditor {
                             frame.fill_rectangle(
                                 Point::new(selection_x, cursor_y + 2.0),
                                 Size::new(selection_w, ctx.line_height - 4.0),
-                                Color { r: 0.3, g: 0.5, b: 0.8, a: 0.3 },
+                                Color {
+                                    r: 0.3,
+                                    g: 0.5,
+                                    b: 0.8,
+                                    a: 0.3,
+                                },
                             );
                         }
                     }
@@ -834,11 +800,8 @@ impl CodeEditor {
     /// `true` if the editor has both Iced focus and internal canvas focus and is not focus-locked; `false` otherwise
     pub(crate) fn has_focus(&self) -> bool {
         // Check if this editor has Iced focus
-        let focused_id =
-            super::FOCUSED_EDITOR_ID.load(std::sync::atomic::Ordering::Relaxed);
-        focused_id == self.editor_id
-            && self.has_canvas_focus
-            && !self.focus_locked
+        let focused_id = super::FOCUSED_EDITOR_ID.load(std::sync::atomic::Ordering::Relaxed);
+        focused_id == self.editor_id && self.has_canvas_focus && !self.focus_locked
     }
 
     /// Handles keyboard shortcut combinations (Ctrl+C, Ctrl+Z, etc.).
@@ -866,41 +829,28 @@ impl CodeEditor {
         {
             if modifiers.shift() {
                 // Shift+Tab: focus navigation backward
-                return Some(
-                    Action::publish(Message::FocusNavigationShiftTab)
-                        .and_capture(),
-                );
+                return Some(Action::publish(Message::FocusNavigationShiftTab).and_capture());
             } else {
                 // Tab: focus navigation forward
-                return Some(
-                    Action::publish(Message::FocusNavigationTab).and_capture(),
-                );
+                return Some(Action::publish(Message::FocusNavigationTab).and_capture());
             }
         }
 
         // Handle Ctrl+C / Ctrl+Insert (copy)
-        if (modifiers.control()
-            && matches!(key, keyboard::Key::Character(c) if c.as_str() == "c"))
+        if (modifiers.control() && matches!(key, keyboard::Key::Character(c) if c.as_str() == "c"))
             || (modifiers.control()
-                && matches!(
-                    key,
-                    keyboard::Key::Named(keyboard::key::Named::Insert)
-                ))
+                && matches!(key, keyboard::Key::Named(keyboard::key::Named::Insert)))
         {
             return Some(Action::publish(Message::Copy).and_capture());
         }
 
         // Handle Ctrl+Z (undo)
-        if modifiers.control()
-            && matches!(key, keyboard::Key::Character(z) if z.as_str() == "z")
-        {
+        if modifiers.control() && matches!(key, keyboard::Key::Character(z) if z.as_str() == "z") {
             return Some(Action::publish(Message::Undo).and_capture());
         }
 
         // Handle Ctrl+Y (redo)
-        if modifiers.control()
-            && matches!(key, keyboard::Key::Character(y) if y.as_str() == "y")
-        {
+        if modifiers.control() && matches!(key, keyboard::Key::Character(y) if y.as_str() == "y") {
             return Some(Action::publish(Message::Redo).and_capture());
         }
 
@@ -917,9 +867,7 @@ impl CodeEditor {
             && matches!(key, keyboard::Key::Character(h) if h.as_str() == "h")
             && self.search_replace_enabled
         {
-            return Some(
-                Action::publish(Message::OpenSearchReplace).and_capture(),
-            );
+            return Some(Action::publish(Message::OpenSearchReplace).and_capture());
         }
 
         // Handle Escape (close search dialog if open)
@@ -933,15 +881,10 @@ impl CodeEditor {
         {
             if modifiers.shift() {
                 // Shift+Tab: cycle backward
-                return Some(
-                    Action::publish(Message::SearchDialogShiftTab)
-                        .and_capture(),
-                );
+                return Some(Action::publish(Message::SearchDialogShiftTab).and_capture());
             } else {
                 // Tab: cycle forward
-                return Some(
-                    Action::publish(Message::SearchDialogTab).and_capture(),
-                );
+                return Some(Action::publish(Message::SearchDialogTab).and_capture());
             }
         }
 
@@ -950,48 +893,34 @@ impl CodeEditor {
             && self.search_replace_enabled
         {
             if modifiers.shift() {
-                return Some(
-                    Action::publish(Message::FindPrevious).and_capture(),
-                );
+                return Some(Action::publish(Message::FindPrevious).and_capture());
             } else {
                 return Some(Action::publish(Message::FindNext).and_capture());
             }
         }
 
         // Handle Ctrl+V / Shift+Insert (paste) - read clipboard and send paste message
-        if (modifiers.control()
-            && matches!(key, keyboard::Key::Character(v) if v.as_str() == "v"))
+        if (modifiers.control() && matches!(key, keyboard::Key::Character(v) if v.as_str() == "v"))
             || (modifiers.shift()
-                && matches!(
-                    key,
-                    keyboard::Key::Named(keyboard::key::Named::Insert)
-                ))
+                && matches!(key, keyboard::Key::Named(keyboard::key::Named::Insert)))
         {
             // Return an action that requests clipboard read
             return Some(Action::publish(Message::Paste(String::new())));
         }
 
         // Handle Ctrl+Home (go to start of document)
-        if modifiers.control()
-            && matches!(key, keyboard::Key::Named(keyboard::key::Named::Home))
-        {
+        if modifiers.control() && matches!(key, keyboard::Key::Named(keyboard::key::Named::Home)) {
             return Some(Action::publish(Message::CtrlHome).and_capture());
         }
 
         // Handle Ctrl+End (go to end of document)
-        if modifiers.control()
-            && matches!(key, keyboard::Key::Named(keyboard::key::Named::End))
-        {
+        if modifiers.control() && matches!(key, keyboard::Key::Named(keyboard::key::Named::End)) {
             return Some(Action::publish(Message::CtrlEnd).and_capture());
         }
 
         // Handle Shift+Delete (delete selection)
-        if modifiers.shift()
-            && matches!(key, keyboard::Key::Named(keyboard::key::Named::Delete))
-        {
-            return Some(
-                Action::publish(Message::DeleteSelection).and_capture(),
-            );
+        if modifiers.shift() && matches!(key, keyboard::Key::Named(keyboard::key::Named::Delete)) {
+            return Some(Action::publish(Message::DeleteSelection).and_capture());
         }
 
         None
@@ -1039,25 +968,16 @@ impl CodeEditor {
             if let Some(first_char) = text_content.chars().next()
                 && !first_char.is_control()
             {
-                return Some(
-                    Action::publish(Message::CharacterInput(first_char))
-                        .and_capture(),
-                );
+                return Some(Action::publish(Message::CharacterInput(first_char)).and_capture());
             }
         }
 
         // PRIORITY 2: Handle special named keys (navigation, editing)
         // These are only processed if text didn't contain a printable character
         let message = match key {
-            keyboard::Key::Named(keyboard::key::Named::Backspace) => {
-                Some(Message::Backspace)
-            }
-            keyboard::Key::Named(keyboard::key::Named::Delete) => {
-                Some(Message::Delete)
-            }
-            keyboard::Key::Named(keyboard::key::Named::Enter) => {
-                Some(Message::Enter)
-            }
+            keyboard::Key::Named(keyboard::key::Named::Backspace) => Some(Message::Backspace),
+            keyboard::Key::Named(keyboard::key::Named::Delete) => Some(Message::Delete),
+            keyboard::Key::Named(keyboard::key::Named::Enter) => Some(Message::Enter),
             keyboard::Key::Named(keyboard::key::Named::Tab) => {
                 // Handle Tab for focus navigation or text insertion
                 // This implements focus event propagation and focus chain management
@@ -1083,15 +1003,11 @@ impl CodeEditor {
             keyboard::Key::Named(keyboard::key::Named::ArrowLeft) => {
                 Some(Message::ArrowKey(ArrowDirection::Left, modifiers.shift()))
             }
-            keyboard::Key::Named(keyboard::key::Named::ArrowRight) => Some(
-                Message::ArrowKey(ArrowDirection::Right, modifiers.shift()),
-            ),
-            keyboard::Key::Named(keyboard::key::Named::PageUp) => {
-                Some(Message::PageUp)
+            keyboard::Key::Named(keyboard::key::Named::ArrowRight) => {
+                Some(Message::ArrowKey(ArrowDirection::Right, modifiers.shift()))
             }
-            keyboard::Key::Named(keyboard::key::Named::PageDown) => {
-                Some(Message::PageDown)
-            }
+            keyboard::Key::Named(keyboard::key::Named::PageUp) => Some(Message::PageUp),
+            keyboard::Key::Named(keyboard::key::Named::PageDown) => Some(Message::PageDown),
             keyboard::Key::Named(keyboard::key::Named::Home) => {
                 Some(Message::Home(modifiers.shift()))
             }
@@ -1151,9 +1067,7 @@ impl CodeEditor {
         }
 
         // Skip if IME is active (unless Ctrl/Command is pressed)
-        if self.ime_preedit.is_some()
-            && !(modifiers.control() || modifiers.command())
-        {
+        if self.ime_preedit.is_some() && !(modifiers.control() || modifiers.command()) {
             return None;
         }
 
@@ -1208,8 +1122,7 @@ impl CodeEditor {
                 cursor.position_in(bounds).map(|position| {
                     if self.is_dragging {
                         // Handle mouse drag for selection only when cursor is within bounds
-                        Action::publish(Message::MouseDrag(position))
-                            .and_capture()
+                        Action::publish(Message::MouseDrag(position)).and_capture()
                     } else {
                         // Forward hover events when not dragging to enable LSP hover.
                         Action::publish(Message::MouseHover(position))
@@ -1275,9 +1188,7 @@ impl CodeEditor {
             input_method::Event::Preedit(content, selection) => {
                 Message::ImePreedit(content.clone(), selection.clone())
             }
-            input_method::Event::Commit(content) => {
-                Message::ImeCommit(content.clone())
-            }
+            input_method::Event::Commit(content) => Message::ImeCommit(content.clone()),
             input_method::Event::Closed => Message::ImeClosed,
         };
 
@@ -1318,8 +1229,7 @@ impl CodeEditor {
             }
 
             // Find the first visual line for this logical line
-            if let Some(mut idx) =
-                WrappingCalculator::logical_to_visual(ctx.visual_lines, line, 0)
+            if let Some(mut idx) = WrappingCalculator::logical_to_visual(ctx.visual_lines, line, 0)
             {
                 // Iterate all visual lines belonging to this logical line
                 while idx < ctx.visual_lines.len() {
@@ -1338,8 +1248,7 @@ impl CodeEditor {
                             visual_line.start_col,
                             seg_start,
                             seg_end,
-                            ctx.gutter_width + 5.0
-                                - ctx.horizontal_scroll_offset,
+                            ctx.gutter_width + 5.0 - ctx.horizontal_scroll_offset,
                             ctx.full_char_width,
                             ctx.char_width,
                         );
@@ -1347,10 +1256,7 @@ impl CodeEditor {
                         let y = idx as f32 * ctx.line_height + ctx.line_height; // Underline at bottom
 
                         // Draw underline
-                        let path = canvas::Path::line(
-                            Point::new(x, y),
-                            Point::new(x + width, y),
-                        );
+                        let path = canvas::Path::line(Point::new(x, y), Point::new(x + width, y));
 
                         frame.stroke(
                             &path,
@@ -1392,8 +1298,7 @@ impl canvas::Program<Message> for CodeEditor {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
-        let visual_lines: Rc<Vec<VisualLine>> =
-            self.visual_lines_cached(bounds.width);
+        let visual_lines: Rc<Vec<VisualLine>> = self.visual_lines_cached(bounds.width);
 
         // Prefer the tracked viewport height when available, but fall back to
         // the current bounds during initial layout when viewport metrics have
@@ -1403,21 +1308,18 @@ impl canvas::Program<Message> for CodeEditor {
         } else {
             bounds.height
         };
-        let first_visible_line =
-            (self.viewport_scroll / self.line_height).floor() as usize;
+        let first_visible_line = (self.viewport_scroll / self.line_height).floor() as usize;
         let visible_lines_count =
             (effective_viewport_height / self.line_height).ceil() as usize + 2;
-        let last_visible_line =
-            (first_visible_line + visible_lines_count).min(visual_lines.len());
+        let last_visible_line = (first_visible_line + visible_lines_count).min(visual_lines.len());
 
-        let (start_idx, end_idx) =
-            if self.cache_window_end_line > self.cache_window_start_line {
-                let s = self.cache_window_start_line.min(visual_lines.len());
-                let e = self.cache_window_end_line.min(visual_lines.len());
-                (s, e)
-            } else {
-                (first_visible_line, last_visible_line)
-            };
+        let (start_idx, end_idx) = if self.cache_window_end_line > self.cache_window_start_line {
+            let s = self.cache_window_start_line.min(visual_lines.len());
+            let e = self.cache_window_end_line.min(visual_lines.len());
+            (s, e)
+        } else {
+            (first_visible_line, last_visible_line)
+        };
 
         // Split rendering into two cached layers:
         // - content: expensive, mostly static text/gutter rendering
@@ -1426,74 +1328,51 @@ impl canvas::Program<Message> for CodeEditor {
         // This keeps selection dragging and cursor blinking smooth by avoiding
         // invalidation of the text layer on every overlay update.
         let visual_lines_for_content = visual_lines.clone();
-        let content_geometry =
-            self.content_cache.draw(renderer, bounds.size(), |frame| {
-                // syntect initialization is relatively expensive; keep it global.
-                let syntax_set =
-                    SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
-                let theme_set = THEME_SET.get_or_init(ThemeSet::load_defaults);
-                let syntax_theme = theme_set
-                    .themes
-                    .get("base16-ocean.dark")
-                    .or_else(|| theme_set.themes.values().next());
+        let content_geometry = self.content_cache.draw(renderer, bounds.size(), |frame| {
+            // syntect initialization is relatively expensive; keep it global.
+            let syntax_set = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
+            let theme_set = THEME_SET.get_or_init(ThemeSet::load_defaults);
+            let syntax_theme = theme_set
+                .themes
+                .get("base16-ocean.dark")
+                .or_else(|| theme_set.themes.values().next());
 
-                // Normalize common language aliases/extensions used by consumers.
-                let syntax_ref = match self.syntax.as_str() {
-                    "python" => syntax_set.find_syntax_by_extension("py"),
-                    "rust" => syntax_set.find_syntax_by_extension("rs"),
-                    "javascript" => syntax_set.find_syntax_by_extension("js"),
-                    "htm" => syntax_set.find_syntax_by_extension("html"),
-                    "svg" => syntax_set.find_syntax_by_extension("xml"),
-                    "markdown" => syntax_set.find_syntax_by_extension("md"),
-                    "text" => Some(syntax_set.find_syntax_plain_text()),
-                    _ => syntax_set
-                        .find_syntax_by_extension(self.syntax.as_str()),
-                }
-                .or(Some(syntax_set.find_syntax_plain_text()));
+            // Normalize common language aliases/extensions used by consumers.
+            let syntax_ref = match self.syntax.as_str() {
+                "python" => syntax_set.find_syntax_by_extension("py"),
+                "rust" => syntax_set.find_syntax_by_extension("rs"),
+                "javascript" => syntax_set.find_syntax_by_extension("js"),
+                "htm" => syntax_set.find_syntax_by_extension("html"),
+                "svg" => syntax_set.find_syntax_by_extension("xml"),
+                "markdown" => syntax_set.find_syntax_by_extension("md"),
+                "text" => Some(syntax_set.find_syntax_plain_text()),
+                _ => syntax_set.find_syntax_by_extension(self.syntax.as_str()),
+            }
+            .or(Some(syntax_set.find_syntax_plain_text()));
 
-                let ctx = RenderContext {
-                    visual_lines: visual_lines_for_content.as_ref(),
-                    bounds_width: bounds.width,
-                    gutter_width: self.gutter_width(),
-                    line_height: self.line_height,
-                    font_size: self.font_size,
-                    full_char_width: self.full_char_width,
-                    char_width: self.char_width,
-                    font: self.font,
-                    horizontal_scroll_offset: self.horizontal_scroll_offset,
-                };
+            let ctx = RenderContext {
+                visual_lines: visual_lines_for_content.as_ref(),
+                bounds_width: bounds.width,
+                gutter_width: self.gutter_width(),
+                line_height: self.line_height,
+                font_size: self.font_size,
+                full_char_width: self.full_char_width,
+                char_width: self.char_width,
+                font: self.font,
+                horizontal_scroll_offset: self.horizontal_scroll_offset,
+            };
 
-                // Clip code text to the code area (right of gutter) so that
-                // horizontal scrolling cannot cause text to bleed into the gutter.
-                // Note: iced renders ALL text on top of ALL geometry, so a
-                // fill_rectangle cannot mask text bleed — with_clip is required.
-                let code_clip = Rectangle {
-                    x: ctx.gutter_width,
-                    y: 0.0,
-                    width: (bounds.width - ctx.gutter_width).max(0.0),
-                    height: bounds.height,
-                };
-                frame.with_clip(code_clip, |f| {
-                    for (idx, visual_line) in visual_lines_for_content
-                        .iter()
-                        .enumerate()
-                        .skip(start_idx)
-                        .take(end_idx.saturating_sub(start_idx))
-                    {
-                        let y = idx as f32 * self.line_height;
-                        self.draw_text_with_syntax_highlighting(
-                            f,
-                            &ctx,
-                            visual_line,
-                            y,
-                            syntax_ref,
-                            syntax_set,
-                            syntax_theme,
-                        );
-                    }
-                });
-
-                // Draw line numbers in the gutter (no clip — fixed position)
+            // Clip code text to the code area (right of gutter) so that
+            // horizontal scrolling cannot cause text to bleed into the gutter.
+            // Note: iced renders ALL text on top of ALL geometry, so a
+            // fill_rectangle cannot mask text bleed — with_clip is required.
+            let code_clip = Rectangle {
+                x: ctx.gutter_width,
+                y: 0.0,
+                width: (bounds.width - ctx.gutter_width).max(0.0),
+                height: bounds.height,
+            };
+            frame.with_clip(code_clip, |f| {
                 for (idx, visual_line) in visual_lines_for_content
                     .iter()
                     .enumerate()
@@ -1501,47 +1380,61 @@ impl canvas::Program<Message> for CodeEditor {
                     .take(end_idx.saturating_sub(start_idx))
                 {
                     let y = idx as f32 * self.line_height;
-                    self.draw_line_numbers(frame, &ctx, visual_line, y);
-                }
-            });
-
-        let visual_lines_for_overlay = visual_lines;
-        let overlay_geometry =
-            self.overlay_cache.draw(renderer, bounds.size(), |frame| {
-                // The overlay layer shares the same visual lines, but draws only
-                // elements that change without modifying the buffer content.
-                let ctx = RenderContext {
-                    visual_lines: visual_lines_for_overlay.as_ref(),
-                    bounds_width: bounds.width,
-                    gutter_width: self.gutter_width(),
-                    line_height: self.line_height,
-                    font_size: self.font_size,
-                    full_char_width: self.full_char_width,
-                    char_width: self.char_width,
-                    font: self.font,
-                    horizontal_scroll_offset: self.horizontal_scroll_offset,
-                };
-
-                for (idx, visual_line) in visual_lines_for_overlay
-                    .iter()
-                    .enumerate()
-                    .skip(start_idx)
-                    .take(end_idx.saturating_sub(start_idx))
-                {
-                    let y = idx as f32 * self.line_height;
-                    self.draw_current_line_highlight(
-                        frame,
+                    self.draw_text_with_syntax_highlighting(
+                        f,
                         &ctx,
                         visual_line,
                         y,
+                        syntax_ref,
+                        syntax_set,
+                        syntax_theme,
                     );
                 }
-
-                self.draw_search_highlights(frame, &ctx, start_idx, end_idx);
-                self.draw_selection_highlight(frame, &ctx);
-                self.draw_jump_link_highlight(frame, &ctx, bounds, _cursor);
-                self.draw_cursor(frame, &ctx);
             });
+
+            // Draw line numbers in the gutter (no clip — fixed position)
+            for (idx, visual_line) in visual_lines_for_content
+                .iter()
+                .enumerate()
+                .skip(start_idx)
+                .take(end_idx.saturating_sub(start_idx))
+            {
+                let y = idx as f32 * self.line_height;
+                self.draw_line_numbers(frame, &ctx, visual_line, y);
+            }
+        });
+
+        let visual_lines_for_overlay = visual_lines;
+        let overlay_geometry = self.overlay_cache.draw(renderer, bounds.size(), |frame| {
+            // The overlay layer shares the same visual lines, but draws only
+            // elements that change without modifying the buffer content.
+            let ctx = RenderContext {
+                visual_lines: visual_lines_for_overlay.as_ref(),
+                bounds_width: bounds.width,
+                gutter_width: self.gutter_width(),
+                line_height: self.line_height,
+                font_size: self.font_size,
+                full_char_width: self.full_char_width,
+                char_width: self.char_width,
+                font: self.font,
+                horizontal_scroll_offset: self.horizontal_scroll_offset,
+            };
+
+            for (idx, visual_line) in visual_lines_for_overlay
+                .iter()
+                .enumerate()
+                .skip(start_idx)
+                .take(end_idx.saturating_sub(start_idx))
+            {
+                let y = idx as f32 * self.line_height;
+                self.draw_current_line_highlight(frame, &ctx, visual_line, y);
+            }
+
+            self.draw_search_highlights(frame, &ctx, start_idx, end_idx);
+            self.draw_selection_highlight(frame, &ctx);
+            self.draw_jump_link_highlight(frame, &ctx, bounds, _cursor);
+            self.draw_cursor(frame, &ctx);
+        });
 
         vec![content_geometry, overlay_geometry]
     }
@@ -1577,22 +1470,14 @@ impl canvas::Program<Message> for CodeEditor {
                 ..
             }) => {
                 self.modifiers.set(*modifiers);
-                self.handle_keyboard_event(
-                    key, modifiers, text, bounds, &cursor,
-                )
+                self.handle_keyboard_event(key, modifiers, text, bounds, &cursor)
             }
-            Event::Keyboard(keyboard::Event::KeyReleased {
-                modifiers, ..
-            }) => {
+            Event::Keyboard(keyboard::Event::KeyReleased { modifiers, .. }) => {
                 self.modifiers.set(*modifiers);
                 None
             }
-            Event::Mouse(mouse_event) => {
-                self.handle_mouse_event(mouse_event, bounds, &cursor)
-            }
-            Event::InputMethod(ime_event) => {
-                self.handle_ime_event(ime_event, bounds, &cursor)
-            }
+            Event::Mouse(mouse_event) => self.handle_mouse_event(mouse_event, bounds, &cursor),
+            Event::InputMethod(ime_event) => self.handle_ime_event(ime_event, bounds, &cursor),
             _ => None,
         }
     }
@@ -1610,11 +1495,7 @@ impl canvas::Program<Message> for CodeEditor {
 /// # Returns
 ///
 /// `Some((start, end))` if indices are valid, `None` otherwise.
-fn validate_selection_indices(
-    content: &str,
-    start: usize,
-    end: usize,
-) -> Option<(usize, usize)> {
+fn validate_selection_indices(content: &str, start: usize, end: usize) -> Option<(usize, usize)> {
     let len = content.len();
     // Clamp indices to content length
     let start = start.min(len);
@@ -1647,9 +1528,7 @@ mod tests {
         // width("Hello ") = 6 * CHAR_WIDTH
         // width("World") = 5 * CHAR_WIDTH
         let content = "Hello World";
-        let (x, w) = calculate_segment_geometry(
-            content, 0, 6, 11, 0.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 0, 6, 11, 0.0, FONT_SIZE, CHAR_WIDTH);
 
         let expected_x = CHAR_WIDTH * 6.0;
         let expected_w = CHAR_WIDTH * 5.0;
@@ -1674,9 +1553,7 @@ mod tests {
         // width("你好") = 2 * FONT_SIZE
         // width("世界") = 2 * FONT_SIZE
         let content = "你好世界";
-        let (x, w) = calculate_segment_geometry(
-            content, 0, 2, 4, 10.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 0, 2, 4, 10.0, FONT_SIZE, CHAR_WIDTH);
 
         let expected_x = 10.0 + FONT_SIZE * 2.0;
         let expected_w = FONT_SIZE * 2.0;
@@ -1701,9 +1578,7 @@ mod tests {
         // width("Hi") = 2 * CHAR_WIDTH
         // width("你好") = 2 * FONT_SIZE
         let content = "Hi你好";
-        let (x, w) = calculate_segment_geometry(
-            content, 0, 2, 4, 0.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 0, 2, 4, 0.0, FONT_SIZE, CHAR_WIDTH);
 
         let expected_x = CHAR_WIDTH * 2.0;
         let expected_w = FONT_SIZE * 2.0;
@@ -1723,9 +1598,7 @@ mod tests {
     #[test]
     fn test_calculate_segment_geometry_empty_range() {
         let content = "Hello";
-        let (x, w) = calculate_segment_geometry(
-            content, 0, 0, 0, 0.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 0, 0, 0, 0.0, FONT_SIZE, CHAR_WIDTH);
         assert!((x - 0.0).abs() < f32::EPSILON);
         assert!((w - 0.0).abs() < f32::EPSILON);
     }
@@ -1739,9 +1612,7 @@ mod tests {
         // prefix width: 1 * CHAR_WIDTH
         // segment width: 2 * CHAR_WIDTH
         let content = "0123456789";
-        let (x, w) = calculate_segment_geometry(
-            content, 2, 3, 5, 5.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 2, 3, 5, 5.0, FONT_SIZE, CHAR_WIDTH);
 
         let expected_x = 5.0 + CHAR_WIDTH * 1.0;
         let expected_w = CHAR_WIDTH * 2.0;
@@ -1766,9 +1637,7 @@ mod tests {
         // Prefix should consume whole string ("Hello") and stop.
         // Segment should be empty.
         let content = "Hello";
-        let (x, w) = calculate_segment_geometry(
-            content, 0, 10, 15, 0.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 0, 10, 15, 0.0, FONT_SIZE, CHAR_WIDTH);
 
         let expected_x = CHAR_WIDTH * 5.0; // Width of "Hello"
         let expected_w = 0.0;
@@ -1793,9 +1662,7 @@ mod tests {
         // Indices in chars: 'A' (0), '👋' (1), '\t' (2), 'B' (3)
 
         // Segment covering Emoji
-        let (x, w) = calculate_segment_geometry(
-            content, 0, 1, 2, 0.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 0, 1, 2, 0.0, FONT_SIZE, CHAR_WIDTH);
         let expected_x_emoji = CHAR_WIDTH; // 'A'
         let expected_w_emoji = FONT_SIZE; // '👋'
 
@@ -1811,12 +1678,10 @@ mod tests {
         );
 
         // Segment covering Tab
-        let (x_tab, w_tab) = calculate_segment_geometry(
-            content, 0, 2, 3, 0.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x_tab, w_tab) =
+            calculate_segment_geometry(content, 0, 2, 3, 0.0, FONT_SIZE, CHAR_WIDTH);
         let expected_x_tab = CHAR_WIDTH + FONT_SIZE; // 'A' + '👋'
-        let expected_w_tab =
-            CHAR_WIDTH * crate::canvas_editor::TAB_WIDTH as f32;
+        let expected_w_tab = CHAR_WIDTH * crate::canvas_editor::TAB_WIDTH as f32;
 
         assert_eq!(
             compare_floats(x_tab, expected_x_tab),
@@ -1835,9 +1700,7 @@ mod tests {
         // Start 5, End 3
         // Should result in empty segment at start 5
         let content = "0123456789";
-        let (x, w) = calculate_segment_geometry(
-            content, 0, 5, 3, 0.0, FONT_SIZE, CHAR_WIDTH,
-        );
+        let (x, w) = calculate_segment_geometry(content, 0, 5, 3, 0.0, FONT_SIZE, CHAR_WIDTH);
 
         let expected_x = CHAR_WIDTH * 5.0;
         let expected_w = 0.0;

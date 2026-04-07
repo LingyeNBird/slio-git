@@ -180,7 +180,8 @@ impl HighlightedSegment {
             }
 
             // Find syntax color at this position
-            let color = color_map.iter()
+            let color = color_map
+                .iter()
                 .find(|(s, e, _)| *s <= inline.start && *e > inline.start)
                 .map(|(_, _, c)| *c)
                 .unwrap_or(crate::theme::darcula::TEXT_PRIMARY);
@@ -197,7 +198,7 @@ impl HighlightedSegment {
         }
 
         rich_text(result_spans)
-            .size(11)
+            .size(crate::theme::typography::CAPTION_SIZE)
             .line_height(text::LineHeight::Relative(1.30))
             .font(crate::theme::code_font())
             .wrapping(text::Wrapping::None)
@@ -216,7 +217,7 @@ fn render_segments<Message: Clone + 'static>(
         .collect();
 
     rich_text(spans)
-        .size(11)
+        .size(crate::theme::typography::CAPTION_SIZE)
         .line_height(text::LineHeight::Relative(1.30))
         .font(crate::theme::code_font())
         .wrapping(config.wrapping)

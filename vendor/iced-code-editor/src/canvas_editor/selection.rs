@@ -13,12 +13,8 @@ impl CodeEditor {
     }
 
     /// Returns the selected text range in normalized order (start before end).
-    pub(crate) fn get_selection_range(
-        &self,
-    ) -> Option<((usize, usize), (usize, usize))> {
-        if let (Some(start), Some(end)) =
-            (self.selection_start, self.selection_end)
-        {
+    pub(crate) fn get_selection_range(&self) -> Option<((usize, usize), (usize, usize))> {
+        if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
             // Normalize: ensure start comes before end
             if start.0 < end.0 || (start.0 == end.0 && start.1 < end.1) {
                 Some((start, end))
@@ -64,9 +60,7 @@ impl CodeEditor {
             // First line: convert the starting character index to a byte index and slice safely
             // Validate that character indices are within the valid range before attempting to slice.
             // This prevents potential issues if start.1 exceed the actual character count.
-            if let Some((start_byte, _)) =
-                first_line.char_indices().nth(start.1)
-            {
+            if let Some((start_byte, _)) = first_line.char_indices().nth(start.1) {
                 result.push_str(&first_line[start_byte..]);
                 result.push('\n');
             }

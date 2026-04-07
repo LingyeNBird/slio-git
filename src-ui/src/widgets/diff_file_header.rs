@@ -102,17 +102,17 @@ pub fn view<'a, Message: Clone + 'static>(
                 Column::new()
                     .spacing(1)
                     .width(Length::Fill)
-                    .push(Text::new(file_name).size(12))
+                    .push(Text::new(file_name).size(theme::typography::BODY_SIZE))
                     .push_maybe(parent_path.map(|path| {
                         Text::new(path)
-                            .size(10)
+                            .size(theme::typography::CAPTION_SIZE)
                             .width(Length::Fill)
                             .wrapping(text::Wrapping::WordOrGlyph)
                             .color(theme::darcula::TEXT_SECONDARY)
                     }))
                     .push_maybe(rename_hint.map(|hint| {
                         Text::new(hint)
-                            .size(10)
+                            .size(theme::typography::CAPTION_SIZE)
                             .width(Length::Fill)
                             .wrapping(text::Wrapping::WordOrGlyph)
                             .color(theme::darcula::TEXT_SECONDARY)
@@ -121,7 +121,7 @@ pub fn view<'a, Message: Clone + 'static>(
             .push(widgets::compact_chip::<Message>(status_label, status_tone))
             .push(
                 Text::new(format!("{} 区块 · +{} / -{}", hunks, additions, deletions))
-                    .size(10)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             ),
     )

@@ -211,7 +211,11 @@ pub fn prefix_char(tag: ChunkTag, is_left: bool) -> &'static str {
         ChunkTag::Insert => "+",
         ChunkTag::Delete => "-",
         ChunkTag::Replace => {
-            if is_left { "-" } else { "+" }
+            if is_left {
+                "-"
+            } else {
+                "+"
+            }
         }
     }
 }
@@ -223,7 +227,11 @@ pub fn prefix_color(tag: ChunkTag, is_left: bool) -> Color {
         ChunkTag::Insert => MELD_INSERT_TINT,
         ChunkTag::Delete => MELD_DELETE_TINT,
         ChunkTag::Replace => {
-            if is_left { MELD_DELETE_TINT } else { MELD_INSERT_TINT }
+            if is_left {
+                MELD_DELETE_TINT
+            } else {
+                MELD_INSERT_TINT
+            }
         }
     }
 }
@@ -293,13 +301,29 @@ pub fn render_unified_line<'a, Message: Clone + 'static>(
 
     // For unified view, use the origin-based colors for insert/delete (more familiar)
     let actual_code_bg = match origin {
-        DiffLineOrigin::Addition => mix_colors(theme::darcula::BG_EDITOR, theme::darcula::DIFF_ADDED_BG, 0.44),
-        DiffLineOrigin::Deletion => mix_colors(theme::darcula::BG_EDITOR, theme::darcula::DIFF_DELETED_BG, 0.52),
+        DiffLineOrigin::Addition => mix_colors(
+            theme::darcula::BG_EDITOR,
+            theme::darcula::DIFF_ADDED_BG,
+            0.44,
+        ),
+        DiffLineOrigin::Deletion => mix_colors(
+            theme::darcula::BG_EDITOR,
+            theme::darcula::DIFF_DELETED_BG,
+            0.52,
+        ),
         _ => code_bg,
     };
     let actual_gutter_bg = match origin {
-        DiffLineOrigin::Addition => mix_colors(theme::darcula::BG_RAISED, theme::darcula::DIFF_ADDED_BG, 0.22),
-        DiffLineOrigin::Deletion => mix_colors(theme::darcula::BG_RAISED, theme::darcula::DIFF_DELETED_BG, 0.28),
+        DiffLineOrigin::Addition => mix_colors(
+            theme::darcula::BG_RAISED,
+            theme::darcula::DIFF_ADDED_BG,
+            0.22,
+        ),
+        DiffLineOrigin::Deletion => mix_colors(
+            theme::darcula::BG_RAISED,
+            theme::darcula::DIFF_DELETED_BG,
+            0.28,
+        ),
         _ => gutter_bg,
     };
 
@@ -314,7 +338,9 @@ pub fn render_unified_line<'a, Message: Clone + 'static>(
     let m_color = match origin {
         DiffLineOrigin::Addition => theme::darcula::SUCCESS,
         DiffLineOrigin::Deletion => theme::darcula::DANGER,
-        DiffLineOrigin::Header | DiffLineOrigin::HunkHeader => theme::darcula::ACCENT.scale_alpha(0.64),
+        DiffLineOrigin::Header | DiffLineOrigin::HunkHeader => {
+            theme::darcula::ACCENT.scale_alpha(0.64)
+        }
         DiffLineOrigin::Context => Color::TRANSPARENT,
     };
 
@@ -341,14 +367,14 @@ pub fn render_unified_line<'a, Message: Clone + 'static>(
                     .align_y(Alignment::Center)
                     .push(
                         Text::new(format_line_number(line.old_lineno))
-                            .size(10)
+                            .size(theme::typography::MICRO_SIZE)
                             .font(crate::theme::code_font())
                             .color(theme::darcula::TEXT_SECONDARY)
                             .width(Length::Fixed(28.0)),
                     )
                     .push(
                         Text::new(format_line_number(line.new_lineno))
-                            .size(10)
+                            .size(theme::typography::MICRO_SIZE)
                             .font(crate::theme::code_font())
                             .color(theme::darcula::TEXT_SECONDARY)
                             .width(Length::Fixed(28.0)),
@@ -368,7 +394,7 @@ pub fn render_unified_line<'a, Message: Clone + 'static>(
                     .width(Length::Shrink)
                     .push(
                         Text::new(pfx)
-                            .size(11)
+                            .size(theme::typography::CAPTION_SIZE)
                             .font(crate::theme::code_font())
                             .color(pfx_color)
                             .width(Length::Fixed(PREFIX_WIDTH)),
@@ -420,7 +446,7 @@ pub fn render_split_half<'a, Message: Clone + 'static>(
             .push(
                 Container::new(
                     Text::new(format_line_number(side.line_number))
-                        .size(10)
+                        .size(theme::typography::MICRO_SIZE)
                         .font(crate::theme::code_font())
                         .color(theme::darcula::TEXT_DISABLED),
                 )
@@ -431,7 +457,7 @@ pub fn render_split_half<'a, Message: Clone + 'static>(
             )
             .push(
                 Text::new(pfx)
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .font(crate::theme::code_font())
                     .color(pfx_color)
                     .width(Length::Fixed(PREFIX_WIDTH)),
@@ -480,22 +506,19 @@ pub fn hunk_header<'a, Message: Clone + 'static>(
         hunk.header.clone()
     };
 
-    let mut row = Row::new()
-        .spacing(4)
-        .align_y(Alignment::Center)
-        .push(
-            Text::new(header_text)
-                .size(10)
-                .font(crate::theme::code_font())
-                .wrapping(text::Wrapping::None)
-                .color(theme::darcula::TEXT_SECONDARY),
-        );
+    let mut row = Row::new().spacing(4).align_y(Alignment::Center).push(
+        Text::new(header_text)
+            .size(theme::typography::CAPTION_SIZE)
+            .font(crate::theme::code_font())
+            .wrapping(text::Wrapping::None)
+            .color(theme::darcula::TEXT_SECONDARY),
+    );
 
     if let Some(msg) = stage_msg {
         row = row.push(
             iced::widget::Button::new(
                 Text::new("暂存区块")
-                    .size(9)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::STATUS_ADDED),
             )
             .style(theme::button_style(theme::ButtonTone::Ghost))
@@ -508,7 +531,7 @@ pub fn hunk_header<'a, Message: Clone + 'static>(
         row = row.push(
             iced::widget::Button::new(
                 Text::new("取消暂存")
-                    .size(9)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::STATUS_DELETED),
             )
             .style(theme::button_style(theme::ButtonTone::Ghost))
@@ -532,8 +555,8 @@ pub fn hunk_divider<'a, Message: 'a>() -> Element<'a, Message> {
         .width(Length::Fill)
         .push(Space::new().height(Length::Fixed(4.0)))
         .push(
-            Container::new(Space::new().width(Length::Fill).height(Length::Fixed(2.0)))
-                .style(|_| container::Style {
+            Container::new(Space::new().width(Length::Fill).height(Length::Fixed(2.0))).style(
+                |_| container::Style {
                     background: Some(Background::Color(
                         theme::darcula::ACCENT_WEAK.scale_alpha(0.8),
                     )),
@@ -543,7 +566,8 @@ pub fn hunk_divider<'a, Message: 'a>() -> Element<'a, Message> {
                         blur_radius: 4.0,
                     },
                     ..Default::default()
-                }),
+                },
+            ),
         )
         .push(Space::new().height(Length::Fixed(4.0)))
         .into()
@@ -553,7 +577,7 @@ pub fn hunk_divider<'a, Message: 'a>() -> Element<'a, Message> {
 pub fn empty_editor_row<'a, Message: 'a>(label: &str) -> Element<'a, Message> {
     Container::new(
         Text::new(label.to_string())
-            .size(11)
+            .size(theme::typography::CAPTION_SIZE)
             .color(theme::darcula::TEXT_SECONDARY),
     )
     .padding([8, 10])
@@ -606,7 +630,12 @@ mod tests {
     use super::*;
     use git_core::diff::{DiffHunk, DiffLine, DiffLineOrigin};
 
-    fn make_line(origin: DiffLineOrigin, content: &str, old: Option<u32>, new: Option<u32>) -> DiffLine {
+    fn make_line(
+        origin: DiffLineOrigin,
+        content: &str,
+        old: Option<u32>,
+        new: Option<u32>,
+    ) -> DiffLine {
         DiffLine {
             origin,
             content: content.to_string(),
@@ -629,9 +658,12 @@ mod tests {
 
     #[test]
     fn context_lines_become_equal() {
-        let hunk = test_hunk(vec![
-            make_line(DiffLineOrigin::Context, "hello", Some(1), Some(1)),
-        ]);
+        let hunk = test_hunk(vec![make_line(
+            DiffLineOrigin::Context,
+            "hello",
+            Some(1),
+            Some(1),
+        )]);
         let rows = build_aligned_rows(&hunk);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].tag, ChunkTag::Equal);
@@ -641,9 +673,12 @@ mod tests {
 
     #[test]
     fn pure_addition_becomes_insert() {
-        let hunk = test_hunk(vec![
-            make_line(DiffLineOrigin::Addition, "new line", None, Some(1)),
-        ]);
+        let hunk = test_hunk(vec![make_line(
+            DiffLineOrigin::Addition,
+            "new line",
+            None,
+            Some(1),
+        )]);
         let rows = build_aligned_rows(&hunk);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].tag, ChunkTag::Insert);
@@ -653,9 +688,12 @@ mod tests {
 
     #[test]
     fn pure_deletion_becomes_delete() {
-        let hunk = test_hunk(vec![
-            make_line(DiffLineOrigin::Deletion, "old line", Some(1), None),
-        ]);
+        let hunk = test_hunk(vec![make_line(
+            DiffLineOrigin::Deletion,
+            "old line",
+            Some(1),
+            None,
+        )]);
         let rows = build_aligned_rows(&hunk);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].tag, ChunkTag::Delete);

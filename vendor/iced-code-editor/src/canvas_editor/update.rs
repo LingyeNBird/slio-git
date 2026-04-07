@@ -4,12 +4,10 @@ use iced::Task;
 use iced::widget::operation::{focus, select_all};
 
 use super::command::{
-    Command, CompositeCommand, DeleteCharCommand, DeleteForwardCommand,
-    InsertCharCommand, InsertNewlineCommand, ReplaceTextCommand,
+    Command, CompositeCommand, DeleteCharCommand, DeleteForwardCommand, InsertCharCommand,
+    InsertNewlineCommand, ReplaceTextCommand,
 };
-use super::{
-    ArrowDirection, CURSOR_BLINK_INTERVAL, CodeEditor, ImePreedit, Message,
-};
+use super::{ArrowDirection, CURSOR_BLINK_INTERVAL, CodeEditor, ImePreedit, Message};
 
 impl CodeEditor {
     // =========================================================================
@@ -148,12 +146,7 @@ impl CodeEditor {
         // Insert 4 spaces
         for i in 0..4 {
             let current_col = col + i;
-            let mut cmd = InsertCharCommand::new(
-                line,
-                current_col,
-                ' ',
-                (line, current_col),
-            );
+            let mut cmd = InsertCharCommand::new(line, current_col, ' ', (line, current_col));
             cmd.execute(&mut self.buffer, &mut self.cursor);
             self.history.push(Box::new(cmd));
         }
@@ -245,8 +238,7 @@ impl CodeEditor {
 
         // No selection - perform normal backspace
         let (line, col) = self.cursor;
-        let mut cmd =
-            DeleteCharCommand::new(&self.buffer, line, col, self.cursor);
+        let mut cmd = DeleteCharCommand::new(&self.buffer, line, col, self.cursor);
         cmd.execute(&mut self.buffer, &mut self.cursor);
         self.history.push(Box::new(cmd));
 
@@ -273,8 +265,7 @@ impl CodeEditor {
 
         // No selection - perform normal forward delete
         let (line, col) = self.cursor;
-        let mut cmd =
-            DeleteForwardCommand::new(&self.buffer, line, col, self.cursor);
+        let mut cmd = DeleteForwardCommand::new(&self.buffer, line, col, self.cursor);
         cmd.execute(&mut self.buffer, &mut self.cursor);
         self.history.push(Box::new(cmd));
 
@@ -469,11 +460,7 @@ impl CodeEditor {
     /// # Returns
     ///
     /// A `Task<Message>` that scrolls to keep the cursor visible
-    fn handle_goto_position(
-        &mut self,
-        line: usize,
-        col: usize,
-    ) -> Task<Message> {
+    fn handle_goto_position(&mut self, line: usize, col: usize) -> Task<Message> {
         // End grouping on navigation command
         self.end_grouping_if_active();
         self.set_cursor(line, col)
@@ -531,9 +518,7 @@ impl CodeEditor {
             let before_cursor = self.cursor;
             let before_selection_end = self.selection_end;
             self.handle_mouse_drag(point);
-            if self.cursor != before_cursor
-                || self.selection_end != before_selection_end
-            {
+            if self.cursor != before_cursor || self.selection_end != before_selection_end {
                 // Mouse move events can be very frequent. Only invalidate the
                 // overlay cache if the drag actually changed selection/cursor.
                 self.overlay_cache.clear();
@@ -575,9 +560,8 @@ impl CodeEditor {
         // If text is empty, we need to read from clipboard
         if text.is_empty() {
             // Return a task that reads clipboard and chains to paste
-            iced::clipboard::read().and_then(|clipboard_text| {
-                Task::done(Message::Paste(clipboard_text))
-            })
+            iced::clipboard::read()
+                .and_then(|clipboard_text| Task::done(Message::Paste(clipboard_text)))
         } else {
             // We have the text, paste it
             self.paste_text(text);
@@ -679,10 +663,7 @@ impl CodeEditor {
     /// # Returns
     ///
     /// A `Task<Message>` that scrolls to first match if any
-    fn handle_search_query_changed_msg(
-        &mut self,
-        query: &str,
-    ) -> Task<Message> {
+    fn handle_search_query_changed_msg(&mut self, query: &str) -> Task<Message> {
         self.search_state.set_query(query.to_string(), &self.buffer);
         self.overlay_cache.clear();
 
@@ -704,10 +685,7 @@ impl CodeEditor {
     /// # Returns
     ///
     /// A `Task<Message>` (currently Task::none())
-    fn handle_replace_query_changed_msg(
-        &mut self,
-        replace_text: &str,
-    ) -> Task<Message> {
+    fn handle_replace_query_changed_msg(&mut self, replace_text: &str) -> Task<Message> {
         self.search_state.set_replace_with(replace_text.to_string());
         Task::none()
     }
@@ -824,8 +802,7 @@ impl CodeEditor {
             let replace_text = self.search_state.replace_with.clone();
 
             // Create composite command for undo
-            let mut composite =
-                CompositeCommand::new("Replace All".to_string());
+            let mut composite = CompositeCommand::new("Replace All".to_string());
 
             // Process matches in reverse order (to preserve positions)
             for match_pos in all_matches.iter().rev() {
@@ -1020,9 +997,7 @@ impl CodeEditor {
     /// A `Task<Message>` (currently Task::none())
     fn handle_tick_msg(&mut self) -> Task<Message> {
         // Handle cursor blinking only if editor has focus
-        if self.has_focus()
-            && self.last_blink.elapsed() >= CURSOR_BLINK_INTERVAL
-        {
+        if self.has_focus() && self.last_blink.elapsed() >= CURSOR_BLINK_INTERVAL {
             self.cursor_visible = !self.cursor_visible;
             self.last_blink = super::Instant::now();
             self.overlay_cache.clear();
@@ -1065,33 +1040,29 @@ impl CodeEditor {
         let new_height = viewport.bounds().height;
         let new_width = viewport.bounds().width;
         let scroll_changed = (self.viewport_scroll - new_scroll).abs() > 0.1;
-        let visible_lines_count =
-            (new_height / self.line_height).ceil() as usize + 2;
-        let first_visible_line =
-            (new_scroll / self.line_height).floor() as usize;
+        let visible_lines_count = (new_height / self.line_height).ceil() as usize + 2;
+        let first_visible_line = (new_scroll / self.line_height).floor() as usize;
         let last_visible_line = first_visible_line + visible_lines_count;
-        let margin = visible_lines_count
-            * crate::canvas_editor::CACHE_WINDOW_MARGIN_MULTIPLIER;
+        let margin = visible_lines_count * crate::canvas_editor::CACHE_WINDOW_MARGIN_MULTIPLIER;
         let window_start = first_visible_line.saturating_sub(margin);
         let window_end = last_visible_line + margin;
         // Decide whether we need to re-window the cache.
         // Special-case top-of-file: when window_start == 0, allow small forward scrolls
         // without forcing a rewindow, to avoid thrashing when the visible range is near 0.
-        let need_rewindow =
-            if self.cache_window_end_line > self.cache_window_start_line {
-                let lower_boundary_trigger = self.cache_window_start_line > 0
-                    && first_visible_line
-                        < self
-                            .cache_window_start_line
-                            .saturating_add(visible_lines_count / 2);
-                let upper_boundary_trigger = last_visible_line
-                    > self
-                        .cache_window_end_line
-                        .saturating_sub(visible_lines_count / 2);
-                lower_boundary_trigger || upper_boundary_trigger
-            } else {
-                true
-            };
+        let need_rewindow = if self.cache_window_end_line > self.cache_window_start_line {
+            let lower_boundary_trigger = self.cache_window_start_line > 0
+                && first_visible_line
+                    < self
+                        .cache_window_start_line
+                        .saturating_add(visible_lines_count / 2);
+            let upper_boundary_trigger = last_visible_line
+                > self
+                    .cache_window_end_line
+                    .saturating_sub(visible_lines_count / 2);
+            lower_boundary_trigger || upper_boundary_trigger
+        } else {
+            true
+        };
         // Clear cache when viewport dimensions change significantly
         // to ensure proper redraw (e.g., window resize)
         if (self.viewport_height - new_height).abs() > 1.0
@@ -1160,16 +1131,12 @@ impl CodeEditor {
             Message::DeleteSelection => self.handle_delete_selection(),
 
             // Navigation operations
-            Message::ArrowKey(direction, shift) => {
-                self.handle_arrow_key(*direction, *shift)
-            }
+            Message::ArrowKey(direction, shift) => self.handle_arrow_key(*direction, *shift),
             Message::Home(shift) => self.handle_home(*shift),
             Message::End(shift) => self.handle_end(*shift),
             Message::CtrlHome => self.handle_ctrl_home(),
             Message::CtrlEnd => self.handle_ctrl_end(),
-            Message::GotoPosition(line, col) => {
-                self.handle_goto_position(*line, *col)
-            }
+            Message::GotoPosition(line, col) => self.handle_goto_position(*line, *col),
             Message::PageUp => self.handle_page_up(),
             Message::PageDown => self.handle_page_down(),
 
@@ -1191,27 +1158,17 @@ impl CodeEditor {
             Message::OpenSearch => self.handle_open_search_msg(),
             Message::OpenSearchReplace => self.handle_open_search_replace_msg(),
             Message::CloseSearch => self.handle_close_search_msg(),
-            Message::SearchQueryChanged(query) => {
-                self.handle_search_query_changed_msg(query)
-            }
-            Message::ReplaceQueryChanged(text) => {
-                self.handle_replace_query_changed_msg(text)
-            }
-            Message::ToggleCaseSensitive => {
-                self.handle_toggle_case_sensitive_msg()
-            }
+            Message::SearchQueryChanged(query) => self.handle_search_query_changed_msg(query),
+            Message::ReplaceQueryChanged(text) => self.handle_replace_query_changed_msg(text),
+            Message::ToggleCaseSensitive => self.handle_toggle_case_sensitive_msg(),
             Message::FindNext => self.handle_find_next_msg(),
             Message::FindPrevious => self.handle_find_previous_msg(),
             Message::ReplaceNext => self.handle_replace_next_msg(),
             Message::ReplaceAll => self.handle_replace_all_msg(),
             Message::SearchDialogTab => self.handle_search_dialog_tab_msg(),
-            Message::SearchDialogShiftTab => {
-                self.handle_search_dialog_shift_tab_msg()
-            }
+            Message::SearchDialogShiftTab => self.handle_search_dialog_shift_tab_msg(),
             Message::FocusNavigationTab => self.handle_focus_navigation_tab(),
-            Message::FocusNavigationShiftTab => {
-                self.handle_focus_navigation_shift_tab()
-            }
+            Message::FocusNavigationShiftTab => self.handle_focus_navigation_shift_tab(),
 
             // Focus and IME operations
             Message::CanvasFocusGained => self.handle_canvas_focus_gained_msg(),
@@ -1226,9 +1183,7 @@ impl CodeEditor {
             // UI update operations
             Message::Tick => self.handle_tick_msg(),
             Message::Scrolled(viewport) => self.handle_scrolled_msg(*viewport),
-            Message::HorizontalScrolled(viewport) => {
-                self.handle_horizontal_scrolled_msg(*viewport)
-            }
+            Message::HorizontalScrolled(viewport) => self.handle_horizontal_scrolled_msg(*viewport),
 
             // Handle the "Jump to Definition" action triggered by Ctrl+Click.
             // Currently, this returns `Task::none()` as the actual navigation logic
@@ -1308,7 +1263,10 @@ mod tests {
         // When focus is regained, it should be unlocked
         editor.request_focus();
         let _ = editor.update(&Message::CanvasFocusGained);
-        assert!(!editor.focus_locked, "Focus should be unlocked when regained");
+        assert!(
+            !editor.focus_locked,
+            "Focus should be unlocked when regained"
+        );
 
         // Can manually reset focus lock
         editor.focus_locked = true;
@@ -1449,8 +1407,7 @@ mod tests {
 
     #[test]
     fn test_scroll_sets_initial_cache_window() {
-        let content =
-            (0..200).map(|i| format!("line{}\n", i)).collect::<String>();
+        let content = (0..200).map(|i| format!("line{}\n", i)).collect::<String>();
         let mut editor = CodeEditor::new(&content, "py");
 
         // Simulate initial viewport
@@ -1459,8 +1416,7 @@ mod tests {
         let scroll = 0.0;
 
         // Expected derived ranges
-        let visible_lines_count =
-            (height / editor.line_height).ceil() as usize + 2;
+        let visible_lines_count = (height / editor.line_height).ceil() as usize + 2;
         let first_visible_line = (scroll / editor.line_height).floor() as usize;
         let last_visible_line = first_visible_line + visible_lines_count;
         let margin = visible_lines_count * 2;
@@ -1491,16 +1447,13 @@ mod tests {
 
     #[test]
     fn test_small_scroll_keeps_window() {
-        let content =
-            (0..200).map(|i| format!("line{}\n", i)).collect::<String>();
+        let content = (0..200).map(|i| format!("line{}\n", i)).collect::<String>();
         let mut editor = CodeEditor::new(&content, "py");
         let height = 400.0;
         let width = 800.0;
         let initial_scroll = 0.0;
-        let visible_lines_count =
-            (height / editor.line_height).ceil() as usize + 2;
-        let first_visible_line =
-            (initial_scroll / editor.line_height).floor() as usize;
+        let visible_lines_count = (height / editor.line_height).ceil() as usize + 2;
+        let first_visible_line = (initial_scroll / editor.line_height).floor() as usize;
         let last_visible_line = first_visible_line + visible_lines_count;
         let margin = visible_lines_count * 2;
         let window_start = first_visible_line.saturating_sub(margin);
@@ -1512,10 +1465,8 @@ mod tests {
         editor.viewport_scroll = initial_scroll;
 
         // Small scroll inside window
-        let small_scroll =
-            editor.line_height * (visible_lines_count as f32 / 4.0);
-        let first_visible_line2 =
-            (small_scroll / editor.line_height).floor() as usize;
+        let small_scroll = editor.line_height * (visible_lines_count as f32 / 4.0);
+        let first_visible_line2 = (small_scroll / editor.line_height).floor() as usize;
         let last_visible_line2 = first_visible_line2 + visible_lines_count;
         let lower_boundary_trigger = editor.cache_window_start_line > 0
             && first_visible_line2
@@ -1536,30 +1487,26 @@ mod tests {
 
     #[test]
     fn test_large_scroll_rewindows() {
-        let content =
-            (0..1000).map(|i| format!("line{}\n", i)).collect::<String>();
+        let content = (0..1000)
+            .map(|i| format!("line{}\n", i))
+            .collect::<String>();
         let mut editor = CodeEditor::new(&content, "py");
         let height = 400.0;
         let width = 800.0;
         let initial_scroll = 0.0;
-        let visible_lines_count =
-            (height / editor.line_height).ceil() as usize + 2;
-        let first_visible_line =
-            (initial_scroll / editor.line_height).floor() as usize;
+        let visible_lines_count = (height / editor.line_height).ceil() as usize + 2;
+        let first_visible_line = (initial_scroll / editor.line_height).floor() as usize;
         let last_visible_line = first_visible_line + visible_lines_count;
         let margin = visible_lines_count * 2;
-        editor.cache_window_start_line =
-            first_visible_line.saturating_sub(margin);
+        editor.cache_window_start_line = first_visible_line.saturating_sub(margin);
         editor.cache_window_end_line = last_visible_line + margin;
         editor.viewport_height = height;
         editor.viewport_width = width;
         editor.viewport_scroll = initial_scroll;
 
         // Large scroll beyond window boundary
-        let large_scroll =
-            editor.line_height * ((visible_lines_count * 4) as f32);
-        let first_visible_line2 =
-            (large_scroll / editor.line_height).floor() as usize;
+        let large_scroll = editor.line_height * ((visible_lines_count * 4) as f32);
+        let first_visible_line2 = (large_scroll / editor.line_height).floor() as usize;
         let last_visible_line2 = first_visible_line2 + visible_lines_count;
         let window_start2 = first_visible_line2.saturating_sub(margin);
         let window_end2 = last_visible_line2 + margin;
@@ -1632,8 +1579,7 @@ mod tests {
         // Preedit with Chinese content and a selection range
         let content = "安全与合规".to_string();
         let selection = Some(0..3); // range aligned to UTF-8 character boundary
-        let _ = editor
-            .update(&Message::ImePreedit(content.clone(), selection.clone()));
+        let _ = editor.update(&Message::ImePreedit(content.clone(), selection.clone()));
 
         assert!(editor.ime_preedit.is_some());
         assert_eq!(
@@ -1956,8 +1902,7 @@ mod tests {
         editor.has_canvas_focus = false;
         editor.show_cursor = false;
 
-        let _ =
-            editor.update(&Message::MouseClick(iced::Point::new(100.0, 10.0)));
+        let _ = editor.update(&Message::MouseClick(iced::Point::new(100.0, 10.0)));
 
         assert!(editor.has_canvas_focus);
         assert!(editor.show_cursor);

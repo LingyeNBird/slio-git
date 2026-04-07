@@ -507,10 +507,14 @@ fn apply_patch_cached(repo: &Repository, patch: &str) -> Result<(), GitError> {
 
     // Write patch to a temporary file
     let mut temp_path = std::env::temp_dir();
-    temp_path.push(format!("patch_{}_{}", std::process::id(), std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos()));
+    temp_path.push(format!(
+        "patch_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
 
     std::fs::write(&temp_path, patch).map_err(|e| GitError::OperationFailed {
         operation: "apply_patch_cached".to_string(),
@@ -712,10 +716,14 @@ fn apply_patch_workdir(repo: &Repository, patch: &str) -> Result<(), GitError> {
 
     // Write patch to a temporary file
     let mut temp_path = std::env::temp_dir();
-    temp_path.push(format!("patch_{}_{}", std::process::id(), std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos()));
+    temp_path.push(format!(
+        "patch_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
 
     std::fs::write(&temp_path, patch).map_err(|e| GitError::OperationFailed {
         operation: "apply_patch_workdir".to_string(),

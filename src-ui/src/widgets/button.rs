@@ -1,7 +1,7 @@
 //! Styled button helpers shared across the Darcula shell.
 
 use crate::theme::{self, ButtonChrome, ButtonTone};
-use iced::widget::{Button, Container, Text};
+use iced::widget::{text, Button, Container, Text};
 use iced::{Element, Length};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,45 +26,45 @@ struct ButtonMetrics {
 fn metrics(role: ButtonRole) -> ButtonMetrics {
     match role {
         ButtonRole::Standard => ButtonMetrics {
-            text_size: 11,
+            text_size: theme::typography::CAPTION_SIZE as u16,
             padding: theme::density::TOOLBAR_PADDING,
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
+            height: 22,
             width: None,
         },
         ButtonRole::Compact => ButtonMetrics {
-            text_size: 10,
+            text_size: theme::typography::MICRO_SIZE as u16,
             padding: [2, 6],
-            height: theme::density::COMPACT_CONTROL_HEIGHT as u16,
+            height: 20,
             width: None,
         },
         ButtonRole::Tab => ButtonMetrics {
-            text_size: 11,
+            text_size: theme::typography::CAPTION_SIZE as u16,
             padding: [3, 9],
             height: theme::layout::EDITOR_TAB_HEIGHT as u16,
             width: None,
         },
         ButtonRole::Rail => ButtonMetrics {
-            text_size: 12,
+            text_size: theme::typography::BODY_SIZE as u16,
             padding: [5, 0],
             height: 34,
             width: Some(34.0),
         },
         ButtonRole::ToolbarIcon => ButtonMetrics {
-            text_size: 13,
+            text_size: theme::typography::TITLE_SIZE as u16,
             padding: [0, 0],
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
-            width: Some(theme::density::STANDARD_CONTROL_HEIGHT),
+            height: 22,
+            width: Some(22.0),
         },
         ButtonRole::ToolbarSplitMain => ButtonMetrics {
-            text_size: 11,
+            text_size: theme::typography::CAPTION_SIZE as u16,
             padding: theme::density::TOOLBAR_PADDING,
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
+            height: 22,
             width: None,
         },
         ButtonRole::ToolbarSplitChevron => ButtonMetrics {
-            text_size: 10,
+            text_size: theme::typography::MICRO_SIZE as u16,
             padding: [3, 0],
-            height: theme::density::STANDARD_CONTROL_HEIGHT as u16,
+            height: 22,
             width: Some(18.0),
         },
     }
@@ -88,8 +88,13 @@ fn build_button<'a, Message: Clone + 'a>(
     on_press: Option<Message>,
 ) -> Button<'a, Message> {
     let metrics = metrics(role);
-    let content = Container::new(Text::new(label.into()).size(u32::from(metrics.text_size)))
-        .center_y(Length::Fill);
+    let content = Container::new(
+        Text::new(label.into())
+            .size(u32::from(metrics.text_size))
+            .font(theme::app_font())
+            .line_height(text::LineHeight::Relative(1.0)),
+    )
+    .center_y(Length::Fill);
     let mut button = Button::new(content)
         .padding(metrics.padding)
         .height(Length::Fixed(metrics.height as f32))
@@ -193,8 +198,13 @@ pub fn toolbar_split_chevron<'a, Message: Clone + 'a>(
 ) -> Button<'a, Message> {
     let metrics = metrics(ButtonRole::ToolbarSplitChevron);
     let button = Button::new(
-        Container::new(Text::new(label.into()).size(u32::from(metrics.text_size)))
-            .center_y(Length::Fill),
+        Container::new(
+            Text::new(label.into())
+                .size(u32::from(metrics.text_size))
+                .font(theme::app_font())
+                .line_height(text::LineHeight::Relative(1.0)),
+        )
+        .center_y(Length::Fill),
     )
     .padding(metrics.padding)
     .width(Length::Fixed(metrics.width.expect("split chevron width")))
@@ -284,7 +294,14 @@ mod tests {
 
         assert_eq!(main.padding[0], chevron.padding[0]);
         assert_eq!(main.height, chevron.height);
-        assert_eq!(main.height, 24);
+        assert_eq!(main.height, 22);
+    }
+
+    #[test]
+    fn button_heights_follow_compact_type_rhythm() {
+        assert_eq!(metrics(ButtonRole::Standard).height, 22);
+        assert_eq!(metrics(ButtonRole::Compact).height, 20);
+        assert_eq!(metrics(ButtonRole::ToolbarIcon).height, 22);
     }
 
     #[test]

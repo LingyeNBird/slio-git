@@ -69,10 +69,7 @@ pub enum RefType {
 /// 2. Assign each branch tip to the leftmost available lane
 /// 3. Merge points consume the child's lane; parent continues in its lane
 /// 4. Track active lanes at each row for edge rendering
-pub fn compute_graph(
-    repo: &Repository,
-    commit_ids: &[String],
-) -> Result<Vec<GraphNode>, GitError> {
+pub fn compute_graph(repo: &Repository, commit_ids: &[String]) -> Result<Vec<GraphNode>, GitError> {
     info!("Computing graph layout for {} commits", commit_ids.len());
 
     let repo_lock = repo.inner.read().unwrap();
@@ -205,7 +202,11 @@ pub fn compute_graph(
         });
     }
 
-    info!("Graph computed: {} nodes, max {} lanes", nodes.len(), active_lanes.len());
+    info!(
+        "Graph computed: {} nodes, max {} lanes",
+        nodes.len(),
+        active_lanes.len()
+    );
     Ok(nodes)
 }
 
@@ -223,22 +224,21 @@ pub fn compute_ref_labels(repo: &Repository) -> Result<HashMap<String, Vec<RefLa
         .and_then(|h| h.target())
         .map(|oid| oid.to_string());
 
-    let head_branch = repo_lock
-        .head()
-        .ok()
-        .and_then(|h| {
-            if h.is_branch() {
-                h.shorthand().map(|s| s.to_string())
-            } else {
-                None
-            }
-        });
+    let head_branch = repo_lock.head().ok().and_then(|h| {
+        if h.is_branch() {
+            h.shorthand().map(|s| s.to_string())
+        } else {
+            None
+        }
+    });
 
     // Iterate all references
-    let refs = repo_lock.references().map_err(|e| GitError::OperationFailed {
-        operation: "compute_ref_labels".to_string(),
-        details: format!("Failed to enumerate references: {}", e),
-    })?;
+    let refs = repo_lock
+        .references()
+        .map_err(|e| GitError::OperationFailed {
+            operation: "compute_ref_labels".to_string(),
+            details: format!("Failed to enumerate references: {}", e),
+        })?;
 
     for reference in refs.flatten() {
         let name = match reference.name() {
@@ -246,10 +246,7 @@ pub fn compute_ref_labels(repo: &Repository) -> Result<HashMap<String, Vec<RefLa
             None => continue,
         };
 
-        let target = reference
-            .peel_to_commit()
-            .ok()
-            .map(|c| c.id().to_string());
+        let target = reference.peel_to_commit().ok().map(|c| c.id().to_string());
 
         let target_id = match target {
             Some(id) => id,
@@ -258,12 +255,16 @@ pub fn compute_ref_labels(repo: &Repository) -> Result<HashMap<String, Vec<RefLa
 
         let (display_name, ref_type) = if name.starts_with("refs/heads/") {
             (
-                name.strip_prefix("refs/heads/").unwrap_or(&name).to_string(),
+                name.strip_prefix("refs/heads/")
+                    .unwrap_or(&name)
+                    .to_string(),
                 RefType::LocalBranch,
             )
         } else if name.starts_with("refs/remotes/") {
             (
-                name.strip_prefix("refs/remotes/").unwrap_or(&name).to_string(),
+                name.strip_prefix("refs/remotes/")
+                    .unwrap_or(&name)
+                    .to_string(),
                 RefType::RemoteBranch,
             )
         } else if name.starts_with("refs/tags/") {
@@ -280,28 +281,22 @@ pub fn compute_ref_labels(repo: &Repository) -> Result<HashMap<String, Vec<RefLa
             _ => false,
         };
 
-        labels
-            .entry(target_id)
-            .or_default()
-            .push(RefLabel {
-                name: display_name,
-                ref_type,
-                is_current,
-            });
+        labels.entry(target_id).or_default().push(RefLabel {
+            name: display_name,
+            ref_type,
+            is_current,
+        });
     }
 
     // Add HEAD label
     if let Some(head_id) = head_target {
         if head_branch.is_none() {
             // Detached HEAD
-            labels
-                .entry(head_id)
-                .or_default()
-                .push(RefLabel {
-                    name: "HEAD".to_string(),
-                    ref_type: RefType::Head,
-                    is_current: true,
-                });
+            labels.entry(head_id).or_default().push(RefLabel {
+                name: "HEAD".to_string(),
+                ref_type: RefType::Head,
+                is_current: true,
+            });
         }
     }
 

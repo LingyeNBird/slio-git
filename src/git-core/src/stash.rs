@@ -253,11 +253,7 @@ pub fn stash_diff(repo: &Repository, index: u32) -> Result<String, GitError> {
 
 /// Apply a stash to a new branch (git stash branch <name> stash@{N}).
 /// Creates the branch, applies the stash, and removes it from the stash list.
-pub fn unstash_as_branch(
-    repo: &Repository,
-    index: u32,
-    branch_name: &str,
-) -> Result<(), GitError> {
+pub fn unstash_as_branch(repo: &Repository, index: u32, branch_name: &str) -> Result<(), GitError> {
     info!(
         "Applying stash@{{{}}} to new branch '{}'",
         index, branch_name
@@ -285,10 +281,7 @@ pub fn unstash_as_branch(
         });
     }
 
-    info!(
-        "Stash applied to new branch '{}' successfully",
-        branch_name
-    );
+    info!("Stash applied to new branch '{}' successfully", branch_name);
     Ok(())
 }
 

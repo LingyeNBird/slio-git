@@ -4,9 +4,9 @@ pub mod button;
 pub mod changelist;
 pub mod commit_compare;
 pub mod commit_panel;
+pub mod conflict_resolver;
 pub mod diff_core;
 pub mod diff_editor;
-pub mod conflict_resolver;
 pub mod diff_file_header;
 pub mod diff_viewer;
 pub mod file_picker;
@@ -21,7 +21,7 @@ pub mod text_input;
 pub mod tree_widget;
 
 use crate::theme::{self, BadgeTone, Surface};
-use iced::widget::{container, Column, Container, Row, Space, Text};
+use iced::widget::{container, text, Checkbox, Column, Container, Row, Space, Text};
 use iced::{Alignment, Background, Element, Length};
 
 pub trait OptionalPush<'a, Message, Theme, Renderer>: Sized {
@@ -72,13 +72,13 @@ pub fn stat_card<'a, Message: 'a>(
             .spacing(theme::spacing::SM)
             .push(
                 Text::new(label)
-                    .size(10)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             )
             .push(Text::new(value).size(20))
             .push(
                 Text::new(detail)
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             ),
     )
@@ -91,8 +91,14 @@ pub fn info_chip<'a, Message: 'a>(
     label: impl Into<String>,
     tone: BadgeTone,
 ) -> Element<'a, Message> {
-    Container::new(Text::new(label.into()).size(10))
+    Container::new(
+        Text::new(label.into())
+            .size(theme::typography::MICRO_SIZE)
+            .font(theme::app_font())
+            .line_height(text::LineHeight::Relative(1.0)),
+    )
         .padding([3, 8])
+        .center_y(Length::Fixed(theme::density::CHIP_HEIGHT))
         .style(theme::badge_style(tone))
         .into()
 }
@@ -109,10 +115,21 @@ pub fn info_chip_with_icon<'a, Message: 'a>(
         Row::new()
             .spacing(4)
             .align_y(Alignment::Center)
-            .push(Text::new(icon).size(10))
-            .push(Text::new(label_text).size(10)),
+            .push(
+                Text::new(icon)
+                    .size(theme::typography::MICRO_SIZE)
+                    .font(theme::app_font())
+                    .line_height(text::LineHeight::Relative(1.0)),
+            )
+            .push(
+                Text::new(label_text)
+                    .size(theme::typography::MICRO_SIZE)
+                    .font(theme::app_font())
+                    .line_height(text::LineHeight::Relative(1.0)),
+            ),
     )
     .padding([3, 8])
+    .center_y(Length::Fixed(theme::density::CHIP_HEIGHT))
     .style(theme::badge_style(tone))
     .into()
 }
@@ -121,10 +138,36 @@ pub fn compact_chip<'a, Message: 'a>(
     label: impl Into<String>,
     tone: BadgeTone,
 ) -> Element<'a, Message> {
-    Container::new(Text::new(label.into()).size(10))
+    Container::new(
+        Text::new(label.into())
+            .size(theme::typography::MICRO_SIZE)
+            .font(theme::app_font())
+            .line_height(text::LineHeight::Relative(1.0)),
+    )
         .padding(theme::density::COMPACT_CHIP_PADDING)
+        .center_y(Length::Fixed(theme::density::CHIP_HEIGHT))
         .style(theme::badge_style(tone))
         .into()
+}
+
+pub fn compact_checkbox<'a, Message: Clone + 'a>(
+    checked: bool,
+    label: impl Into<String>,
+    on_toggle: impl Fn(bool) -> Message + 'a,
+) -> Element<'a, Message> {
+    Container::new(
+        Checkbox::new(checked)
+            .label(label.into())
+            .size(theme::density::CHECKBOX_SIZE)
+            .spacing(theme::density::CHECKBOX_SPACING)
+            .text_size(theme::typography::CAPTION_SIZE)
+            .text_line_height(text::LineHeight::Relative(1.0))
+            .font(theme::app_font())
+            .style(theme::checkbox_style())
+            .on_toggle(on_toggle),
+    )
+    .center_y(Length::Fixed(theme::density::STANDARD_CONTROL_HEIGHT))
+    .into()
 }
 
 /// IDEA-style loading spinner with animated dots
@@ -135,10 +178,14 @@ pub fn loading_spinner<'a, Message: 'a>() -> Element<'a, Message> {
         Row::new()
             .spacing(2)
             .align_y(Alignment::Center)
-            .push(Text::new("◐").size(12).color(theme::darcula::ACCENT))
+            .push(
+                Text::new("◐")
+                    .size(theme::typography::CAPTION_SIZE)
+                    .color(theme::darcula::ACCENT),
+            )
             .push(
                 Text::new("◑")
-                    .size(12)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             ),
     )
@@ -154,10 +201,14 @@ pub fn inline_loading<'a, Message: Clone + 'a>(label: &'a str) -> Element<'a, Me
             .align_y(Alignment::Center)
             .push(
                 Text::new(label)
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             )
-            .push(Text::new("…").size(11).color(theme::darcula::TEXT_DISABLED)),
+            .push(
+                Text::new("…")
+                    .size(theme::typography::CAPTION_SIZE)
+                    .color(theme::darcula::TEXT_DISABLED),
+            ),
     )
     .into()
 }
@@ -173,16 +224,16 @@ pub fn section_header<'a, Message: 'a>(
         .push(
             Container::new(
                 Text::new(eyebrow_text)
-                    .size(10)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::ACCENT),
             )
             .padding([4, 10])
             .style(theme::badge_style(BadgeTone::Accent)),
         )
-        .push(Text::new(title).size(18))
+        .push(Text::new(title).size(theme::typography::TITLE_SIZE))
         .push(
             Text::new(detail)
-                .size(12)
+                .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         )
         .into()
@@ -207,7 +258,7 @@ pub fn status_banner<'a, Message: 'a>(
             .push(info_chip::<Message>(label, tone))
             .push(
                 Text::new(detail.into())
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
                     .color(theme::darcula::TEXT_SECONDARY),
             ),
@@ -230,16 +281,16 @@ pub fn panel_empty_state<'a, Message: 'a>(
         .push(
             Container::new(
                 Text::new(eyebrow_text.to_uppercase())
-                    .size(10)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::ACCENT),
             )
             .padding([4, 10])
             .style(theme::badge_style(BadgeTone::Accent)),
         )
-        .push(Text::new(title.into()).size(18))
+        .push(Text::new(title.into()).size(theme::typography::TITLE_SIZE))
         .push(
             Text::new(detail.into())
-                .size(12)
+                .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         );
 
@@ -268,12 +319,12 @@ pub fn panel_empty_state_compact<'a, Message: 'a>(
             .align_x(Alignment::Center)
             .push(
                 Text::new(title.into())
-                    .size(13)
+                    .size(theme::typography::BODY_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             )
             .push(
                 Text::new(detail.into())
-                    .size(10)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::TEXT_DISABLED),
             ),
     )
@@ -313,7 +364,7 @@ pub fn separator_with_text<'a, Message: Clone + 'a>(
                         )
                         .push(
                             Text::new(text.to_uppercase())
-                                .size(10)
+                                .size(theme::typography::MICRO_SIZE)
                                 .color(theme::darcula::TEXT_DISABLED),
                         )
                         .push(

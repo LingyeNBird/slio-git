@@ -8,7 +8,7 @@ use git_core::{
     tag::{create_lightweight_tag, create_tag, delete_tag, list_tags, TagInfo},
     Repository,
 };
-use iced::widget::{text, Button, Checkbox, Column, Container, Row, Text};
+use iced::widget::{text, Button, Column, Container, Row, Text};
 use iced::{Alignment, Element, Length};
 
 /// Message types for tag dialog.
@@ -270,11 +270,11 @@ fn build_tag_form(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
             TagDialogMessage::SetTagName,
         ))
         .push(
-            Checkbox::new(state.is_force)
-                .label("强制覆盖已有标签")
-                .size(13)
-                .style(theme::checkbox_style())
-                .on_toggle(TagDialogMessage::SetForceTag),
+            widgets::compact_checkbox(
+                state.is_force,
+                "强制覆盖已有标签",
+                TagDialogMessage::SetForceTag,
+            ),
         )
         .push(
             Row::new()
@@ -315,11 +315,11 @@ fn build_tag_form(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
             TagDialogMessage::SetMessage,
         ))
         .push(
-            Checkbox::new(state.is_lightweight)
-                .label("创建轻量标签")
-                .size(13)
-                .style(theme::checkbox_style())
-                .on_toggle(TagDialogMessage::SetLightweight),
+            widgets::compact_checkbox(
+                state.is_lightweight,
+                "创建轻量标签",
+                TagDialogMessage::SetLightweight,
+            ),
         );
 
     Container::new(form)
@@ -425,12 +425,9 @@ pub fn view(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
                 format!("总数 {}", state.tags.len()),
                 BadgeTone::Neutral,
             ))
-            .push_maybe(
-                state
-                    .selected_tag
-                    .as_ref()
-                    .map(|tag| widgets::info_chip::<TagDialogMessage>(format!("已选 {tag}"), BadgeTone::Accent)),
-            )
+            .push_maybe(state.selected_tag.as_ref().map(|tag| {
+                widgets::info_chip::<TagDialogMessage>(format!("已选 {tag}"), BadgeTone::Accent)
+            }))
             .push(button::ghost("刷新", Some(TagDialogMessage::Refresh)))
             .push(button::ghost("关闭", Some(TagDialogMessage::Close))),
     )

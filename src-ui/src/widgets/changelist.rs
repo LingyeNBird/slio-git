@@ -92,7 +92,11 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
         self
     }
 
-    pub fn with_collapsed_state(mut self, staged_collapsed: bool, unstaged_collapsed: bool) -> Self {
+    pub fn with_collapsed_state(
+        mut self,
+        staged_collapsed: bool,
+        unstaged_collapsed: bool,
+    ) -> Self {
         self.staged_collapsed = staged_collapsed;
         self.unstaged_collapsed = unstaged_collapsed;
         self
@@ -178,11 +182,8 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
         }
 
         // Unstaged + Untracked group (combined under "Unstaged Changes")
-        let unstaged_combined: Vec<&Change> = self
-            .unstaged
-            .iter()
-            .chain(self.untracked.iter())
-            .collect();
+        let unstaged_combined: Vec<&Change> =
+            self.unstaged.iter().chain(self.untracked.iter()).collect();
         if !unstaged_combined.is_empty() {
             sections = sections.push(self.build_collapsible_section_refs(
                 self.i18n.unstaged_changes,
@@ -197,10 +198,14 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
 
         if let Some(handler) = self.on_track_cursor.as_ref() {
             let handle = handler.clone();
-            mouse_area(Container::new(scrollable).width(Length::Fill).height(Length::Fill))
-                .on_move(move |point| handle(point))
-                .interaction(mouse::Interaction::Pointer)
-                .into()
+            mouse_area(
+                Container::new(scrollable)
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            )
+            .on_move(move |point| handle(point))
+            .interaction(mouse::Interaction::Pointer)
+            .into()
         } else {
             scrollable.into()
         }
@@ -220,18 +225,16 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
-            .push(Text::new(self.i18n.changes).size(12))
+            .push(Text::new(self.i18n.changes).size(theme::typography::BODY_SIZE))
             .push(widgets::info_chip::<Message>(
                 (self.staged.len() + self.unstaged.len() + self.untracked.len()).to_string(),
                 BadgeTone::Neutral,
             ))
             .push(Space::new().width(Length::Fill))
-            .push(
-                crate::widgets::button::toolbar_icon(
-                    mode_icon,
-                    self.on_toggle_display_mode.clone(),
-                ),
-            )
+            .push(crate::widgets::button::toolbar_icon(
+                mode_icon,
+                self.on_toggle_display_mode.clone(),
+            ))
             .into()
     }
 
@@ -262,12 +265,12 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
             .align_y(Alignment::Center)
             .push(
                 Text::new(expand_icon)
-                    .size(10)
+                    .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             )
             .push(
                 Text::new(title)
-                    .size(11)
+                    .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY),
             )
             .push(widgets::info_chip::<Message>(
@@ -331,12 +334,12 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
                             .push(Space::new().width(Length::Fixed(16.0)))
                             .push(
                                 Text::new("📁")
-                                    .size(10)
+                                    .size(theme::typography::MICRO_SIZE)
                                     .color(theme::darcula::TEXT_DISABLED),
                             )
                             .push(
                                 Text::new(dir.clone())
-                                    .size(10)
+                                    .size(theme::typography::MICRO_SIZE)
                                     .color(theme::darcula::TEXT_DISABLED),
                             ),
                     )
@@ -367,8 +370,12 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
             .push(
-                Container::new(Text::new(status.symbol()).size(11).color(status.color()))
-                    .width(Length::Fixed(14.0)),
+                Container::new(
+                    Text::new(status.symbol())
+                        .size(theme::typography::CAPTION_SIZE)
+                        .color(status.color()),
+                )
+                .width(Length::Fixed(14.0)),
             );
 
         match self.display_mode {
@@ -376,14 +383,14 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
                 // Show filename + parent path
                 let mut name_col = Column::new().spacing(1).width(Length::Fill).push(
                     Text::new(file_name)
-                        .size(11)
+                        .size(theme::typography::CAPTION_SIZE)
                         .width(Length::Fill)
                         .wrapping(text::Wrapping::WordOrGlyph),
                 );
                 if !parent_path.is_empty() {
                     name_col = name_col.push(
                         Text::new(parent_path)
-                            .size(9)
+                            .size(theme::typography::MICRO_SIZE)
                             .width(Length::Fill)
                             .wrapping(text::Wrapping::WordOrGlyph)
                             .color(theme::darcula::TEXT_SECONDARY),
@@ -395,7 +402,7 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
                 // Show just filename (directory is shown as group header)
                 info_row = info_row.push(
                     Text::new(file_name)
-                        .size(11)
+                        .size(theme::typography::CAPTION_SIZE)
                         .width(Length::Fill)
                         .wrapping(text::Wrapping::WordOrGlyph),
                 );
@@ -407,7 +414,7 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
             if let Some(summary) = &change.submodule_summary {
                 info_row = info_row.push(
                     Text::new(format!("⊞ {}", summary))
-                        .size(9)
+                        .size(theme::typography::MICRO_SIZE)
                         .color(theme::darcula::TEXT_DISABLED),
                 );
             }
@@ -417,21 +424,29 @@ impl<'a, Message: Clone + 'a> ChangesList<'a, Message> {
         let action_button: Element<'a, Message> = if staged {
             if let Some(handler) = &self.on_unstage {
                 let msg = handler(change.path.clone());
-                Button::new(Text::new("−").size(11).color(theme::darcula::STATUS_DELETED))
-                    .style(theme::button_style(theme::ButtonTone::Ghost))
-                    .padding([0, 4])
-                    .on_press(msg)
-                    .into()
+                Button::new(
+                    Text::new("−")
+                        .size(theme::typography::CAPTION_SIZE)
+                        .color(theme::darcula::STATUS_DELETED),
+                )
+                .style(theme::button_style(theme::ButtonTone::Ghost))
+                .padding([0, 4])
+                .on_press(msg)
+                .into()
             } else {
                 Space::new().width(Length::Fixed(18.0)).into()
             }
         } else if let Some(handler) = &self.on_stage {
             let msg = handler(change.path.clone());
-            Button::new(Text::new("+").size(11).color(theme::darcula::STATUS_ADDED))
-                .style(theme::button_style(theme::ButtonTone::Ghost))
-                .padding([0, 4])
-                .on_press(msg)
-                .into()
+            Button::new(
+                Text::new("+")
+                    .size(theme::typography::CAPTION_SIZE)
+                    .color(theme::darcula::STATUS_ADDED),
+            )
+            .style(theme::button_style(theme::ButtonTone::Ghost))
+            .padding([0, 4])
+            .on_press(msg)
+            .into()
         } else {
             Space::new().width(Length::Fixed(18.0)).into()
         };

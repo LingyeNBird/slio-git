@@ -33,31 +33,22 @@ pub fn log_tabs_view<'a, Message: Clone + 'a>(
         let is_active = tab.is_active;
         let on_msg = on_message.clone();
 
-        let label = Text::new(tab.label)
-            .size(12)
-            .color(if is_active {
-                theme::darcula::TEXT_PRIMARY
-            } else {
-                theme::darcula::TEXT_SECONDARY
-            });
+        let label = Text::new(tab.label).size(12).color(if is_active {
+            theme::darcula::TEXT_PRIMARY
+        } else {
+            theme::darcula::TEXT_SECONDARY
+        });
 
-        let mut tab_content = Row::new()
-            .spacing(4)
-            .align_y(Alignment::Center)
-            .push(label);
+        let mut tab_content = Row::new().spacing(4).align_y(Alignment::Center).push(label);
 
         if tab.is_closable {
             let close_idx = i;
             let on_msg_close = on_message.clone();
             tab_content = tab_content.push(
-                button(
-                    Text::new("×")
-                        .size(10)
-                        .color(theme::darcula::TEXT_DISABLED),
-                )
-                .style(|_, _| button::Style::default())
-                .padding(0)
-                .on_press(on_msg_close(LogTabsMessage::CloseTab(close_idx))),
+                button(Text::new("×").size(10).color(theme::darcula::TEXT_DISABLED))
+                    .style(|_, _| button::Style::default())
+                    .padding(0)
+                    .on_press(on_msg_close(LogTabsMessage::CloseTab(close_idx))),
             );
         }
 
@@ -99,14 +90,10 @@ pub fn log_tabs_view<'a, Message: Clone + 'a>(
     // Add "+" button for new tab
     let on_msg_new = on_message.clone();
     row = row.push(
-        button(
-            Text::new("+")
-                .size(12)
-                .color(theme::darcula::TEXT_DISABLED),
-        )
-        .style(|_, _| button::Style::default())
-        .padding([6, 10])
-        .on_press(on_msg_new(LogTabsMessage::NewTab)),
+        button(Text::new("+").size(12).color(theme::darcula::TEXT_DISABLED))
+            .style(|_, _| button::Style::default())
+            .padding([6, 10])
+            .on_press(on_msg_new(LogTabsMessage::NewTab)),
     );
 
     Container::new(row).width(Length::Fill).into()

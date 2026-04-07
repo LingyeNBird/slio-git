@@ -313,11 +313,7 @@ pub fn push(
 }
 
 /// Force push with --force-with-lease semantics
-pub fn force_push(
-    repo: &Repository,
-    remote_name: &str,
-    branch_name: &str,
-) -> Result<(), GitError> {
+pub fn force_push(repo: &Repository, remote_name: &str, branch_name: &str) -> Result<(), GitError> {
     info!(
         "Force pushing branch '{}' to remote '{}' (--force-with-lease)",
         branch_name, remote_name
@@ -326,12 +322,7 @@ pub fn force_push(
     let repo_path = repo.command_cwd();
 
     let output = std::process::Command::new("git")
-        .args([
-            "push",
-            "--force-with-lease",
-            remote_name,
-            branch_name,
-        ])
+        .args(["push", "--force-with-lease", remote_name, branch_name])
         .current_dir(&repo_path)
         .output()
         .map_err(|e| GitError::OperationFailed {

@@ -6,8 +6,7 @@ use log::info;
 use std::process::Command;
 
 /// A Git tag
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TagInfo {
     pub name: String,
     pub target: String,
@@ -17,7 +16,6 @@ pub struct TagInfo {
     pub tagged_time: Option<i64>,
 }
 
-
 /// List all tags with full metadata.
 pub fn list_tags(repo: &Repository) -> Result<Vec<TagInfo>, GitError> {
     info!("Listing all tags");
@@ -26,16 +24,22 @@ pub fn list_tags(repo: &Repository) -> Result<Vec<TagInfo>, GitError> {
 
     // Use for-each-ref with explicit format to get reliable tab-separated output.
     let format_arg = concat!(
-        "%(refname:short)%01",  // name (unit-separated)
+        "%(refname:short)%01",    // name (unit-separated)
         "%(objectname:short)%01", // target commit
         "%(if)%(contents:body)%(then)%(contents:body)%(end)%01", // message body
-        "%(taggername)%01",     // tagger name
-        "%(taggeremail)%01",    // tagger email
-        "%(taggerdate:unix)",   // timestamp
+        "%(taggername)%01",       // tagger name
+        "%(taggeremail)%01",      // tagger email
+        "%(taggerdate:unix)",     // timestamp
     );
 
     let output = Command::new("git")
-        .args(["for-each-ref", "--sort=-taggerdate", "--format", format_arg, "refs/tags/"])
+        .args([
+            "for-each-ref",
+            "--sort=-taggerdate",
+            "--format",
+            format_arg,
+            "refs/tags/",
+        ])
         .current_dir(&repo_path)
         .output()
         .map_err(|e| GitError::OperationFailed {
@@ -69,18 +73,33 @@ pub fn list_tags(repo: &Repository) -> Result<Vec<TagInfo>, GitError> {
             continue;
         }
 
-        let target = fields.get(1).map(|s| s.trim().to_string()).unwrap_or_default();
+        let target = fields
+            .get(1)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
         let message = fields.get(2).and_then(|s| {
             let trimmed = s.trim();
-            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
         });
         let tagger_name = fields.get(3).and_then(|s| {
             let trimmed = s.trim();
-            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
         });
         let tagger_email = fields.get(4).and_then(|s| {
             let trimmed = s.trim();
-            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
         });
         let tagged_time = fields.get(5).and_then(|s| s.trim().parse::<i64>().ok());
 
@@ -230,10 +249,7 @@ pub fn push_tag(repo: &Repository, tag_name: &str, remote: &str) -> Result<(), G
 
 /// Delete a tag from a remote
 pub fn delete_remote_tag(repo: &Repository, tag_name: &str, remote: &str) -> Result<(), GitError> {
-    info!(
-        "Deleting tag '{}' from remote '{}'",
-        tag_name, remote
-    );
+    info!("Deleting tag '{}' from remote '{}'", tag_name, remote);
 
     let repo_path = repo.command_cwd();
     let refspec = format!(":refs/tags/{}", tag_name);

@@ -160,7 +160,10 @@ pub fn get_default_signature(repo: &Repository) -> Result<git2::Signature<'stati
 
 /// Validate a commit reference (hash, branch name, tag, etc.)
 /// Returns the resolved full hash and first line of commit message if valid.
-pub fn validate_commit_ref(repo: &Repository, reference: &str) -> Result<(String, String), GitError> {
+pub fn validate_commit_ref(
+    repo: &Repository,
+    reference: &str,
+) -> Result<(String, String), GitError> {
     let repo_lock = repo.inner.read().unwrap();
     let object = repo_lock
         .revparse_single(reference)
@@ -234,8 +237,7 @@ pub fn load_recent_messages(repo_path: &Path) -> Vec<String> {
     };
 
     let key = repo_path.to_string_lossy().to_string();
-    let map: HashMap<String, Vec<String>> =
-        serde_json::from_str(&content).unwrap_or_default();
+    let map: HashMap<String, Vec<String>> = serde_json::from_str(&content).unwrap_or_default();
 
     map.get(&key).cloned().unwrap_or_default()
 }

@@ -3,9 +3,7 @@
 //! This module provides a custom Canvas widget that handles all text rendering
 //! and input directly, bypassing Iced's higher-level widgets for optimal speed.
 
-use iced::advanced::text::{
-    Alignment, Paragraph, Renderer as TextRenderer, Text,
-};
+use iced::advanced::text::{Alignment, Paragraph, Renderer as TextRenderer, Text};
 use iced::widget::operation::{RelativeOffset, scroll_to, snap_to};
 use iced::widget::{Id, canvas};
 use std::cell::{Cell, RefCell};
@@ -54,8 +52,7 @@ pub(crate) const LINE_HEIGHT: f32 = 20.0;
 pub(crate) const CHAR_WIDTH: f32 = 8.4; // Monospace character width
 pub(crate) const TAB_WIDTH: usize = 4;
 pub(crate) const GUTTER_WIDTH: f32 = 45.0;
-pub(crate) const CURSOR_BLINK_INTERVAL: std::time::Duration =
-    std::time::Duration::from_millis(530);
+pub(crate) const CURSOR_BLINK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(530);
 
 /// Measures the width of a single character.
 ///
@@ -68,11 +65,7 @@ pub(crate) const CURSOR_BLINK_INTERVAL: std::time::Duration =
 /// # Returns
 ///
 /// The calculated width of the character as a `f32`
-pub(crate) fn measure_char_width(
-    c: char,
-    full_char_width: f32,
-    char_width: f32,
-) -> f32 {
+pub(crate) fn measure_char_width(c: char, full_char_width: f32, char_width: f32) -> f32 {
     if c == '\t' {
         return char_width * TAB_WIDTH as f32;
     }
@@ -98,11 +91,7 @@ pub(crate) fn measure_char_width(
 /// # Returns
 ///
 /// The total calculated width of the text as a `f32`
-pub(crate) fn measure_text_width(
-    text: &str,
-    full_char_width: f32,
-    char_width: f32,
-) -> f32 {
+pub(crate) fn measure_text_width(text: &str, full_char_width: f32, char_width: f32) -> f32 {
     text.chars()
         .map(|c| measure_char_width(c, full_char_width, char_width))
         .sum()
@@ -787,7 +776,9 @@ impl CodeEditor {
     ///
     /// * `document` - Document metadata describing the buffer
     pub fn lsp_open_document(&mut self, mut document: lsp::LspDocument) {
-        let Some(client) = self.lsp_client.as_mut() else { return };
+        let Some(client) = self.lsp_client.as_mut() else {
+            return;
+        };
         if let Some(current) = self.lsp_document.as_ref() {
             client.did_close(current);
         }
@@ -854,10 +845,7 @@ impl CodeEditor {
     /// Requests hover information at an explicit LSP position.
     ///
     /// Returns `true` if an LSP client is attached and the request was sent.
-    pub fn lsp_request_hover_at_position(
-        &mut self,
-        position: lsp::LspPosition,
-    ) -> bool {
+    pub fn lsp_request_hover_at_position(&mut self, position: lsp::LspPosition) -> bool {
         if let (Some(client), Some(document)) =
             (self.lsp_client.as_mut(), self.lsp_document.as_ref())
         {
@@ -868,10 +856,7 @@ impl CodeEditor {
     }
 
     /// Converts a canvas point to an LSP position, if possible.
-    pub fn lsp_position_at_point(
-        &self,
-        point: iced::Point,
-    ) -> Option<lsp::LspPosition> {
+    pub fn lsp_position_at_point(&self, point: iced::Point) -> Option<lsp::LspPosition> {
         self.lsp_position_from_point(point)
     }
 
@@ -887,8 +872,7 @@ impl CodeEditor {
         let (line, col) = self.calculate_cursor_from_point(point)?;
         let line_content = self.buffer.line(line);
         let anchor_col = Self::word_start_in_line(line_content, col);
-        let anchor_point =
-            self.point_from_position(line, anchor_col).unwrap_or(point);
+        let anchor_point = self.point_from_position(line, anchor_col).unwrap_or(point);
         let line = u32::try_from(line).unwrap_or(u32::MAX);
         let character = u32::try_from(anchor_col).unwrap_or(u32::MAX);
         Some((lsp::LspPosition { line, character }, anchor_point))
@@ -1035,10 +1019,7 @@ impl CodeEditor {
     }
 
     /// Converts a canvas point into an LSP position, if it hits the buffer.
-    fn lsp_position_from_point(
-        &self,
-        point: iced::Point,
-    ) -> Option<lsp::LspPosition> {
+    fn lsp_position_from_point(&self, point: iced::Point) -> Option<lsp::LspPosition> {
         let (line, col) = self.calculate_cursor_from_point(point)?;
         let line = u32::try_from(line).unwrap_or(u32::MAX);
         let character = u32::try_from(col).unwrap_or(u32::MAX);
@@ -1046,17 +1027,10 @@ impl CodeEditor {
     }
 
     /// Converts a logical buffer position into a canvas point, if visible.
-    fn point_from_position(
-        &self,
-        line: usize,
-        col: usize,
-    ) -> Option<iced::Point> {
+    fn point_from_position(&self, line: usize, col: usize) -> Option<iced::Point> {
         let visual_lines = self.visual_lines_cached(self.viewport_width);
-        let visual_index = wrapping::WrappingCalculator::logical_to_visual(
-            &visual_lines,
-            line,
-            col,
-        )?;
+        let visual_index =
+            wrapping::WrappingCalculator::logical_to_visual(&visual_lines, line, col)?;
         let visual_line = &visual_lines[visual_index];
         let line_content = self.buffer.line(visual_line.logical_line);
         let prefix_len = col.saturating_sub(visual_line.start_col);
@@ -1067,11 +1041,7 @@ impl CodeEditor {
             .collect();
         let x = self.gutter_width()
             + 5.0
-            + measure_text_width(
-                &prefix_text,
-                self.full_char_width,
-                self.char_width,
-            );
+            + measure_text_width(&prefix_text, self.full_char_width, self.char_width);
         let y = visual_index as f32 * self.line_height;
         Some(iced::Point::new(x, y))
     }
@@ -1456,7 +1426,11 @@ impl CodeEditor {
     ///
     /// `GUTTER_WIDTH` if line numbers are enabled, `0.0` otherwise
     pub fn gutter_width(&self) -> f32 {
-        if self.line_numbers_enabled { GUTTER_WIDTH } else { 0.0 }
+        if self.line_numbers_enabled {
+            GUTTER_WIDTH
+        } else {
+            0.0
+        }
     }
 
     /// Removes canvas focus from this editor.
@@ -1565,13 +1539,7 @@ impl CodeEditor {
 
         let gutter = self.gutter_width();
         let max_line_width = (0..self.buffer.line_count())
-            .map(|i| {
-                measure_text_width(
-                    self.buffer.line(i),
-                    self.full_char_width,
-                    self.char_width,
-                )
-            })
+            .map(|i| measure_text_width(self.buffer.line(i), self.full_char_width, self.char_width))
             .fold(0.0_f32, f32::max);
 
         // gutter + left padding + text + right margin
@@ -1597,10 +1565,7 @@ impl CodeEditor {
     /// The returned `Rc<Vec<VisualLine>>` is cheap to clone and allows multiple
     /// rendering passes (content + overlay layers) to share the same computed
     /// layout without extra allocation.
-    pub(crate) fn visual_lines_cached(
-        &self,
-        viewport_width: f32,
-    ) -> Rc<Vec<wrapping::VisualLine>> {
+    pub(crate) fn visual_lines_cached(&self, viewport_width: f32) -> Rc<Vec<wrapping::VisualLine>> {
         let key = VisualLinesKey {
             buffer_revision: self.buffer_revision,
             viewport_width_bits: viewport_width.to_bits(),
@@ -1624,15 +1589,14 @@ impl CodeEditor {
             self.full_char_width,
             self.char_width,
         );
-        let visual_lines = wrapping_calc.calculate_visual_lines(
-            &self.buffer,
-            viewport_width,
-            self.gutter_width(),
-        );
+        let visual_lines =
+            wrapping_calc.calculate_visual_lines(&self.buffer, viewport_width, self.gutter_width());
         let visual_lines = Rc::new(visual_lines);
 
-        *cache =
-            Some(VisualLinesCache { key, visual_lines: visual_lines.clone() });
+        *cache = Some(VisualLinesCache {
+            key,
+            visual_lines: visual_lines.clone(),
+        });
         visual_lines
     }
 
@@ -1823,8 +1787,7 @@ mod tests {
         // "漢字" (Kanji, 2 chars) -> 2 * FONT_SIZE
 
         let text_hiragana = "こんにちは";
-        let width_hiragana =
-            measure_text_width(text_hiragana, FONT_SIZE, CHAR_WIDTH);
+        let width_hiragana = measure_text_width(text_hiragana, FONT_SIZE, CHAR_WIDTH);
         let expected_hiragana = FONT_SIZE * 5.0;
         assert_eq!(
             compare_floats(width_hiragana, expected_hiragana),
@@ -1833,8 +1796,7 @@ mod tests {
         );
 
         let text_katakana = "カタカナ";
-        let width_katakana =
-            measure_text_width(text_katakana, FONT_SIZE, CHAR_WIDTH);
+        let width_katakana = measure_text_width(text_katakana, FONT_SIZE, CHAR_WIDTH);
         let expected_katakana = FONT_SIZE * 4.0;
         assert_eq!(
             compare_floats(width_katakana, expected_katakana),
@@ -1943,11 +1905,7 @@ mod tests {
     }
 
     impl lsp::LspClient for TestLspClient {
-        fn did_change(
-            &mut self,
-            _document: &lsp::LspDocument,
-            changes: &[lsp::LspTextChange],
-        ) {
+        fn did_change(&mut self, _document: &lsp::LspDocument, changes: &[lsp::LspTextChange]) {
             self.changes.borrow_mut().push(changes.to_vec());
         }
     }
@@ -1965,7 +1923,9 @@ mod tests {
     #[test]
     fn test_enqueue_lsp_change_auto_flush() {
         let changes = Rc::new(RefCell::new(Vec::new()));
-        let client = TestLspClient { changes: Rc::clone(&changes) };
+        let client = TestLspClient {
+            changes: Rc::clone(&changes),
+        };
         let mut editor = CodeEditor::new("hello", "rs");
         editor.attach_lsp(
             Box::new(client),
@@ -2017,8 +1977,7 @@ mod tests {
     #[test]
     fn test_max_content_width_increases_with_longer_lines() {
         let short = CodeEditor::new("ab", "rs");
-        let long =
-            CodeEditor::new("abcdefghijklmnopqrstuvwxyz0123456789", "rs");
+        let long = CodeEditor::new("abcdefghijklmnopqrstuvwxyz0123456789", "rs");
 
         assert!(
             long.max_content_width() > short.max_content_width(),
@@ -2041,9 +2000,7 @@ mod tests {
         // Bump revision to simulate edit
         editor.buffer_revision = editor.buffer_revision.wrapping_add(1);
         // Update the buffer to reflect a longer line
-        editor.buffer = crate::text_buffer::TextBuffer::new(
-            "hello world with extra content",
-        );
+        editor.buffer = crate::text_buffer::TextBuffer::new("hello world with extra content");
         let w3 = editor.max_content_width();
         assert!(
             w3 > w1,

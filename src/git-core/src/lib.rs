@@ -104,7 +104,9 @@ pub use tag::{
 
 // New modules for IDEA git parity
 pub use blame::{blame_file, BlameEntry};
-pub use graph::{compute_graph, compute_ref_labels, EdgeType, GraphEdge, GraphNode, RefLabel, RefType};
+pub use graph::{
+    compute_graph, compute_ref_labels, EdgeType, GraphEdge, GraphNode, RefLabel, RefType,
+};
 pub use signature::{verify_commit_signature, SignatureCache, SignatureStatus, SignatureType};
 pub use submodule::{is_submodule, list_submodules, submodule_summary, SubmoduleChange};
 pub use worktree::{create_worktree, list_worktrees, remove_worktree, WorkingTree};

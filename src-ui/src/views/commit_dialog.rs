@@ -433,7 +433,7 @@ pub fn view(state: &CommitDialogState) -> Element<'_, CommitDialogMessage> {
                 text_editor(&state.message_editor)
                     .placeholder("输入提交消息（第一行为标题）...")
                     .padding([8, 10])
-                    .size(f32::from(theme::typography::BODY_SIZE))
+                    .size(theme::typography::BODY_SIZE as f32)
                     .height(Length::Fixed(88.0))
                     .style(theme::text_editor_style())
                     .on_action(CommitDialogMessage::MessageEdited),
@@ -516,21 +516,30 @@ pub fn view(state: &CommitDialogState) -> Element<'_, CommitDialogMessage> {
             .push_maybe((!state.is_committing).then(|| {
                 Container::new(
                     Row::new()
-                        .spacing(theme::spacing::SM)
+                        .spacing(theme::density::CHECKBOX_SPACING)
                         .align_y(Alignment::Center)
                         .push(
                             Checkbox::new(state.is_amend)
-                                .size(16)
+                                .size(theme::density::CHECKBOX_SIZE)
                                 .style(theme::checkbox_style())
+                                .text_line_height(text::LineHeight::Relative(1.0))
                                 .on_toggle(amend_checkbox_message),
                         )
-                        .push(Text::new("修正提交").size(12).color(if state.is_amend {
-                            theme::darcula::TEXT_PRIMARY
-                        } else {
-                            theme::darcula::TEXT_SECONDARY
-                        })),
+                        .push(
+                            Text::new("修正提交")
+                                .size(theme::typography::CAPTION_SIZE)
+                                .font(theme::app_font())
+                                .line_height(text::LineHeight::Relative(1.0))
+                                .color(if state.is_amend {
+                                    theme::darcula::TEXT_PRIMARY
+                                } else {
+                                    theme::darcula::TEXT_SECONDARY
+                                }),
+                        ),
                 )
-                .padding([5, 8])
+                .height(Length::Fixed(theme::density::STANDARD_CONTROL_HEIGHT))
+                .padding([0, 8])
+                .center_y(Length::Fill)
                 .style(theme::panel_style(if state.is_amend {
                     Surface::Accent
                 } else {
