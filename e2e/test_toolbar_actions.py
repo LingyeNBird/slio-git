@@ -1,38 +1,36 @@
 """
-E2E Test: Toolbar actions — refresh, commit dialog, branch popup.
+E2E: 工具栏操作 — 刷新、提交对话框、分支弹窗
 """
-
-import time
 import pyautogui
-from conftest import take_screenshot, win_click
+import rpa
 
 
-class TestToolbarRefresh:
-    def test_click_refresh(self, app):
-        win_click(0.78, 0.035)
-        time.sleep(2)
-        take_screenshot("50_after_refresh")
+class Test刷新:
+    def test_点击刷新状态(self, app):
+        rpa.窗口内点击(0.77, 0.03)
+        rpa.延时(2)
+        rpa.截图对比("50_刷新后")
 
 
-class TestCommitDialog:
-    def test_open_commit_dialog(self, app):
-        win_click(0.93, 0.035)
-        time.sleep(1)
-        take_screenshot("51_commit_dialog")
+class Test提交对话框:
+    def test_打开提交(self, app):
+        rpa.窗口内点击(0.925, 0.03)
+        rpa.延时(1)
+        rpa.截图对比("51_提交对话框")
 
-    def test_close_with_escape(self, app):
-        pyautogui.press("escape")
-        time.sleep(0.5)
-        take_screenshot("52_commit_closed")
+    def test_ESC关闭(self, app):
+        rpa.按键("escape")
+        rpa.延时(0.5)
+        rpa.截图对比("52_提交已关闭")
 
 
-class TestBranchPopup:
-    def test_click_branch_indicator(self, app):
-        win_click(0.14, 0.035)
-        time.sleep(1)
-        take_screenshot("53_branch_popup")
+class Test分支弹窗:
+    def test_点击分支名(self, app):
+        rpa.窗口内点击(0.14, 0.03)
+        rpa.延时(1)
+        rpa.截图对比("53_分支弹窗")
 
-    def test_close_with_escape(self, app):
-        pyautogui.press("escape")
-        time.sleep(0.5)
-        take_screenshot("54_branch_closed")
+    def test_ESC关闭(self, app):
+        rpa.按键("escape")
+        rpa.延时(0.5)
+        rpa.截图对比("54_分支已关闭")

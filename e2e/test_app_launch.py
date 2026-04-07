@@ -1,24 +1,19 @@
 """
-E2E Test: App launch and window verification.
+E2E: 启动验证
 """
-
 import os
-from conftest import take_screenshot, get_window_bounds, is_app_running
+import rpa
 
 
-class TestAppWindow:
-    def test_screenshot_captures(self, app):
-        """Take a screenshot to verify screen capture works."""
-        path = take_screenshot("01_current_state")
-        assert os.path.exists(path)
-        assert os.path.getsize(path) > 0
+class Test启动:
+    def test_进程存活(self, app):
+        assert rpa.进程存活()
 
-    def test_window_exists(self, app):
-        """Verify we can read the window bounds."""
-        x, y, w, h = get_window_bounds()
-        assert w > 100 and h > 100, f"Window too small: {w}x{h}"
-        take_screenshot("02_window_bounds")
+    def test_窗口可获取(self, app):
+        rect = rpa.获取窗口区域()
+        assert rect.w > 400 and rect.h > 300, f"窗口太小: {rect.w}x{rect.h}"
+        print(f"窗口: ({rect.x}, {rect.y}) {rect.w}x{rect.h}")
 
-    def test_app_is_running(self, app):
-        """App process has not crashed."""
-        assert is_app_running()
+    def test_窗口截图(self, app):
+        path = rpa.截图对比("01_启动状态")
+        assert os.path.exists(path) and os.path.getsize(path) > 0
