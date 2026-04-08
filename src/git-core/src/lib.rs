@@ -54,6 +54,7 @@ pub mod signature;
 pub mod stash;
 pub mod submodule;
 pub mod tag;
+pub mod updater;
 pub mod worktree;
 
 pub use branch::Branch;

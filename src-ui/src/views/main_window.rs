@@ -829,7 +829,7 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             detail,
         } = Self::build_status_bar_content(state);
 
-        crate::widgets::statusbar::StatusBar {
+        let base_bar: Element<'a, Message> = crate::widgets::statusbar::StatusBar {
             i18n,
             repo_path: Some(repo_path),
             workspace_summary,
@@ -838,7 +838,9 @@ impl<'a, Message: Clone + 'a> MainWindow<'a, Message> {
             activity_tone,
             detail,
         }
-        .view()
+        .view();
+
+        base_bar
     }
 
     #[allow(clippy::too_many_arguments)]

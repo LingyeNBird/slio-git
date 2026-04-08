@@ -21,6 +21,10 @@ once_cell = "1.19"
 syntect = { workspace = true }
 iced-code-editor = { path = "../vendor/iced-code-editor" }
 unicode-width = "0.2"
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+open = "5"
 
 [dev-dependencies]
 tempfile = { workspace = true }

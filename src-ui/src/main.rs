@@ -81,7 +81,17 @@ pub fn main() -> iced::Result {
         window_settings.icon = Some(icon);
     }
 
-    iced::application(|| (AppState::restore(), Task::none()), update, view)
+    iced::application(
+        || {
+            let startup_task = Task::perform(
+                git_core::updater::check_for_update(env!("CARGO_PKG_VERSION").to_string()),
+                |result| Message::UpdateCheckResult(result.ok().flatten()),
+            );
+            (AppState::restore(), startup_task)
+        },
+        update,
+        view,
+    )
         .title("slio-git")
         .default_font(theme::app_font())
         .theme(app_theme)
@@ -620,6 +630,21 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     return update(state, Message::Push);
                 }
             }
+        }
+        Message::UpdateCheckResult(update_info) => {
+            state.available_update = update_info;
+        }
+        Message::OpenUpdateUrl => {
+            if let Some(ref update) = state.available_update {
+                let url = update
+                    .download_url
+                    .as_deref()
+                    .unwrap_or(&update.release_url);
+                let _ = open::that(url);
+            }
+        }
+        Message::DismissUpdate => {
+            state.available_update = None;
         }
         Message::ShowWorktrees => {
             if let Ok(repo) = require_repository(state) {
@@ -4610,6 +4635,56 @@ fn view(state: &AppState) -> Element<'_, Message> {
             .into();
     }
 
+    // Update available banner overlay (bottom-right)
+    if let Some(ref update) = state.available_update {
+        let banner = Container::new(
+            Row::new()
+                .spacing(8)
+                .align_y(Alignment::Center)
+                .push(
+                    Text::new(format!("新版本 v{} 可用", update.latest_version))
+                        .size(11)
+                        .color(theme::darcula::TEXT_PRIMARY),
+                )
+                .push(
+                    Button::new(Text::new("下载更新").size(11))
+                        .style(theme::button_style(theme::ButtonTone::Primary))
+                        .padding([3, 10])
+                        .on_press(Message::OpenUpdateUrl),
+                )
+                .push(
+                    Button::new(Text::new("忽略").size(11))
+                        .style(theme::button_style(theme::ButtonTone::Ghost))
+                        .padding([3, 6])
+                        .on_press(Message::DismissUpdate),
+                ),
+        )
+        .padding([6, 12])
+        .style(|_: &Theme| iced::widget::container::Style {
+            background: Some(Background::Color(theme::darcula::BG_PANEL)),
+            border: Border {
+                color: theme::darcula::ACCENT,
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            shadow: iced::Shadow {
+                color: Color::from_rgba(0.0, 0.0, 0.0, 0.3),
+                offset: iced::Vector::new(0.0, 2.0),
+                blur_radius: 8.0,
+            },
+            ..Default::default()
+        });
+
+        let positioned = Container::new(banner)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(Alignment::End)
+            .align_y(Alignment::End)
+            .padding([32, 16]);
+
+        return iced::widget::stack([main_view, positioned.into()]).into();
+    }
+
     main_view
 }
 
@@ -5828,6 +5903,9 @@ pub enum Message {
         branch: String,
         remote: String,
     },
+    UpdateCheckResult(Option<git_core::updater::UpdateInfo>),
+    OpenUpdateUrl,
+    DismissUpdate,
 }
 
 #[cfg(test)]

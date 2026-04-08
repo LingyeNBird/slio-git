@@ -532,6 +532,8 @@ pub struct AppState {
     pub network_operation: Option<NetworkOperation>,
     /// Pull strategy preference (merge or rebase)
     pub pull_strategy: PullStrategy,
+    /// Available update info from GitHub
+    pub available_update: Option<git_core::updater::UpdateInfo>,
 }
 
 /// In-progress network operation state for progress indicator
@@ -629,6 +631,7 @@ impl AppState {
             split_diff_editor: None,
             network_operation: None,
             pull_strategy: PullStrategy::default(),
+            available_update: None,
         };
 
         state.sync_context_feedback();
