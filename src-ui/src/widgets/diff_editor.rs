@@ -1590,17 +1590,26 @@ impl UnifiedDiffEditorState {
 
         for file in &diff.files {
             for hunk in &file.hunks {
-                // Hunk header line
-                text.push_str(&hunk.header);
-                if !hunk.header.ends_with('\n') {
-                    text.push('\n');
-                }
+                // Hunk header line — only show the @@ range part, not the trailing context
+                let header_display = hunk
+                    .header
+                    .find(" @@")
+                    .map(|pos| &hunk.header[..pos + 3])
+                    .unwrap_or(&hunk.header);
+                text.push_str(header_display);
+                text.push('\n');
                 line_kinds.push(UnifiedLineKind::HunkHeader);
 
                 for line in &hunk.lines {
-                    let content = &line.content;
-                    text.push_str(content);
-                    if !content.ends_with('\n') {
+                    // Add +/- prefix like a real unified diff
+                    let prefix = match line.origin {
+                        git_core::diff::DiffLineOrigin::Addition => "+",
+                        git_core::diff::DiffLineOrigin::Deletion => "-",
+                        _ => " ",
+                    };
+                    text.push_str(prefix);
+                    text.push_str(&line.content);
+                    if !line.content.ends_with('\n') {
                         text.push('\n');
                     }
 
@@ -1616,8 +1625,7 @@ impl UnifiedDiffEditorState {
 
         let line_count = logical_line_count(&text);
         let mut editor = build_editor_with_font_size(&text, path_hint, font_size);
-        // Disable line numbers — unified diff has its own gutter context
-        editor.set_line_numbers_enabled(false);
+        editor.set_line_numbers_enabled(true);
 
         let decorations = build_unified_decorations(&line_kinds, line_count);
 
