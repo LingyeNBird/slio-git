@@ -426,6 +426,30 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.toggle_diff_presentation();
             update_editor_diff_model(state);
         }
+        Message::CopyDiffContent => {
+            if let Some(diff) = &state.current_diff {
+                let mut text = String::new();
+                for file in &diff.files {
+                    for hunk in &file.hunks {
+                        text.push_str(&hunk.header);
+                        text.push('\n');
+                        for line in &hunk.lines {
+                            let prefix = match line.origin {
+                                git_core::diff::DiffLineOrigin::Addition => "+",
+                                git_core::diff::DiffLineOrigin::Deletion => "-",
+                                _ => " ",
+                            };
+                            text.push_str(prefix);
+                            text.push_str(&line.content);
+                            if !line.content.ends_with('\n') {
+                                text.push('\n');
+                            }
+                        }
+                    }
+                }
+                return iced::clipboard::write(text);
+            }
+        }
         Message::SplitDiffEditorEvent(event) => {
             if let Some(editor) = state.split_diff_editor.as_mut() {
                 let (task, current_hunk) = editor.update(event);
@@ -5117,6 +5141,10 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
                     .is_some()
                     .then_some(Message::ToggleDiffPresentation),
             ))
+            .push(button::compact_ghost(
+                "复制",
+                state.current_diff.is_some().then_some(Message::CopyDiffContent),
+            ))
             .push_maybe(state.current_diff.as_ref().and_then(|diff| {
                 let total_hunks: usize = diff.files.iter().map(|f| f.hunks.len()).sum();
                 (total_hunks > 1).then(|| {
@@ -5861,6 +5889,7 @@ pub enum Message {
     SwitchProject(PathBuf),
     SelectChange(String),
     ToggleDiffPresentation,
+    CopyDiffContent,
     SplitDiffEditorEvent(DiffEditorEvent),
     NavigatePrevFile,
     NavigateNextFile,

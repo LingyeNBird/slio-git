@@ -17,7 +17,8 @@ pub const UNIFIED_GUTTER_WIDTH: f32 = 62.0;
 pub const SPLIT_GUTTER_WIDTH: f32 = 44.0;
 pub const PREFIX_WIDTH: f32 = 14.0;
 pub const SEPARATOR_WIDTH: f32 = 1.0;
-pub const DIFF_ROW_HEIGHT: f32 = 22.0;
+pub const DIFF_CODE_SIZE: u32 = 13;
+pub const DIFF_ROW_HEIGHT: f32 = 26.0;
 pub const HUNK_HEADER_HEIGHT: f32 = 24.0;
 
 // ── Meld chunk model ──────────────────────────────────────────────────────
@@ -394,7 +395,7 @@ pub fn render_unified_line<'a, Message: Clone + 'static>(
                     .width(Length::Shrink)
                     .push(
                         Text::new(pfx)
-                            .size(theme::typography::CAPTION_SIZE)
+                            .size(DIFF_CODE_SIZE)
                             .font(crate::theme::code_font())
                             .color(pfx_color)
                             .width(Length::Fixed(PREFIX_WIDTH)),
@@ -457,7 +458,7 @@ pub fn render_split_half<'a, Message: Clone + 'static>(
             )
             .push(
                 Text::new(pfx)
-                    .size(theme::typography::CAPTION_SIZE)
+                    .size(DIFF_CODE_SIZE)
                     .font(crate::theme::code_font())
                     .color(pfx_color)
                     .width(Length::Fixed(PREFIX_WIDTH)),
@@ -508,7 +509,7 @@ pub fn hunk_header<'a, Message: Clone + 'static>(
 
     let mut row = Row::new().spacing(4).align_y(Alignment::Center).push(
         Text::new(header_text)
-            .size(theme::typography::CAPTION_SIZE)
+            .size(DIFF_CODE_SIZE)
             .font(crate::theme::code_font())
             .wrapping(text::Wrapping::None)
             .color(theme::darcula::TEXT_SECONDARY),
@@ -577,7 +578,7 @@ pub fn hunk_divider<'a, Message: 'a>() -> Element<'a, Message> {
 pub fn empty_editor_row<'a, Message: 'a>(label: &str) -> Element<'a, Message> {
     Container::new(
         Text::new(label.to_string())
-            .size(theme::typography::CAPTION_SIZE)
+            .size(DIFF_CODE_SIZE)
             .color(theme::darcula::TEXT_SECONDARY),
     )
     .padding([8, 10])
