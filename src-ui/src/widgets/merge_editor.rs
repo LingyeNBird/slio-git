@@ -7,10 +7,11 @@ use crate::theme::{self, BadgeTone, Surface};
 use crate::widgets::diff_core;
 use crate::widgets::{self, button};
 use git_core::diff::{MergeChunkType, MergeEditorModel};
-use iced::widget::canvas::{self, Canvas, Frame};
+use iced::widget::canvas::{self, Canvas};
 use iced::widget::{Column, Container, Row, Space, Stack, Text};
 use iced::{mouse, Alignment, Element, Length, Point, Rectangle, Renderer, Size, Theme};
 use iced_code_editor::{CodeEditor, Message as EditorMessage};
+use std::cell::Cell;
 use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
@@ -758,81 +759,97 @@ struct MergeDecorationCanvas {
     active_range: Option<Range<usize>>,
 }
 
+#[derive(Debug, Default)]
+struct MergeDecoCacheState {
+    cache: canvas::Cache<Renderer>,
+    key: Cell<Option<(i32, i32, i32)>>,
+}
+
 impl<Message> canvas::Program<Message> for MergeDecorationCanvas {
-    type State = ();
+    type State = MergeDecoCacheState;
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        let gutter_width = self.gutter_width.min(bounds.width);
-        let code_width = (bounds.width - gutter_width).max(0.0);
-
-        frame.fill_rectangle(
-            Point::ORIGIN,
-            Size::new(gutter_width, bounds.height),
-            diff_core::chunk_gutter_bg(diff_core::ChunkTag::Equal),
+        let key = (
+            (self.viewport_scroll * 0.5).round() as i32,
+            self.active_range.as_ref().map(|r| r.start as i32).unwrap_or(-1),
+            bounds.width as i32,
         );
-        frame.fill_rectangle(
-            Point::new(gutter_width, 0.0),
-            Size::new(code_width, bounds.height),
-            theme::darcula::BG_EDITOR,
-        );
-
-        if self.line_height <= 0.0 {
-            return vec![frame.into_geometry()];
+        if state.key.get() != Some(key) {
+            state.cache.clear();
+            state.key.set(Some(key));
         }
 
-        let start_line = (self.viewport_scroll / self.line_height).floor().max(0.0) as usize;
-        let end_line = ((self.viewport_scroll + self.viewport_height) / self.line_height)
-            .ceil()
-            .max(0.0) as usize
-            + 1;
-
-        for line_index in start_line..end_line.min(self.decorations.lines.len()) {
-            let Some(line) = self
-                .decorations
-                .lines
-                .get(line_index)
-                .and_then(|l| l.as_ref())
-            else {
-                continue;
-            };
-
-            let y = line_index as f32 * self.line_height - self.viewport_scroll;
-            let (code_bg, gutter_bg) = merge_block_colors(line.chunk_type, line.resolved);
+        let geometry = state.cache.draw(renderer, bounds.size(), |frame| {
+            let gutter_width = self.gutter_width.min(bounds.width);
+            let code_width = (bounds.width - gutter_width).max(0.0);
 
             frame.fill_rectangle(
-                Point::new(0.0, y),
-                Size::new(gutter_width, self.line_height),
-                gutter_bg,
+                Point::ORIGIN,
+                Size::new(gutter_width, bounds.height),
+                diff_core::chunk_gutter_bg(diff_core::ChunkTag::Equal),
             );
             frame.fill_rectangle(
-                Point::new(gutter_width, y),
-                Size::new(code_width, self.line_height),
-                code_bg,
+                Point::new(gutter_width, 0.0),
+                Size::new(code_width, bounds.height),
+                theme::darcula::BG_EDITOR,
             );
 
-            // Active chunk highlight
-            if self
-                .active_range
-                .as_ref()
-                .is_some_and(|r| line_in_range(r, line_index as f32))
-            {
+            if self.line_height <= 0.0 {
+                return;
+            }
+
+            let start_line = (self.viewport_scroll / self.line_height).floor().max(0.0) as usize;
+            let end_line = ((self.viewport_scroll + self.viewport_height) / self.line_height)
+                .ceil()
+                .max(0.0) as usize
+                + 1;
+
+            for line_index in start_line..end_line.min(self.decorations.lines.len()) {
+                let Some(line) = self
+                    .decorations
+                    .lines
+                    .get(line_index)
+                    .and_then(|l| l.as_ref())
+                else {
+                    continue;
+                };
+
+                let y = line_index as f32 * self.line_height - self.viewport_scroll;
+                let (code_bg, gutter_bg) = merge_block_colors(line.chunk_type, line.resolved);
+
                 frame.fill_rectangle(
                     Point::new(0.0, y),
-                    Size::new(bounds.width, self.line_height),
-                    theme::darcula::SELECTION_BG.scale_alpha(0.12),
+                    Size::new(gutter_width, self.line_height),
+                    gutter_bg,
                 );
-            }
-        }
+                frame.fill_rectangle(
+                    Point::new(gutter_width, y),
+                    Size::new(code_width, self.line_height),
+                    code_bg,
+                );
 
-        vec![frame.into_geometry()]
+                if self
+                    .active_range
+                    .as_ref()
+                    .is_some_and(|r| line_in_range(r, line_index as f32))
+                {
+                    frame.fill_rectangle(
+                        Point::new(0.0, y),
+                        Size::new(bounds.width, self.line_height),
+                        theme::darcula::SELECTION_BG.scale_alpha(0.12),
+                    );
+                }
+            }
+        });
+
+        vec![geometry]
     }
 }
 
@@ -852,73 +869,93 @@ struct MergeLinkMapCanvas {
     right_line_height: f32,
 }
 
+#[derive(Debug, Default)]
+struct MergeLinkCacheState {
+    cache: canvas::Cache<Renderer>,
+    key: Cell<Option<(i32, i32, Option<usize>)>>,
+}
+
 impl<Message> canvas::Program<Message> for MergeLinkMapCanvas {
-    type State = ();
+    type State = MergeLinkCacheState;
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        frame.fill_rectangle(
-            Point::ORIGIN,
-            bounds.size(),
-            theme::darcula::BG_PANEL.scale_alpha(0.92),
+        let key = (
+            (self.left_scroll * 0.5).round() as i32,
+            (self.right_scroll * 0.5).round() as i32,
+            self.current_chunk,
         );
-
-        for block in self.blocks.iter() {
-            let left = block_visual_bounds(
-                &block.left_range,
-                self.left_line_height,
-                self.left_scroll,
-                MIN_EMPTY_BLOCK_HEIGHT,
-            );
-            let right = block_visual_bounds(
-                &block.right_range,
-                self.right_line_height,
-                self.right_scroll,
-                MIN_EMPTY_BLOCK_HEIGHT,
-            );
-
-            if left.1 < 0.0 || right.1 < 0.0 || left.0 > bounds.height || right.0 > bounds.height
-            {
-                continue;
-            }
-
-            let path = canvas::Path::new(|builder| {
-                builder.move_to(Point::new(0.0, left.0));
-                builder.bezier_curve_to(
-                    Point::new(bounds.width * 0.35, left.0),
-                    Point::new(bounds.width * 0.65, right.0),
-                    Point::new(bounds.width, right.0),
-                );
-                builder.line_to(Point::new(bounds.width, right.1));
-                builder.bezier_curve_to(
-                    Point::new(bounds.width * 0.65, right.1),
-                    Point::new(bounds.width * 0.35, left.1),
-                    Point::new(0.0, left.1),
-                );
-                builder.close();
-            });
-
-            let is_active = self.current_chunk == Some(block.chunk_id);
-            let fill = merge_link_fill(block.chunk_type, block.resolved, is_active);
-            let stroke_color = merge_link_stroke(block.chunk_type, block.resolved);
-
-            frame.fill(&path, fill);
-            frame.stroke(
-                &path,
-                canvas::Stroke::default()
-                    .with_width(if is_active { 1.3 } else { 0.8 })
-                    .with_color(stroke_color),
-            );
+        if state.key.get() != Some(key) {
+            state.cache.clear();
+            state.key.set(Some(key));
         }
 
-        vec![frame.into_geometry()]
+        let geometry = state.cache.draw(renderer, bounds.size(), |frame| {
+            frame.fill_rectangle(
+                Point::ORIGIN,
+                bounds.size(),
+                theme::darcula::BG_PANEL.scale_alpha(0.92),
+            );
+
+            for block in self.blocks.iter() {
+                let left = block_visual_bounds(
+                    &block.left_range,
+                    self.left_line_height,
+                    self.left_scroll,
+                    MIN_EMPTY_BLOCK_HEIGHT,
+                );
+                let right = block_visual_bounds(
+                    &block.right_range,
+                    self.right_line_height,
+                    self.right_scroll,
+                    MIN_EMPTY_BLOCK_HEIGHT,
+                );
+
+                if left.1 < 0.0
+                    || right.1 < 0.0
+                    || left.0 > bounds.height
+                    || right.0 > bounds.height
+                {
+                    continue;
+                }
+
+                let path = canvas::Path::new(|builder| {
+                    builder.move_to(Point::new(0.0, left.0));
+                    builder.bezier_curve_to(
+                        Point::new(bounds.width * 0.35, left.0),
+                        Point::new(bounds.width * 0.65, right.0),
+                        Point::new(bounds.width, right.0),
+                    );
+                    builder.line_to(Point::new(bounds.width, right.1));
+                    builder.bezier_curve_to(
+                        Point::new(bounds.width * 0.65, right.1),
+                        Point::new(bounds.width * 0.35, left.1),
+                        Point::new(0.0, left.1),
+                    );
+                    builder.close();
+                });
+
+                let is_active = self.current_chunk == Some(block.chunk_id);
+                let fill = merge_link_fill(block.chunk_type, block.resolved, is_active);
+                let stroke_color = merge_link_stroke(block.chunk_type, block.resolved);
+
+                frame.fill(&path, fill);
+                frame.stroke(
+                    &path,
+                    canvas::Stroke::default()
+                        .with_width(if is_active { 1.3 } else { 0.8 })
+                        .with_color(stroke_color),
+                );
+            }
+        });
+
+        vec![geometry]
     }
 }
 
@@ -929,64 +966,82 @@ struct MergeOverviewCanvas {
     viewport_range: Range<f32>,
 }
 
+#[derive(Debug, Default)]
+struct MergeOverviewCacheState {
+    cache: canvas::Cache<Renderer>,
+    key: Cell<Option<(usize, i32, i32)>>,
+}
+
 impl<Message> canvas::Program<Message> for MergeOverviewCanvas {
-    type State = ();
+    type State = MergeOverviewCacheState;
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
         let drawable_height = (bounds.height - OVERVIEW_PADDING_Y * 2.0).max(1.0);
         let track_x = 2.0;
         let track_width = (bounds.width - 4.0).max(1.0);
 
-        frame.fill_rectangle(
-            Point::ORIGIN,
-            bounds.size(),
-            theme::darcula::BG_PANEL.scale_alpha(0.94),
+        let key = (
+            self.blocks.len(),
+            (self.viewport_range.start * 100.0).round() as i32,
+            (self.viewport_range.end * 100.0).round() as i32,
         );
-
-        let total = self.total_lines.max(1) as f32;
-        for block in self.blocks.iter() {
-            let y = block.range.start as f32 / total * drawable_height;
-            let height = (((block.range.end.max(block.range.start + 1) - block.range.start) as f32
-                / total)
-                * drawable_height)
-                .max(MIN_OVERVIEW_BLOCK_HEIGHT);
-            let color = merge_overview_fill(block.chunk_type, block.resolved);
-
-            frame.fill_rectangle(
-                Point::new(track_x, y + OVERVIEW_PADDING_Y),
-                Size::new(track_width, height),
-                color,
-            );
+        if state.key.get() != Some(key) {
+            state.cache.clear();
+            state.key.set(Some(key));
         }
 
-        // Viewport indicator
-        let viewport_y = self.viewport_range.start * drawable_height + OVERVIEW_PADDING_Y;
-        let viewport_height =
-            ((self.viewport_range.end - self.viewport_range.start) * drawable_height).max(8.0);
-        let vp_rect = canvas::Path::rectangle(
-            Point::new(0.5, viewport_y),
-            Size::new(bounds.width - 1.0, viewport_height),
-        );
-        frame.fill(
-            &vp_rect,
-            theme::darcula::TEXT_PRIMARY.scale_alpha(0.08),
-        );
-        frame.stroke(
-            &vp_rect,
-            canvas::Stroke::default()
-                .with_width(1.0)
-                .with_color(theme::darcula::TEXT_SECONDARY.scale_alpha(0.35)),
-        );
+        let geometry = state.cache.draw(renderer, bounds.size(), |frame| {
+            frame.fill_rectangle(
+                Point::ORIGIN,
+                bounds.size(),
+                theme::darcula::BG_PANEL.scale_alpha(0.94),
+            );
 
-        vec![frame.into_geometry()]
+            let total = self.total_lines.max(1) as f32;
+            for block in self.blocks.iter() {
+                let y = block.range.start as f32 / total * drawable_height;
+                let height =
+                    (((block.range.end.max(block.range.start + 1) - block.range.start) as f32
+                        / total)
+                        * drawable_height)
+                        .max(MIN_OVERVIEW_BLOCK_HEIGHT);
+                let color = merge_overview_fill(block.chunk_type, block.resolved);
+
+                frame.fill_rectangle(
+                    Point::new(track_x, y + OVERVIEW_PADDING_Y),
+                    Size::new(track_width, height),
+                    color,
+                );
+            }
+
+            // Viewport indicator
+            let viewport_y = self.viewport_range.start * drawable_height + OVERVIEW_PADDING_Y;
+            let viewport_height =
+                ((self.viewport_range.end - self.viewport_range.start) * drawable_height).max(8.0);
+            let vp_rect = canvas::Path::rectangle(
+                Point::new(0.5, viewport_y),
+                Size::new(bounds.width - 1.0, viewport_height),
+            );
+            frame.fill(
+                &vp_rect,
+                theme::darcula::TEXT_PRIMARY.scale_alpha(0.08),
+            );
+            frame.stroke(
+                &vp_rect,
+                canvas::Stroke::default()
+                    .with_width(1.0)
+                    .with_color(theme::darcula::TEXT_SECONDARY.scale_alpha(0.35)),
+            );
+        });
+
+        vec![geometry]
     }
 }
 
@@ -1172,14 +1227,20 @@ fn build_overview(
 // Helpers
 // ═══════════════════════════════════════
 
+const DEFAULT_MERGE_FONT_SIZE: f32 = 13.0;
+
 fn build_editor(content: &str, path_hint: Option<&str>) -> CodeEditor {
+    build_editor_sized(content, path_hint, DEFAULT_MERGE_FONT_SIZE)
+}
+
+fn build_editor_sized(content: &str, path_hint: Option<&str>, font_size: f32) -> CodeEditor {
     let syntax = path_hint
         .and_then(|p| Path::new(p).extension())
         .and_then(|ext| ext.to_str())
         .unwrap_or("txt");
     let mut editor = CodeEditor::new(content, syntax);
     editor.set_font(theme::code_font());
-    editor.set_font_size(theme::typography::CAPTION_SIZE as f32, true);
+    editor.set_font_size(font_size, true);
     editor.set_wrap_enabled(false);
     editor.set_line_numbers_enabled(true);
     editor.set_search_replace_enabled(false);

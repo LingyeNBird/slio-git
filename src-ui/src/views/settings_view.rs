@@ -22,6 +22,7 @@ pub enum SettingsMessage {
     ToggleWarnLargeFiles,
     SetLargeFileLimitMb(String),
     ToggleStagingArea,
+    SetEditorFontSize(String),
     // Fetch
     SetFetchTagsMode(FetchTagsMode),
     // LLM
@@ -84,6 +85,8 @@ pub struct GitSettings {
     pub large_file_limit_mb: String,
     pub staging_area_enabled: bool,
     pub fetch_tags_mode: FetchTagsMode,
+    // Editor
+    pub editor_font_size: String,
     // LLM
     pub llm_enabled: bool,
     pub llm_api_url: String,
@@ -105,6 +108,7 @@ impl Default for GitSettings {
             large_file_limit_mb: "50".to_string(),
             staging_area_enabled: false,
             fetch_tags_mode: FetchTagsMode::Default,
+            editor_font_size: "13".to_string(),
             llm_enabled: false,
             llm_api_url: "https://api.deepseek.com/v1/chat/completions".to_string(),
             llm_api_key: String::new(),
@@ -138,6 +142,7 @@ impl GitSettings {
             SettingsMessage::ToggleStagingArea => {
                 self.staging_area_enabled = !self.staging_area_enabled;
             }
+            SettingsMessage::SetEditorFontSize(val) => self.editor_font_size = val.clone(),
             SettingsMessage::SetFetchTagsMode(mode) => self.fetch_tags_mode = *mode,
             SettingsMessage::ToggleLlmEnabled => self.llm_enabled = !self.llm_enabled,
             SettingsMessage::SetLlmApiUrl(val) => self.llm_api_url = val.clone(),
@@ -194,6 +199,7 @@ impl GitSettings {
                 "warn_large_files" => s.warn_large_files = value == "true",
                 "large_file_limit_mb" => s.large_file_limit_mb = value.to_string(),
                 "staging_area_enabled" => s.staging_area_enabled = value == "true",
+                "editor_font_size" => s.editor_font_size = value.to_string(),
                 "fetch_tags_mode" => {
                     s.fetch_tags_mode = match value {
                         "all" => FetchTagsMode::AllTags,
@@ -244,6 +250,7 @@ impl GitSettings {
              warn_large_files\t{}\n\
              large_file_limit_mb\t{}\n\
              staging_area_enabled\t{}\n\
+             editor_font_size\t{}\n\
              fetch_tags_mode\t{fetch_tags}\n\
              llm_enabled\t{}\n\
              llm_api_url\t{}\n\
@@ -258,11 +265,19 @@ impl GitSettings {
             self.warn_large_files,
             self.large_file_limit_mb,
             self.staging_area_enabled,
+            self.editor_font_size,
             self.llm_enabled,
             self.llm_api_url,
             self.llm_api_key,
             self.llm_model,
         )
+    }
+
+    pub fn editor_font_size_f32(&self) -> f32 {
+        self.editor_font_size
+            .parse::<f32>()
+            .unwrap_or(13.0)
+            .clamp(8.0, 24.0)
     }
 
     pub fn llm_config(&self) -> git_core::llm::LlmConfig {
@@ -343,6 +358,41 @@ pub fn view(settings: &GitSettings) -> Element<'_, SettingsMessage> {
             ),
     )
     .padding([2, 14]);
+
+    // ── 编辑器 ──
+    let editor_section = Container::new(
+        Column::new()
+            .spacing(4)
+            .push(
+                Text::new("编辑器")
+                    .size(10)
+                    .color(theme::darcula::TEXT_DISABLED),
+            )
+            .push(
+                Row::new()
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new("Diff 字号:")
+                            .size(12)
+                            .color(theme::darcula::TEXT_SECONDARY),
+                    )
+                    .push(
+                        Container::new(text_input::styled(
+                            "13",
+                            &settings.editor_font_size,
+                            SettingsMessage::SetEditorFontSize,
+                        ))
+                        .width(Length::Fixed(50.0)),
+                    )
+                    .push(
+                        Text::new("px")
+                            .size(11)
+                            .color(theme::darcula::TEXT_DISABLED),
+                    ),
+            ),
+    )
+    .padding([8, 14]);
 
     // ── 推送 ──
     let push_section = settings_section(
@@ -535,6 +585,8 @@ pub fn view(settings: &GitSettings) -> Element<'_, SettingsMessage> {
         .push(iced::widget::rule::horizontal(1))
         .push(commit_section)
         .push(large_file_row)
+        .push(iced::widget::rule::horizontal(1))
+        .push(editor_section)
         .push(iced::widget::rule::horizontal(1))
         .push(push_section)
         .push(protected_row)

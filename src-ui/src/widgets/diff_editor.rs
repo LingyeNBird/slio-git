@@ -74,13 +74,19 @@ impl Clone for SplitDiffEditorState {
 
 impl SplitDiffEditorState {
     pub fn new(model: EditorDiffModel) -> Self {
-        let left = build_editor(
+        Self::with_font_size(model, DEFAULT_EDITOR_FONT_SIZE)
+    }
+
+    pub fn with_font_size(model: EditorDiffModel, font_size: f32) -> Self {
+        let left = build_editor_with_font_size(
             &model.left_text,
             model.old_path.as_deref().or(model.new_path.as_deref()),
+            font_size,
         );
-        let right = build_editor(
+        let right = build_editor_with_font_size(
             &model.right_text,
             model.new_path.as_deref().or(model.old_path.as_deref()),
+            font_size,
         );
         let left_line_count = logical_line_count(&model.left_text);
         let right_line_count = logical_line_count(&model.right_text);
@@ -531,6 +537,23 @@ struct OverviewHunk {
     range: Range<usize>,
 }
 
+/// Cache key for decoration canvas — quantized to avoid thrashing on sub-pixel scroll.
+#[derive(Debug, Default)]
+struct DecorationCacheState {
+    cache: canvas::Cache<Renderer>,
+    key: Cell<Option<DecorationCacheKey>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DecorationCacheKey {
+    scroll_q: i32,       // scroll quantized to 2px
+    h_scroll_q: i32,
+    active_start: i32,
+    active_end: i32,
+    bounds_w: i32,
+    bounds_h: i32,
+}
+
 #[derive(Debug, Clone)]
 struct DiffDecorationCanvas {
     decorations: Arc<PaneDecorations>,
@@ -544,105 +567,150 @@ struct DiffDecorationCanvas {
     active_range: Option<Range<usize>>,
 }
 
+impl DiffDecorationCanvas {
+    fn cache_key(&self, bounds: Rectangle) -> DecorationCacheKey {
+        DecorationCacheKey {
+            scroll_q: (self.viewport_scroll * 0.5).round() as i32,
+            h_scroll_q: (self.horizontal_scroll_offset * 0.5).round() as i32,
+            active_start: self
+                .active_range
+                .as_ref()
+                .map(|r| r.start as i32)
+                .unwrap_or(-1),
+            active_end: self
+                .active_range
+                .as_ref()
+                .map(|r| r.end as i32)
+                .unwrap_or(-1),
+            bounds_w: bounds.width as i32,
+            bounds_h: bounds.height as i32,
+        }
+    }
+}
+
 impl<Message> canvas::Program<Message> for DiffDecorationCanvas {
-    type State = ();
+    type State = DecorationCacheState;
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        let gutter_width = self.gutter_width.min(bounds.width);
-        let code_width = (bounds.width - gutter_width).max(0.0);
+        let key = self.cache_key(bounds);
+        if state.key.get() != Some(key) {
+            state.cache.clear();
+            state.key.set(Some(key));
+        }
 
-        frame.fill_rectangle(
-            Point::ORIGIN,
-            Size::new(gutter_width, bounds.height),
-            diff_core::chunk_gutter_bg(diff_core::ChunkTag::Equal),
-        );
-        frame.fill_rectangle(
-            Point::new(gutter_width, 0.0),
-            Size::new(code_width, bounds.height),
-            theme::darcula::BG_EDITOR,
-        );
-
-        let start_line = (self.viewport_scroll / self.line_height).floor().max(0.0) as usize;
-        let end_line = ((self.viewport_scroll + self.viewport_height) / self.line_height)
-            .ceil()
-            .max(0.0) as usize
-            + 1;
-
-        for line_index in start_line..end_line.min(self.decorations.lines.len()) {
-            let Some(line) = self
-                .decorations
-                .lines
-                .get(line_index)
-                .and_then(|line| line.as_ref())
-            else {
-                continue;
-            };
-
-            let (code_bg, gutter_bg) = block_colors(line.kind);
-            let y = line_index as f32 * self.line_height - self.viewport_scroll;
-            let is_active = self
-                .active_range
-                .as_ref()
-                .is_some_and(|range| line_in_range(range, line_index as f32));
+        let geometry = state.cache.draw(renderer, bounds.size(), |frame| {
+            let gutter_width = self.gutter_width.min(bounds.width);
+            let code_width = (bounds.width - gutter_width).max(0.0);
 
             frame.fill_rectangle(
-                Point::new(0.0, y),
-                Size::new(gutter_width, self.line_height),
-                gutter_bg,
+                Point::ORIGIN,
+                Size::new(gutter_width, bounds.height),
+                diff_core::chunk_gutter_bg(diff_core::ChunkTag::Equal),
             );
             frame.fill_rectangle(
-                Point::new(gutter_width, y),
-                Size::new(code_width, self.line_height),
-                code_bg,
+                Point::new(gutter_width, 0.0),
+                Size::new(code_width, bounds.height),
+                theme::darcula::BG_EDITOR,
             );
 
-            if is_active {
+            if self.line_height <= 0.0 {
+                return;
+            }
+
+            let start_line = (self.viewport_scroll / self.line_height).floor().max(0.0) as usize;
+            let end_line = ((self.viewport_scroll + self.viewport_height) / self.line_height)
+                .ceil()
+                .max(0.0) as usize
+                + 1;
+
+            for line_index in start_line..end_line.min(self.decorations.lines.len()) {
+                let Some(line) = self
+                    .decorations
+                    .lines
+                    .get(line_index)
+                    .and_then(|line| line.as_ref())
+                else {
+                    continue;
+                };
+
+                let (code_bg, gutter_bg) = block_colors(line.kind);
+                let y = line_index as f32 * self.line_height - self.viewport_scroll;
+                let is_active = self
+                    .active_range
+                    .as_ref()
+                    .is_some_and(|range| line_in_range(range, line_index as f32));
+
                 frame.fill_rectangle(
                     Point::new(0.0, y),
                     Size::new(gutter_width, self.line_height),
-                    theme::darcula::SELECTION_BG.scale_alpha(0.18),
+                    gutter_bg,
                 );
                 frame.fill_rectangle(
                     Point::new(gutter_width, y),
                     Size::new(code_width, self.line_height),
-                    theme::darcula::SELECTION_BG.scale_alpha(0.10),
+                    code_bg,
                 );
-            }
 
-            for inline in line.inline_changes.iter().filter(|span| span.changed) {
-                let end = inline.start + inline.len;
-                let prefix = line.content.get(..inline.start).unwrap_or_default();
-                let changed = line.content.get(inline.start..end).unwrap_or_default();
-                if changed.is_empty() {
-                    continue;
+                if is_active {
+                    frame.fill_rectangle(
+                        Point::new(0.0, y),
+                        Size::new(gutter_width, self.line_height),
+                        theme::darcula::SELECTION_BG.scale_alpha(0.18),
+                    );
+                    frame.fill_rectangle(
+                        Point::new(gutter_width, y),
+                        Size::new(code_width, self.line_height),
+                        theme::darcula::SELECTION_BG.scale_alpha(0.10),
+                    );
                 }
 
-                let inline_x = gutter_width + CODE_PADDING_X - self.horizontal_scroll_offset
-                    + measure_text_width(prefix, self.full_char_width, self.char_width);
-                let inline_width =
-                    measure_text_width(changed, self.full_char_width, self.char_width);
-                if inline_width <= 0.0 {
-                    continue;
+                for inline in line.inline_changes.iter().filter(|span| span.changed) {
+                    let end = inline.start + inline.len;
+                    let prefix = line.content.get(..inline.start).unwrap_or_default();
+                    let changed = line.content.get(inline.start..end).unwrap_or_default();
+                    if changed.is_empty() {
+                        continue;
+                    }
+
+                    let inline_x = gutter_width + CODE_PADDING_X - self.horizontal_scroll_offset
+                        + measure_text_width(prefix, self.full_char_width, self.char_width);
+                    let inline_width =
+                        measure_text_width(changed, self.full_char_width, self.char_width);
+                    if inline_width <= 0.0 {
+                        continue;
+                    }
+
+                    frame.fill_rectangle(
+                        Point::new(inline_x, y + 2.0),
+                        Size::new(inline_width, (self.line_height - 4.0).max(1.0)),
+                        inline_color(line.kind),
+                    );
                 }
-
-                frame.fill_rectangle(
-                    Point::new(inline_x, y + 2.0),
-                    Size::new(inline_width, (self.line_height - 4.0).max(1.0)),
-                    inline_color(line.kind),
-                );
             }
-        }
+        });
 
-        vec![frame.into_geometry()]
+        vec![geometry]
     }
+}
+
+#[derive(Debug, Default)]
+struct LinkMapCacheState {
+    cache: canvas::Cache<Renderer>,
+    key: Cell<Option<LinkMapCacheKey>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LinkMapCacheKey {
+    left_scroll_q: i32,
+    right_scroll_q: i32,
+    current_hunk: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -656,76 +724,88 @@ struct LinkMapCanvas {
 }
 
 impl<Message> canvas::Program<Message> for LinkMapCanvas {
-    type State = ();
+    type State = LinkMapCacheState;
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        frame.fill_rectangle(
-            Point::ORIGIN,
-            bounds.size(),
-            theme::darcula::BG_PANEL.scale_alpha(0.92),
-        );
-
-        for block in self.blocks.iter() {
-            let left = block_visual_bounds(
-                &block.left_range,
-                self.left_line_height,
-                self.left_scroll,
-                MIN_EMPTY_BLOCK_HEIGHT,
-            );
-            let right = block_visual_bounds(
-                &block.right_range,
-                self.right_line_height,
-                self.right_scroll,
-                MIN_EMPTY_BLOCK_HEIGHT,
-            );
-
-            if left.end < 0.0
-                || right.end < 0.0
-                || left.start > bounds.height
-                || right.start > bounds.height
-            {
-                continue;
-            }
-
-            let path = canvas::Path::new(|builder| {
-                builder.move_to(Point::new(0.0, left.start));
-                builder.bezier_curve_to(
-                    Point::new(bounds.width * 0.35, left.start),
-                    Point::new(bounds.width * 0.65, right.start),
-                    Point::new(bounds.width, right.start),
-                );
-                builder.line_to(Point::new(bounds.width, right.end));
-                builder.bezier_curve_to(
-                    Point::new(bounds.width * 0.65, right.end),
-                    Point::new(bounds.width * 0.35, left.end),
-                    Point::new(0.0, left.end),
-                );
-                builder.close();
-            });
-
-            let fill = link_map_fill(block.kind, self.current_hunk == Some(block.hunk_id));
-            frame.fill(&path, fill);
-            frame.stroke(
-                &path,
-                canvas::Stroke::default()
-                    .with_width(if self.current_hunk == Some(block.hunk_id) {
-                        1.3
-                    } else {
-                        0.8
-                    })
-                    .with_color(link_map_stroke(block.kind)),
-            );
+        let key = LinkMapCacheKey {
+            left_scroll_q: (self.left_scroll * 0.5).round() as i32,
+            right_scroll_q: (self.right_scroll * 0.5).round() as i32,
+            current_hunk: self.current_hunk,
+        };
+        if state.key.get() != Some(key) {
+            state.cache.clear();
+            state.key.set(Some(key));
         }
 
-        vec![frame.into_geometry()]
+        let geometry = state.cache.draw(renderer, bounds.size(), |frame| {
+            frame.fill_rectangle(
+                Point::ORIGIN,
+                bounds.size(),
+                theme::darcula::BG_PANEL.scale_alpha(0.92),
+            );
+
+            for block in self.blocks.iter() {
+                let left = block_visual_bounds(
+                    &block.left_range,
+                    self.left_line_height,
+                    self.left_scroll,
+                    MIN_EMPTY_BLOCK_HEIGHT,
+                );
+                let right = block_visual_bounds(
+                    &block.right_range,
+                    self.right_line_height,
+                    self.right_scroll,
+                    MIN_EMPTY_BLOCK_HEIGHT,
+                );
+
+                if left.end < 0.0
+                    || right.end < 0.0
+                    || left.start > bounds.height
+                    || right.start > bounds.height
+                {
+                    continue;
+                }
+
+                let path = canvas::Path::new(|builder| {
+                    builder.move_to(Point::new(0.0, left.start));
+                    builder.bezier_curve_to(
+                        Point::new(bounds.width * 0.35, left.start),
+                        Point::new(bounds.width * 0.65, right.start),
+                        Point::new(bounds.width, right.start),
+                    );
+                    builder.line_to(Point::new(bounds.width, right.end));
+                    builder.bezier_curve_to(
+                        Point::new(bounds.width * 0.65, right.end),
+                        Point::new(bounds.width * 0.35, left.end),
+                        Point::new(0.0, left.end),
+                    );
+                    builder.close();
+                });
+
+                let fill =
+                    link_map_fill(block.kind, self.current_hunk == Some(block.hunk_id));
+                frame.fill(&path, fill);
+                frame.stroke(
+                    &path,
+                    canvas::Stroke::default()
+                        .with_width(if self.current_hunk == Some(block.hunk_id) {
+                            1.3
+                        } else {
+                            0.8
+                        })
+                        .with_color(link_map_stroke(block.kind)),
+                );
+            }
+        });
+
+        vec![geometry]
     }
 }
 
@@ -912,17 +992,23 @@ struct OverviewRect {
     height: f32,
 }
 
-fn build_editor(content: &str, path_hint: Option<&str>) -> CodeEditor {
+pub fn build_editor_with_font_size(
+    content: &str,
+    path_hint: Option<&str>,
+    font_size: f32,
+) -> CodeEditor {
     let syntax = syntax_for_path(path_hint);
     let mut editor = CodeEditor::new(content, syntax);
     editor.set_font(theme::code_font());
-    editor.set_font_size(theme::typography::CAPTION_SIZE as f32, true);
+    editor.set_font_size(font_size, true);
     editor.set_wrap_enabled(false);
     editor.set_line_numbers_enabled(true);
     editor.set_search_replace_enabled(false);
     editor.set_theme(editor_style());
     editor
 }
+
+const DEFAULT_EDITOR_FONT_SIZE: f32 = 13.0;
 
 fn editor_style() -> iced_code_editor::theme::Style {
     iced_code_editor::theme::Style {

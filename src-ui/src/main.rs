@@ -3722,7 +3722,10 @@ fn update_editor_diff_model(state: &mut AppState) {
     match git_core::diff::build_editor_diff_model(repo, path, is_staged) {
         Ok(Some(model)) => {
             state.editor_diff = Some(model.clone());
-            state.split_diff_editor = Some(widgets::diff_editor::SplitDiffEditorState::new(model));
+            state.split_diff_editor = Some(widgets::diff_editor::SplitDiffEditorState::with_font_size(
+                model,
+                state.git_settings.editor_font_size_f32(),
+            ));
             if state.selected_hunk_index.is_none() {
                 state.selected_hunk_index = Some(0);
             }

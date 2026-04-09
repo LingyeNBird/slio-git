@@ -80,7 +80,33 @@ fn build_remote_callbacks(
 
         if allowed_types.is_ssh_key() {
             if let Some(username) = auth_username.as_deref() {
-                return Cred::ssh_key_from_agent(username);
+                // 1. Try SSH agent first
+                if let Ok(cred) = Cred::ssh_key_from_agent(username) {
+                    return Ok(cred);
+                }
+
+                // 2. Try common SSH key files from ~/.ssh/
+                let ssh_dir = dirs_next::home_dir()
+                    .map(|h| h.join(".ssh"))
+                    .unwrap_or_default();
+                let key_names = [
+                    "id_ed25519",
+                    "id_rsa",
+                    "id_ecdsa",
+                    "id_dsa",
+                ];
+                for key_name in &key_names {
+                    let private_key = ssh_dir.join(key_name);
+                    if private_key.exists() {
+                        let public_key = ssh_dir.join(format!("{key_name}.pub"));
+                        let pub_path = public_key.exists().then_some(public_key.as_path());
+                        if let Ok(cred) =
+                            Cred::ssh_key(username, pub_path, &private_key, None)
+                        {
+                            return Ok(cred);
+                        }
+                    }
+                }
             }
         }
 
@@ -267,49 +293,52 @@ pub fn push(
         branch_name, remote_name
     );
 
-    let remote_url = remote_url(repo, remote_name)?;
-    if remote_url_uses_ssh(&remote_url) {
-        let refspec = format!("refs/heads/{branch_name}:refs/heads/{branch_name}");
-        info!(
-            "Using system git push for SSH remote '{}' ({})",
-            remote_name, remote_url
-        );
-        return run_git_remote_command(repo, "push", remote_name, &["push", remote_name, &refspec]);
+    let refspec = format!("refs/heads/{branch_name}:refs/heads/{branch_name}");
+
+    // Try libgit2 first (handles SSH keys from agent + ~/.ssh/ + credential helpers)
+    let libgit2_result = (|| -> Result<(), GitError> {
+        let repo_lock = repo.inner.write().unwrap();
+        let config = repo_lock.config().map_err(|e| GitError::RemoteFailed {
+            remote: remote_name.to_string(),
+            details: e.to_string(),
+        })?;
+        let mut remote = repo_lock
+            .find_remote(remote_name)
+            .map_err(|e| GitError::RemoteFailed {
+                remote: remote_name.to_string(),
+                details: e.to_string(),
+            })?;
+
+        let mut callbacks = build_remote_callbacks(config, credentials);
+        callbacks.push_update_reference(|refname, msg| {
+            info!("Push update: {} - {:?}", refname, msg);
+            Ok(())
+        });
+
+        let mut push_options = PushOptions::new();
+        push_options.remote_callbacks(callbacks);
+
+        remote
+            .push(&[&refspec], Some(&mut push_options))
+            .map_err(|e| GitError::RemoteFailed {
+                remote: remote_name.to_string(),
+                details: e.to_string(),
+            })?;
+
+        info!("Push completed successfully via libgit2");
+        Ok(())
+    })();
+
+    if libgit2_result.is_ok() {
+        return libgit2_result;
     }
 
-    let repo_lock = repo.inner.write().unwrap();
-    let config = repo_lock.config().map_err(|e| GitError::RemoteFailed {
-        remote: remote_name.to_string(),
-        details: e.to_string(),
-    })?;
-    let mut remote = repo_lock
-        .find_remote(remote_name)
-        .map_err(|e| GitError::RemoteFailed {
-            remote: remote_name.to_string(),
-            details: e.to_string(),
-        })?;
-
-    let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
-
-    let mut callbacks = build_remote_callbacks(config, credentials);
-
-    callbacks.push_update_reference(|refname, msg| {
-        info!("Push update: {} - {:?}", refname, msg);
-        Ok(())
-    });
-
-    let mut push_options = PushOptions::new();
-    push_options.remote_callbacks(callbacks);
-
-    remote
-        .push(&[&refspec], Some(&mut push_options))
-        .map_err(|e| GitError::RemoteFailed {
-            remote: remote_name.to_string(),
-            details: e.to_string(),
-        })?;
-
-    info!("Push completed successfully");
-    Ok(())
+    // Fallback to system git (handles edge cases libgit2 can't)
+    info!(
+        "libgit2 push failed ({}), falling back to system git",
+        libgit2_result.as_ref().unwrap_err()
+    );
+    run_git_remote_command(repo, "push", remote_name, &["push", remote_name, &refspec])
 }
 
 /// Force push with --force-with-lease semantics
