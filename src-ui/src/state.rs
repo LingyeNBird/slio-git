@@ -528,6 +528,8 @@ pub struct AppState {
     pub editor_diff: Option<EditorDiffModel>,
     /// Runtime state for the editor-backed split diff surface.
     pub split_diff_editor: Option<SplitDiffEditorState>,
+    /// Runtime state for the unified diff CodeEditor surface.
+    pub unified_diff_editor: Option<crate::widgets::diff_editor::UnifiedDiffEditorState>,
     /// In-progress network operation for progress bar display
     pub network_operation: Option<NetworkOperation>,
     /// Pull strategy preference (merge or rebase)
@@ -629,6 +631,7 @@ impl AppState {
             full_file_preview_binary: false,
             editor_diff: None,
             split_diff_editor: None,
+            unified_diff_editor: None,
             network_operation: None,
             pull_strategy: PullStrategy::default(),
             available_update: None,
@@ -773,6 +776,7 @@ impl AppState {
         self.current_diff = None;
         self.editor_diff = None;
         self.split_diff_editor = None;
+        self.unified_diff_editor = None;
         self.selected_hunk_index = None;
         self.change_context_menu_path = None;
         self.change_context_menu_cursor = Point::new(0.0, 0.0);
@@ -850,6 +854,7 @@ impl AppState {
         self.current_diff = None;
         self.editor_diff = None;
         self.split_diff_editor = None;
+        self.unified_diff_editor = None;
         self.diff_presentation = DiffPresentation::Unified;
         self.selected_change_path = None;
         self.toolbar_remote_menu = None;
@@ -1254,6 +1259,7 @@ impl AppState {
                             self.current_diff = None;
                             self.editor_diff = None;
                             self.split_diff_editor = None;
+        self.unified_diff_editor = None;
                             self.selected_hunk_index = None;
                             self.change_context_menu_path = None;
                             self.change_context_menu_anchor = None;
@@ -1602,6 +1608,7 @@ impl AppState {
         self.full_file_preview_truncated = false;
         self.editor_diff = None;
         self.split_diff_editor = None;
+        self.unified_diff_editor = None;
         self.sync_shell_state();
 
         let result = self.load_diff_for_file(&path);

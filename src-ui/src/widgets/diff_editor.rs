@@ -1540,6 +1540,161 @@ fn is_mutating_message(message: &EditorMessage) -> bool {
     )
 }
 
+// ═══════════════════════════════════════
+// Unified Diff Editor (single CodeEditor pane)
+// ═══════════════════════════════════════
+
+/// Line decoration kind for the unified view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnifiedLineKind {
+    Context,
+    Addition,
+    Deletion,
+    HunkHeader,
+}
+
+/// State for the unified diff view backed by a single CodeEditor.
+pub struct UnifiedDiffEditorState {
+    editor: CodeEditor,
+    decorations: Arc<PaneDecorations>,
+    line_count: usize,
+    /// Stored for clone/rebuild
+    source_diff: git_core::diff::Diff,
+    font_size: f32,
+}
+
+impl std::fmt::Debug for UnifiedDiffEditorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UnifiedDiffEditorState")
+            .field("line_count", &self.line_count)
+            .finish()
+    }
+}
+
+impl Clone for UnifiedDiffEditorState {
+    fn clone(&self) -> Self {
+        Self::from_diff(&self.source_diff, self.font_size)
+    }
+}
+
+impl UnifiedDiffEditorState {
+    /// Build from a `Diff` (the standard unified diff data).
+    pub fn from_diff(diff: &git_core::diff::Diff, font_size: f32) -> Self {
+        let mut text = String::new();
+        let mut line_kinds: Vec<UnifiedLineKind> = Vec::new();
+
+        let path_hint = diff
+            .files
+            .first()
+            .and_then(|f| f.new_path.as_deref().or(f.old_path.as_deref()));
+
+        for file in &diff.files {
+            for hunk in &file.hunks {
+                // Hunk header line
+                text.push_str(&hunk.header);
+                if !hunk.header.ends_with('\n') {
+                    text.push('\n');
+                }
+                line_kinds.push(UnifiedLineKind::HunkHeader);
+
+                for line in &hunk.lines {
+                    let content = &line.content;
+                    text.push_str(content);
+                    if !content.ends_with('\n') {
+                        text.push('\n');
+                    }
+
+                    let kind = match line.origin {
+                        git_core::diff::DiffLineOrigin::Addition => UnifiedLineKind::Addition,
+                        git_core::diff::DiffLineOrigin::Deletion => UnifiedLineKind::Deletion,
+                        _ => UnifiedLineKind::Context,
+                    };
+                    line_kinds.push(kind);
+                }
+            }
+        }
+
+        let line_count = logical_line_count(&text);
+        let mut editor = build_editor_with_font_size(&text, path_hint, font_size);
+        // Disable line numbers — unified diff has its own gutter context
+        editor.set_line_numbers_enabled(false);
+
+        let decorations = build_unified_decorations(&line_kinds, line_count);
+
+        Self {
+            editor,
+            decorations: Arc::new(decorations),
+            line_count,
+            source_diff: diff.clone(),
+            font_size,
+        }
+    }
+
+    pub fn update(&mut self, message: EditorMessage) -> iced::Task<UnifiedDiffEditorEvent> {
+        if is_mutating_message(&message) {
+            return iced::Task::none();
+        }
+        self.editor
+            .update(&message)
+            .map(|m| UnifiedDiffEditorEvent::Editor(m))
+    }
+
+    pub fn view(&self) -> Element<'_, UnifiedDiffEditorEvent> {
+        let decorations = Arc::clone(&self.decorations);
+        let background = Canvas::new(DiffDecorationCanvas {
+            decorations,
+            viewport_scroll: self.editor.viewport_scroll(),
+            horizontal_scroll_offset: self.editor.horizontal_scroll_offset(),
+            line_height: self.editor.line_height(),
+            viewport_height: self.editor.viewport_height(),
+            gutter_width: self.editor.gutter_width(),
+            char_width: self.editor.char_width(),
+            full_char_width: self.editor.full_char_width(),
+            active_range: None,
+        })
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        let editor_view = self
+            .editor
+            .view()
+            .map(UnifiedDiffEditorEvent::Editor);
+
+        Container::new(Stack::new().push(background).push(editor_view))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum UnifiedDiffEditorEvent {
+    Editor(EditorMessage),
+}
+
+fn build_unified_decorations(line_kinds: &[UnifiedLineKind], total_lines: usize) -> PaneDecorations {
+    let mut lines: Vec<Option<DecoratedLine>> = vec![None; total_lines];
+
+    for (i, kind) in line_kinds.iter().enumerate() {
+        if i >= lines.len() {
+            break;
+        }
+        let block_kind = match kind {
+            UnifiedLineKind::Addition => EditorDiffBlockKind::Insert,
+            UnifiedLineKind::Deletion => EditorDiffBlockKind::Delete,
+            UnifiedLineKind::HunkHeader => EditorDiffBlockKind::Replace,
+            UnifiedLineKind::Context => continue,
+        };
+        lines[i] = Some(DecoratedLine {
+            kind: block_kind,
+            content: String::new(),
+            inline_changes: Vec::new(),
+        });
+    }
+
+    PaneDecorations { lines }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -426,28 +426,12 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.toggle_diff_presentation();
             update_editor_diff_model(state);
         }
-        Message::CopyDiffContent => {
-            if let Some(diff) = &state.current_diff {
-                let mut text = String::new();
-                for file in &diff.files {
-                    for hunk in &file.hunks {
-                        text.push_str(&hunk.header);
-                        text.push('\n');
-                        for line in &hunk.lines {
-                            let prefix = match line.origin {
-                                git_core::diff::DiffLineOrigin::Addition => "+",
-                                git_core::diff::DiffLineOrigin::Deletion => "-",
-                                _ => " ",
-                            };
-                            text.push_str(prefix);
-                            text.push_str(&line.content);
-                            if !line.content.ends_with('\n') {
-                                text.push('\n');
-                            }
-                        }
-                    }
-                }
-                return iced::clipboard::write(text);
+        Message::UnifiedDiffEditorEvent(event) => {
+            if let Some(editor) = state.unified_diff_editor.as_mut() {
+                let task = editor.update(match event {
+                    widgets::diff_editor::UnifiedDiffEditorEvent::Editor(m) => m,
+                });
+                return task.map(Message::UnifiedDiffEditorEvent);
             }
         }
         Message::SplitDiffEditorEvent(event) => {
@@ -3725,8 +3709,19 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
 fn update_editor_diff_model(state: &mut AppState) {
     state.editor_diff = None;
     state.split_diff_editor = None;
+    state.unified_diff_editor = None;
 
-    if state.diff_presentation != DiffPresentation::Split {
+    // Build unified editor for unified mode
+    if state.diff_presentation == DiffPresentation::Unified {
+        if let Some(diff) = &state.current_diff {
+            if !diff.files.is_empty() {
+                state.unified_diff_editor =
+                    Some(widgets::diff_editor::UnifiedDiffEditorState::from_diff(
+                        diff,
+                        state.git_settings.editor_font_size_f32(),
+                    ));
+            }
+        }
         return;
     }
 
@@ -5141,10 +5136,6 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
                     .is_some()
                     .then_some(Message::ToggleDiffPresentation),
             ))
-            .push(button::compact_ghost(
-                "复制",
-                state.current_diff.is_some().then_some(Message::CopyDiffContent),
-            ))
             .push_maybe(state.current_diff.as_ref().and_then(|diff| {
                 let total_hunks: usize = diff.files.iter().map(|f| f.hunks.len()).sum();
                 (total_hunks > 1).then(|| {
@@ -5196,13 +5187,18 @@ fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<
 
     match state.diff_presentation {
         DiffPresentation::Unified => {
-            let mut viewer = widgets::diff_viewer::DiffViewer::new(diff);
-            if selected_is_staged {
-                viewer = viewer.with_unstage_hunk_handler(Message::UnstageHunk);
+            if let Some(editor) = state.unified_diff_editor.as_ref() {
+                editor.view().map(Message::UnifiedDiffEditorEvent)
             } else {
-                viewer = viewer.with_stage_hunk_handler(Message::StageHunk);
+                // Fallback to old text-based viewer
+                let mut viewer = widgets::diff_viewer::DiffViewer::new(diff);
+                if selected_is_staged {
+                    viewer = viewer.with_unstage_hunk_handler(Message::UnstageHunk);
+                } else {
+                    viewer = viewer.with_stage_hunk_handler(Message::StageHunk);
+                }
+                viewer.view()
             }
-            viewer.view()
         }
         DiffPresentation::Split => {
             let (Some(model), Some(editor)) =
@@ -5889,7 +5885,7 @@ pub enum Message {
     SwitchProject(PathBuf),
     SelectChange(String),
     ToggleDiffPresentation,
-    CopyDiffContent,
+    UnifiedDiffEditorEvent(widgets::diff_editor::UnifiedDiffEditorEvent),
     SplitDiffEditorEvent(DiffEditorEvent),
     NavigatePrevFile,
     NavigateNextFile,
