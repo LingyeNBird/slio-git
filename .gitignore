@@ -33,6 +33,9 @@ Thumbs.db
 *.a
 *.dmg
 
+# Screenshots
+e2e/screenshots/
+
 # Tool config
 .obsidian/
 .codex/
