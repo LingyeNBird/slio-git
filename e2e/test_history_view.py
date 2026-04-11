@@ -10,14 +10,13 @@ E2E: 历史视图 — 切换到 Log tab，浏览提交历史
 import driver
 
 
-LOG_TAB = (0.06, 0.07)
 CHANGES_TAB = (0.045, 0.07)
 
 
 class Test历史视图:
     def test_切换到Log(self, app):
         """点击 Log tab。"""
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1)
         driver.window_screenshot("hist_01_log_tab")
 

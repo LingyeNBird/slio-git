@@ -40,8 +40,6 @@ from scenarios.conftest import add_unstaged_change
 # ═══════════════════════════════════════════════════════════════════════
 
 CHANGES_TAB = (0.045, 0.07)
-LOG_TAB = (0.06, 0.07)
-
 # 历史列表中的提交行
 HISTORY_ROW_1 = (0.30, 0.18)
 HISTORY_ROW_2 = (0.30, 0.22)
@@ -155,7 +153,7 @@ class Test00_准备历史:
 
     def test_02_切到Log视图(self, app):
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         step("history_ready")
 
@@ -169,7 +167,7 @@ class Test01_菜单布局:
 
     def test_01_右键最新提交(self, app):
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1)
         right_click_history(HISTORY_ROW_1)
         step("menu_full")
@@ -229,7 +227,7 @@ class Test03_Cherry_pick:
         driver.sleep(2)
 
     def test_02_切到Log选中老提交(self, app):
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1)
         # 选中第 3 个提交 (较早的)
         driver.click_relative(*HISTORY_ROW_3)
@@ -265,7 +263,7 @@ class Test04_从提交创建分支:
 
     def test_01_右键老提交(self, app):
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1)
         right_click_history(HISTORY_ROW_2)
         step("create_branch_menu")

@@ -19,7 +19,6 @@ import subprocess
 
 import driver
 
-LOG_TAB = (0.06, 0.07)
 CHANGES_TAB = (0.045, 0.07)
 
 # 历史视图坐标
@@ -57,7 +56,7 @@ class Test历史搜索:
         driver.sleep(2)
 
     def test_切换到Log_tab(self, app):
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         driver.window_screenshot("history_01_log_tab")
 
@@ -100,7 +99,7 @@ class Test历史滚动:
     """测试长历史列表的滚动。"""
 
     def test_切换到Log(self, app):
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1)
 
     def test_滚动到底部(self, app):

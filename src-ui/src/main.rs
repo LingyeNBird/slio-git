@@ -938,6 +938,15 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     );
                 }
             }
+            ShortcutAction::SwitchToLogTab => {
+                return update(state, Message::SwitchGitToolWindowTab(GitToolWindowTab::Log));
+            }
+            ShortcutAction::SwitchToChangesTab => {
+                return update(
+                    state,
+                    Message::SwitchGitToolWindowTab(GitToolWindowTab::Changes),
+                );
+            }
             _ => {}
         },
         Message::Commit => {

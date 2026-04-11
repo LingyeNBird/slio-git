@@ -23,7 +23,6 @@ import subprocess
 import driver
 
 
-LOG_TAB = (0.06, 0.07)
 CHANGES_TAB = (0.045, 0.07)
 
 # 历史视图坐标
@@ -54,7 +53,7 @@ class Test提交列表浏览:
 
     def test_切换到Log(self, app):
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         driver.window_screenshot("log_filter_01_log_tab")
 

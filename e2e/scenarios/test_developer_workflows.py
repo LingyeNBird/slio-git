@@ -35,8 +35,6 @@ SETTINGS_BTN = (0.975, 0.03)
 
 # Tab 栏
 CHANGES_TAB = (0.045, 0.07)
-LOG_TAB = (0.06, 0.07)
-
 # 变更列表
 STAGE_ALL_BTN = (0.31, 0.105)
 UNSTAGE_ALL_BTN = (0.33, 0.105)
@@ -300,7 +298,7 @@ class Test01_Feature分支开发:
     def test_09_查看提交历史(self, app):
         """切到 Log tab，确认两次提交都在。"""
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         step("log_two_commits")
         shot_region(0.03, 0.10, 0.94, 0.50, "commit_history")
@@ -384,7 +382,7 @@ class Test03_代码审查:
 
     def test_01_切到Log视图(self, app):
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         step("review_log_tab")
 
@@ -627,7 +625,7 @@ class Test05_多文件分批提交:
     def test_06_查看历史验证分批效果(self, app):
         """切到 Log 查看是否有两笔清晰的提交。"""
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         step("batch_history_view")
         shot_region(0.03, 0.10, 0.94, 0.50, "batch_two_commits")
@@ -709,7 +707,7 @@ class Test06_分支整理与发布:
     def test_06_查看最终提交历史(self, app):
         """切到 Log 查看合并后的完整历史。"""
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         step("release_final_history")
         shot_region(0.03, 0.10, 0.94, 0.70, "release_full_log")

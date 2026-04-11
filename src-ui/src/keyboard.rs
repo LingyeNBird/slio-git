@@ -35,6 +35,9 @@ pub enum ShortcutAction {
     StashPop,
     StashDrop,
     StashList,
+    // Tab switching
+    SwitchToLogTab,
+    SwitchToChangesTab,
 }
 
 /// Keyboard shortcut definition
@@ -156,6 +159,18 @@ pub fn get_shortcuts() -> Vec<KeyboardShortcut> {
             key: Key::Character("z".into()),
             action: ShortcutAction::StashDrop,
         },
+        // Ctrl+L: Switch to Log tab
+        KeyboardShortcut {
+            modifiers: Modifiers::CTRL,
+            key: Key::Character("l".into()),
+            action: ShortcutAction::SwitchToLogTab,
+        },
+        // Ctrl+Shift+L: Switch to Changes tab
+        KeyboardShortcut {
+            modifiers: Modifiers::CTRL | Modifiers::SHIFT,
+            key: Key::Character("l".into()),
+            action: ShortcutAction::SwitchToChangesTab,
+        },
         // F7: Next hunk (IDEA style)
         KeyboardShortcut {
             modifiers: Modifiers::empty(),
@@ -226,6 +241,8 @@ pub fn action_description(action: ShortcutAction) -> &'static str {
         ShortcutAction::StashPop => "弹出储藏",
         ShortcutAction::StashDrop => "删除储藏",
         ShortcutAction::StashList => "列出储藏",
+        ShortcutAction::SwitchToLogTab => "切换到日志",
+        ShortcutAction::SwitchToChangesTab => "切换到变更",
     }
 }
 

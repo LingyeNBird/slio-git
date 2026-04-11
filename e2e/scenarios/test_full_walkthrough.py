@@ -42,8 +42,6 @@ SETTINGS_BTN = (0.975, 0.03)        # Settings 按钮
 
 # Tab 栏
 CHANGES_TAB = (0.045, 0.07)         # Changes tab
-LOG_TAB = (0.06, 0.07)              # Log tab
-
 # 变更列表工具栏
 STAGE_ALL_BTN = (0.31, 0.105)       # 全部暂存
 UNSTAGE_ALL_BTN = (0.33, 0.105)     # 全部取消暂存
@@ -387,7 +385,7 @@ class Test06_分支弹窗:
 class Test07_历史视图:
     def test_切换到Log_tab(self, app):
         ensure_focus()
-        driver.click_relative(*LOG_TAB)
+        driver.hotkey("ctrl", "l")
         driver.sleep(1.5)
         step("34_log_tab")
 
