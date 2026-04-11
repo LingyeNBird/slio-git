@@ -630,7 +630,8 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             state.change_context_menu_path = None;
             if let Some(repo) = state.current_repository.clone() {
-                state.history_view.load_history(&repo);
+                let i18n = i18n::locale(state.git_settings.language.as_deref());
+                state.history_view.load_history(&repo, i18n);
             }
         }
         Message::ToggleBlameAnnotation => {
@@ -1045,17 +1046,19 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             if state.show_branch_dropdown {
                 // Load branches when opening
                 if let Some(repo) = state.current_repository.clone() {
-                    state.branch_popup.load_branches(&repo);
+                    let i18n = i18n::locale(state.git_settings.language.as_deref());
+                    state.branch_popup.load_branches(&repo, i18n);
                 }
             }
         }
         Message::ShowHistory => {
             state.switch_git_tool_window_tab(GitToolWindowTab::Log);
             if let Some(repo) = state.current_repository.clone() {
-                state.history_view.load_history(&repo);
+                let i18n = i18n::locale(state.git_settings.language.as_deref());
+                state.history_view.load_history(&repo, i18n);
                 // Also load branches for the dashboard sidebar
                 if state.branch_popup.local_branches.is_empty() {
-                    state.branch_popup.load_branches(&repo);
+                    state.branch_popup.load_branches(&repo, i18n);
                 }
             }
         }
@@ -1063,9 +1066,10 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.switch_git_tool_window_tab(tab);
             if tab == GitToolWindowTab::Log {
                 if let Some(repo) = state.current_repository.clone() {
-                    state.history_view.load_history(&repo);
+                    let i18n = i18n::locale(state.git_settings.language.as_deref());
+                    state.history_view.load_history(&repo, i18n);
                     if state.branch_popup.local_branches.is_empty() {
-                        state.branch_popup.load_branches(&repo);
+                        state.branch_popup.load_branches(&repo, i18n);
                     }
                 }
             }
@@ -1410,6 +1414,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
         },
         Message::BranchPopupMessage(message) => {
+            let i18n = i18n::locale(state.git_settings.language.as_deref());
             if branch_popup_message_closes_context_menu(&message) {
                 state.branch_popup.close_context_menu();
             }
@@ -1418,7 +1423,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 BranchPopupMessage::SelectBranch(name) => {
                     state.branch_popup.select_branch(name);
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.load_selected_branch_history(&repo);
+                        state.branch_popup.load_selected_branch_history(&repo, i18n);
                     }
                 }
                 BranchPopupMessage::ToggleFolder(path_key) => {
@@ -1427,14 +1432,14 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 BranchPopupMessage::OpenBranchContextMenu(name) => {
                     state.branch_popup.open_context_menu(name);
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.load_selected_branch_history(&repo);
+                        state.branch_popup.load_selected_branch_history(&repo, i18n);
                     }
                 }
                 BranchPopupMessage::OpenCommitContextMenu(commit_id) => {
                     if let Ok(repo) = require_repository(state) {
                         state
                             .branch_popup
-                            .select_branch_commit(&repo, commit_id.clone());
+                            .select_branch_commit(&repo, commit_id.clone(), i18n);
                         state.branch_popup.open_commit_context_menu(commit_id);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
@@ -1457,7 +1462,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     let selection_changed = state.branch_popup.set_search_query(query);
                     if selection_changed {
                         if let Ok(repo) = require_repository(state) {
-                            state.branch_popup.load_selected_branch_history(&repo);
+                            state.branch_popup.load_selected_branch_history(&repo, i18n);
                         }
                     }
                 }
@@ -1465,7 +1470,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     let selection_changed = state.branch_popup.set_search_query(String::new());
                     if selection_changed {
                         if let Ok(repo) = require_repository(state) {
-                            state.branch_popup.load_selected_branch_history(&repo);
+                            state.branch_popup.load_selected_branch_history(&repo, i18n);
                         }
                     }
                 }
@@ -1480,7 +1485,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::SelectBranchCommit(commit_id) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.select_branch_commit(&repo, commit_id);
+                        state.branch_popup.select_branch_commit(&repo, commit_id, i18n);
                         state.open_auxiliary_view(AuxiliaryView::Branches);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
@@ -1499,7 +1504,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::ConfirmInlineAction => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.confirm_inline_action(&repo);
+                        state.branch_popup.confirm_inline_action(&repo, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1511,7 +1516,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         } else {
                             let _ = refresh_repository_after_action(state, &repo, false);
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1524,7 +1529,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 BranchPopupMessage::CreateBranch(name) => {
                     if let Ok(repo) = require_repository(state) {
                         state.branch_popup.new_branch_name = name.clone();
-                        state.branch_popup.create_branch(&repo, name);
+                        state.branch_popup.create_branch(&repo, name, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1536,7 +1541,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         } else {
                             let _ = refresh_repository_after_action(state, &repo, false);
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1547,7 +1552,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::DeleteBranch(name) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.delete_branch(&repo, name);
+                        state.branch_popup.delete_branch(&repo, name, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1559,7 +1564,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         } else {
                             let _ = refresh_repository_after_action(state, &repo, false);
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1570,7 +1575,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::PrepareDeleteBranch(name) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.prepare_delete_branch(&repo, name);
+                        state.branch_popup.prepare_delete_branch(&repo, name, i18n);
                     }
                 }
                 BranchPopupMessage::ConfirmDeleteBranch => {
@@ -1588,7 +1593,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::CheckoutBranch(name) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.checkout_branch(&repo, name.clone());
+                        state.branch_popup.checkout_branch(&repo, name.clone(), i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             // Detect uncommitted changes conflict → show smart checkout dialog
                             if error.contains("would be overwritten")
@@ -1620,7 +1625,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                 "workspace.branches.checkout",
                             );
                         } else if let Some(current) = state.current_repository.clone() {
-                            state.branch_popup.load_branches(&current);
+                            state.branch_popup.load_branches(&current, i18n);
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
                                 state.set_success(message, None, "workspace.branches");
@@ -1632,7 +1637,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     if let Ok(repo) = require_repository(state) {
                         state
                             .branch_popup
-                            .checkout_remote_branch(&repo, remote_ref.clone());
+                            .checkout_remote_branch(&repo, remote_ref.clone(), i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             if error.contains("would be overwritten")
                                 || error.contains("please commit your changes or stash")
@@ -1663,7 +1668,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                 "workspace.branches.checkout_remote",
                             );
                         } else if let Some(current) = state.current_repository.clone() {
-                            state.branch_popup.load_branches(&current);
+                            state.branch_popup.load_branches(&current, i18n);
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
                                 state.set_success(message, None, "workspace.branches");
@@ -1684,7 +1689,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                     Some(format!("智能签出: 已切到 {name}（变更已恢复）"));
                                 let _ = refresh_repository_after_action(state, &repo, true);
                                 if let Some(current) = state.current_repository.clone() {
-                                    state.branch_popup.load_branches(&current);
+                                    state.branch_popup.load_branches(&current, i18n);
                                 }
                                 state.set_success(
                                     format!("智能签出 {name} 完成"),
@@ -1720,7 +1725,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                     Some(format!("强制签出: 已切到 {name}（本地修改已丢弃）"));
                                 let _ = refresh_repository_after_action(state, &repo, false);
                                 if let Some(current) = state.current_repository.clone() {
-                                    state.branch_popup.load_branches(&current);
+                                    state.branch_popup.load_branches(&current, i18n);
                                 }
                                 state.set_success(
                                     format!("强制签出 {name} 完成"),
@@ -1750,7 +1755,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 BranchPopupMessage::MergeBranch(name) => {
                     if let Ok(repo) = require_repository(state) {
                         let branch_name = name.clone();
-                        state.branch_popup.merge_branch(&repo, name);
+                        state.branch_popup.merge_branch(&repo, name, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1779,7 +1784,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             );
                         } else if !state.has_conflicts() {
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1792,7 +1797,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     if let Ok(repo) = require_repository(state) {
                         state
                             .branch_popup
-                            .checkout_and_rebase(&repo, &branch, &onto);
+                            .checkout_and_rebase(&repo, &branch, &onto, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1813,7 +1818,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             );
                         } else if !state.has_conflicts() {
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1828,7 +1833,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             Some(format!("{selected} ↔ {current}"));
                         state
                             .branch_popup
-                            .compare_refs_preview(&repo, &selected, &current);
+                            .compare_refs_preview(&repo, &selected, &current, i18n);
                         state.open_auxiliary_view(AuxiliaryView::Branches);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
@@ -1846,7 +1851,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         state.branch_popup.comparison_title = Some(format!("{reference} ↔ 工作树"));
                         state
                             .branch_popup
-                            .compare_ref_to_workdir_preview(&repo, &reference);
+                            .compare_ref_to_workdir_preview(&repo, &reference, i18n);
                         state.open_auxiliary_view(AuxiliaryView::Branches);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
@@ -1861,7 +1866,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::RebaseCurrentOnto(onto) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.rebase_current_onto(&repo, &onto);
+                        state.branch_popup.rebase_current_onto(&repo, &onto, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1882,7 +1887,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             );
                         } else if !state.has_conflicts() {
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1893,7 +1898,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::FetchRemote(remote_name) => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.fetch_remote(&repo, &remote_name);
+                        state.branch_popup.fetch_remote(&repo, &remote_name, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1905,7 +1910,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         } else {
                             let _ = refresh_repository_after_action(state, &repo, false);
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1918,7 +1923,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     if let Ok(repo) = require_repository(state) {
                         state
                             .branch_popup
-                            .push_branch_to_remote(&repo, &remote, &branch);
+                            .push_branch_to_remote(&repo, &remote, &branch, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1930,7 +1935,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         } else {
                             let _ = refresh_repository_after_action(state, &repo, false);
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -1941,7 +1946,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::SetUpstream { branch, upstream } => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.set_upstream(&repo, &branch, &upstream);
+                        state.branch_popup.set_upstream(&repo, &branch, &upstream, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -1953,7 +1958,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         } else {
                             let _ = refresh_repository_after_action(state, &repo, false);
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -2023,7 +2028,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     if let Ok(repo) = require_repository(state) {
                         state.pending_commit_action = state
                             .branch_popup
-                            .prepare_cherry_pick_commit(&repo, commit_id);
+                            .prepare_cherry_pick_commit(&repo, commit_id, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -2038,7 +2043,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 BranchPopupMessage::PrepareRevertCommit(commit_id) => {
                     if let Ok(repo) = require_repository(state) {
                         state.pending_commit_action =
-                            state.branch_popup.prepare_revert_commit(&repo, commit_id);
+                            state.branch_popup.prepare_revert_commit(&repo, commit_id, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -2054,7 +2059,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     if let Ok(repo) = require_repository(state) {
                         state.pending_commit_action = state
                             .branch_popup
-                            .prepare_reset_current_branch_to_commit(&repo, commit_id);
+                            .prepare_reset_current_branch_to_commit(&repo, commit_id, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -2070,7 +2075,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     if let Ok(repo) = require_repository(state) {
                         state.pending_commit_action = state
                             .branch_popup
-                            .prepare_push_current_branch_to_commit(&repo, commit_id);
+                            .prepare_push_current_branch_to_commit(&repo, commit_id, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -2084,7 +2089,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::ContinueInProgressCommitAction => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.continue_in_progress_commit_action(&repo);
+                        state.branch_popup.continue_in_progress_commit_action(&repo, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -2112,7 +2117,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             );
                         } else {
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -2123,7 +2128,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 BranchPopupMessage::AbortInProgressCommitAction => {
                     if let Ok(repo) = require_repository(state) {
-                        state.branch_popup.abort_in_progress_commit_action(&repo);
+                        state.branch_popup.abort_in_progress_commit_action(&repo, i18n);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
                                 state,
@@ -2144,7 +2149,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             );
                         } else {
                             if let Some(current) = state.current_repository.clone() {
-                                state.branch_popup.load_branches(&current);
+                                state.branch_popup.load_branches(&current, i18n);
                             }
                             state.open_auxiliary_view(AuxiliaryView::Branches);
                             if let Some(message) = state.branch_popup.success_message.clone() {
@@ -2171,7 +2176,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             let keep_branch_dropdown_open = state.show_branch_dropdown;
                             state
                                 .branch_popup
-                                .confirm_pending_commit_action(&repo, confirmation);
+                                .confirm_pending_commit_action(&repo, confirmation, i18n);
                             if let Some(error) = state.branch_popup.error.clone() {
                                 report_async_failure(
                                     state,
@@ -2220,7 +2225,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             } else {
                                 if keep_branch_popup_open || keep_branch_dropdown_open {
                                     if let Some(current) = state.current_repository.clone() {
-                                        state.branch_popup.load_branches(&current);
+                                        state.branch_popup.load_branches(&current, i18n);
                                     }
                                 }
                                 if keep_branch_popup_open {
@@ -2251,7 +2256,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 BranchPopupMessage::Refresh => {
                     if let Ok(repo) = require_repository(state) {
                         logging::LogManager::log_context_switcher("refresh", &repo.name());
-                        state.branch_popup.load_branches(&repo);
+                        state.branch_popup.load_branches(&repo, i18n);
                         state.open_auxiliary_view(AuxiliaryView::Branches);
                         if let Some(error) = state.branch_popup.error.clone() {
                             report_async_failure(
@@ -2302,15 +2307,16 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
             }
         }
-        Message::HistoryMessage(message) => match message {
+        Message::HistoryMessage(message) => { let i18n = i18n::locale(state.git_settings.language.as_deref()); match message {
             HistoryMessage::Refresh => {
                 if let Ok(repo) = require_repository(state) {
-                    state.history_view.load_history(&repo);
+                    let i18n = i18n::locale(state.git_settings.language.as_deref());
+                    state.history_view.load_history(&repo, i18n);
                     state.history_view.context_menu_commit = None;
                     if let Some(error) = state.history_view.error.clone() {
                         report_async_failure(
                             state,
-                            "刷新提交历史失败",
+                            i18n.load_history_failed,
                             error,
                             "workspace.history",
                             "workspace.history.refresh",
@@ -2320,12 +2326,13 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             HistoryMessage::SelectCommit(commit_id) => {
                 if let Ok(repo) = require_repository(state) {
+                    let i18n = i18n::locale(state.git_settings.language.as_deref());
                     state.history_view.context_menu_commit = None;
-                    state.history_view.select_commit(&repo, commit_id);
+                    state.history_view.select_commit(&repo, commit_id, i18n);
                     if let Some(error) = state.history_view.error.clone() {
                         report_async_failure(
                             state,
-                            "加载提交详情失败",
+                            i18n.load_commit_detail_failed,
                             error,
                             "workspace.history",
                             "workspace.history.select",
@@ -2334,9 +2341,10 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
             }
             HistoryMessage::ViewDiff(_) => {
+                let i18n = i18n::locale(state.git_settings.language.as_deref());
                 state.set_info(
-                    "提交详情已加载",
-                    Some("当前可直接查看作者、时间与完整提交消息。".to_string()),
+                    i18n.commit_detail_loaded,
+                    Some(i18n.commit_detail_loaded_hint.to_string()),
                     "workspace.history",
                 );
             }
@@ -2354,13 +2362,16 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                 history_diff.editor_diff,
                             );
                         }
-                        Err(error) => report_async_failure(
-                            state,
-                            "加载提交文件差异失败",
-                            error,
-                            "workspace.history",
-                            "workspace.history.file_diff",
-                        ),
+                        Err(error) => {
+                            let i18n = i18n::locale(state.git_settings.language.as_deref());
+                            report_async_failure(
+                                state,
+                                i18n.load_commit_file_diff_failed,
+                                error,
+                                "workspace.history",
+                                "workspace.history.file_diff",
+                            );
+                        }
                     }
                 }
             }
@@ -2393,14 +2404,15 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             HistoryMessage::OpenCommitContextMenu(commit_id) => {
                 if let Ok(repo) = require_repository(state) {
-                    state.history_view.select_commit(&repo, commit_id.clone());
+                    let i18n = i18n::locale(state.git_settings.language.as_deref());
+                    state.history_view.select_commit(&repo, commit_id.clone(), i18n);
                     state.history_view.context_menu_commit = Some(commit_id);
                     state.history_view.context_menu_anchor =
                         Some(state.history_view.context_menu_cursor);
                     if let Some(error) = state.history_view.error.clone() {
                         report_async_failure(
                             state,
-                            "打开提交动作失败",
+                            i18n.open_commit_action_failed,
                             error,
                             "workspace.history",
                             "workspace.history.context_menu",
@@ -2467,7 +2479,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 };
                 if let Ok(repo) = require_repository(state) {
                     state.history_view.context_menu_commit = None;
-                    state.branch_popup.load_branches(&repo);
+                    state.branch_popup.load_branches(&repo, i18n);
                 }
                 return update(
                     state,
@@ -2480,7 +2492,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             HistoryMessage::CompareWithWorktree(commit_id) => {
                 if let Ok(repo) = require_repository(state) {
                     state.history_view.context_menu_commit = None;
-                    state.branch_popup.load_branches(&repo);
+                    state.branch_popup.load_branches(&repo, i18n);
                 }
                 return update(
                     state,
@@ -2490,7 +2502,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             HistoryMessage::PrepareCreateBranch(commit_id) => {
                 state.history_view.context_menu_commit = None;
                 if let Ok(repo) = require_repository(state) {
-                    state.branch_popup.load_branches(&repo);
+                    state.branch_popup.load_branches(&repo, i18n);
                     state.branch_popup.prepare_create_from_selected(commit_id);
                     state.open_auxiliary_view(AuxiliaryView::Branches);
                 }
@@ -2498,7 +2510,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             HistoryMessage::PrepareTagFromCommit(commit_id) => {
                 state.history_view.context_menu_commit = None;
                 if let Ok(repo) = require_repository(state) {
-                    state.branch_popup.load_branches(&repo);
+                    state.branch_popup.load_branches(&repo, i18n);
                 }
                 return update(
                     state,
@@ -2578,7 +2590,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 if let Ok(repo) = require_repository(state) {
                     state.pending_commit_action = state
                         .branch_popup
-                        .prepare_reset_current_branch_to_commit(&repo, commit_id);
+                        .prepare_reset_current_branch_to_commit(&repo, commit_id, i18n);
                     if let Some(error) = state.branch_popup.error.clone() {
                         state.set_error(error);
                     }
@@ -2589,7 +2601,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 if let Ok(repo) = require_repository(state) {
                     state.pending_commit_action = state
                         .branch_popup
-                        .prepare_push_current_branch_to_commit(&repo, commit_id);
+                        .prepare_push_current_branch_to_commit(&repo, commit_id, i18n);
                     if let Some(error) = state.branch_popup.error.clone() {
                         state.set_error(error);
                     }
@@ -2958,11 +2970,12 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             HistoryMessage::SetSearchQuery(query) => state.history_view.set_search_query(query),
             HistoryMessage::Search => {
                 if let Ok(repo) = require_repository(state) {
-                    state.history_view.perform_search(&repo);
+                    let i18n = i18n::locale(state.git_settings.language.as_deref());
+                    state.history_view.perform_search(&repo, i18n);
                     if let Some(error) = state.history_view.error.clone() {
                         report_async_failure(
                             state,
-                            "搜索提交历史失败",
+                            i18n.search_failed,
                             error,
                             "workspace.history",
                             "workspace.history.search",
@@ -3063,7 +3076,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     ),
                 );
             }
-        },
+        } },
         Message::RemoteDialogMessage(message) => match message {
             RemoteDialogMessage::SelectRemote(name) => {
                 state.remote_dialog.selected_remote = Some(name);
@@ -4005,7 +4018,10 @@ fn refresh_open_auxiliary_view(state: &mut AppState) {
     };
 
     match state.auxiliary_view {
-        Some(AuxiliaryView::Branches) => state.branch_popup.load_branches(&repo),
+        Some(AuxiliaryView::Branches) => {
+            let i18n = i18n::locale(state.git_settings.language.as_deref());
+            state.branch_popup.load_branches(&repo, i18n);
+        }
         Some(AuxiliaryView::Remotes) => state.remote_dialog.load_remotes(&repo),
         Some(AuxiliaryView::Tags) => state.tag_dialog.load_tags(&repo),
         Some(AuxiliaryView::Stashes) => state.stash_panel.load_stashes(&repo),
@@ -4868,7 +4884,7 @@ fn view(state: &AppState) -> Element<'_, Message> {
 
     if state.show_branch_dropdown {
         let dropdown = Container::new(
-            branch_popup::view(&state.branch_popup).map(Message::BranchPopupMessage),
+            branch_popup::view(&state.branch_popup, i18n).map(Message::BranchPopupMessage),
         )
         .width(Length::Fixed(620.0))
         .height(Length::Fixed(520.0))
@@ -4973,9 +4989,11 @@ fn wrap_with_pending_commit_action_dialog<'a>(
 ) -> Element<'a, Message> {
     use crate::views::branch_popup;
 
+    let i18n = i18n::locale(state.git_settings.language.as_deref());
     let Some(dialog) = branch_popup::build_pending_commit_action_dialog(
         state.pending_commit_action.as_ref(),
         state.branch_popup.is_loading,
+        i18n,
     ) else {
         return base;
     };
@@ -5119,14 +5137,14 @@ fn build_body<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Mess
                 views::settings_view::view(&state.git_settings).map(Message::SettingsMessage)
             }
             AuxiliaryView::Commit => build_changes_body(state, i18n),
-            AuxiliaryView::History => build_log_body(state),
+            AuxiliaryView::History => build_log_body(state, i18n),
         };
     }
 
     match state.shell.active_section {
         ShellSection::Changes => match state.shell.git_tool_window_tab {
             GitToolWindowTab::Changes => build_changes_body(state, i18n),
-            GitToolWindowTab::Log => build_log_body(state),
+            GitToolWindowTab::Log => build_log_body(state, i18n),
         },
         ShellSection::Conflicts => build_conflict_body(state, i18n),
         ShellSection::Welcome => build_welcome_body(i18n),
@@ -5157,7 +5175,7 @@ fn build_welcome_body<'a>(i18n: &'a i18n::I18n) -> Element<'a, Message> {
     )
 }
 
-fn build_log_body<'a>(state: &'a AppState) -> Element<'a, Message> {
+fn build_log_body<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Message> {
     history_view::view_with_tabs(
         &state.history_view,
         &state.log_tabs,
@@ -5165,6 +5183,7 @@ fn build_log_body<'a>(state: &'a AppState) -> Element<'a, Message> {
         &state.branch_popup.local_branches,
         &state.branch_popup.remote_branches,
         state.log_branches_dashboard_visible,
+        i18n,
     )
     .map(Message::HistoryMessage)
 }

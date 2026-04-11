@@ -2,6 +2,7 @@
 //!
 //! Provides a view for browsing commit history.
 
+use crate::i18n::I18n;
 use crate::theme::{self, BadgeTone, Surface};
 use crate::state::FileDisplayMode;
 use crate::widgets::{self, button, scrollable, text_input, OptionalPush};
@@ -126,7 +127,7 @@ impl HistoryState {
         self.current_branch_state_hint = repo.state_hint();
     }
 
-    pub fn load_history(&mut self, repo: &Repository) {
+    pub fn load_history(&mut self, repo: &Repository, i18n: &I18n) {
         self.is_loading = true;
         self.error = None;
         self.refresh_repo_context(repo);
@@ -140,13 +141,13 @@ impl HistoryState {
                 self.context_menu_anchor = None;
             }
             Err(error) => {
-                self.error = Some(format!("加载历史失败: {error}"));
+                self.error = Some(format!("{}: {error}", i18n.load_history_failed));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn select_commit(&mut self, repo: &Repository, commit_id: String) {
+    pub fn select_commit(&mut self, repo: &Repository, commit_id: String, i18n: &I18n) {
         self.selected_commit = Some(commit_id.clone());
         self.selected_commit_info = None;
         self.selected_commit_files.clear();
@@ -165,12 +166,12 @@ impl HistoryState {
                         self.selected_commit_files = files;
                     }
                     Err(error) => {
-                        self.error = Some(format!("加载提交文件失败: {error}"));
+                        self.error = Some(format!("{}: {error}", i18n.load_commit_files_failed));
                     }
                 }
             }
             Err(error) => {
-                self.error = Some(format!("加载提交详情失败: {error}"));
+                self.error = Some(format!("{}: {error}", i18n.load_commit_detail_failed));
             }
         }
     }
@@ -183,7 +184,7 @@ impl HistoryState {
         self.context_menu_cursor = position;
     }
 
-    pub fn perform_search(&mut self, repo: &Repository) {
+    pub fn perform_search(&mut self, repo: &Repository, i18n: &I18n) {
         self.context_menu_commit = None;
         self.context_menu_anchor = None;
         self.refresh_repo_context(repo);
@@ -201,7 +202,7 @@ impl HistoryState {
                 self.is_searching = false;
             }
             Err(error) => {
-                self.error = Some(format!("搜索失败: {error}"));
+                self.error = Some(format!("{}: {error}", i18n.search_failed));
                 self.is_searching = false;
             }
         }
@@ -617,7 +618,7 @@ fn build_commit_row<'a>(
     .into()
 }
 
-fn build_history_list<'a>(state: &'a HistoryState) -> Element<'a, HistoryMessage> {
+fn build_history_list<'a>(state: &'a HistoryState, i18n: &'a I18n) -> Element<'a, HistoryMessage> {
     let entries = &state.filtered_entries;
     let graph = build_history_graph(entries);
     let graph_width = (graph.lane_count as f32 * HISTORY_GRAPH_LANE_WIDTH
@@ -626,7 +627,7 @@ fn build_history_list<'a>(state: &'a HistoryState) -> Element<'a, HistoryMessage
 
     let list = if entries.is_empty() {
         Column::new().push(
-            Text::new("当前没有可显示的提交历史。")
+            Text::new(i18n.no_commits_to_display)
                 .size(12)
                 .color(theme::darcula::TEXT_SECONDARY),
         )
@@ -664,7 +665,7 @@ fn build_history_list<'a>(state: &'a HistoryState) -> Element<'a, HistoryMessage
                         .spacing(theme::spacing::XS)
                         .align_y(Alignment::Center)
                         .push(
-                            Text::new("提交列表")
+                            Text::new(i18n.commits_label)
                                 .size(13)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
@@ -678,25 +679,25 @@ fn build_history_list<'a>(state: &'a HistoryState) -> Element<'a, HistoryMessage
                         Row::new()
                             .align_y(Alignment::Center)
                             .push(
-                                Text::new("图谱")
+                                Text::new(i18n.graph_label)
                                     .size(10)
                                     .width(Length::Fixed(graph_width))
                                     .color(theme::darcula::TEXT_DISABLED),
                             )
                             .push(
-                                Text::new("提交")
+                                Text::new(i18n.commit)
                                     .size(10)
                                     .width(Length::FillPortion(5))
                                     .color(theme::darcula::TEXT_DISABLED),
                             )
                             .push(
-                                Text::new("作者 / 哈希")
+                                Text::new(i18n.author_hash)
                                     .size(10)
                                     .width(Length::FillPortion(3))
                                     .color(theme::darcula::TEXT_DISABLED),
                             )
                             .push(
-                                Text::new("时间")
+                                Text::new(i18n.time_label)
                                     .size(10)
                                     .width(Length::FillPortion(2))
                                     .color(theme::darcula::TEXT_DISABLED),
@@ -714,7 +715,7 @@ fn build_history_list<'a>(state: &'a HistoryState) -> Element<'a, HistoryMessage
     .into()
 }
 
-fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a, HistoryMessage> {
+fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState, i18n: &'a I18n) -> Element<'a, HistoryMessage> {
     let Some(commit_id) = state.context_menu_commit.as_deref() else {
         return Space::new().width(Length::Shrink).into();
     };
@@ -743,96 +744,96 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
 
     let _compare_with_current_detail = if let Some(branch_name) = state.current_branch_name.as_ref()
     {
-        format!("直接比较这条提交和当前分支 {branch_name} 的差异")
+        i18n.ctx_compare_branch_fmt.replace("{}", branch_name)
     } else {
-        "当前为 detached HEAD，不能直接与当前分支比较".to_string()
+        i18n.ctx_detached_no_branch_compare.to_string()
     };
     let _compare_with_worktree_detail =
         if let Some(branch_name) = state.current_branch_name.as_ref() {
-            format!("把这条提交和当前工作树直接做比较，基于 {branch_name} 继续判断")
+            i18n.ctx_compare_worktree_fmt.replace("{}", branch_name)
         } else {
-            "当前为 detached HEAD，仍可查看工作树差异，但不能继续围绕当前分支操作".to_string()
+            i18n.ctx_detached_worktree_diff.to_string()
         };
     let cherry_pick_detail = if !commit_detail_ready {
-        "提交详情还没加载完成，请稍后再试".to_string()
+        i18n.ctx_commit_detail_not_ready.to_string()
     } else if is_merge_commit {
-        "merge 提交暂不支持直接 Cherry-pick".to_string()
+        i18n.ctx_merge_no_cherry_pick.to_string()
     } else if let Some(branch_name) = state.current_branch_name.as_ref() {
-        format!("把这条提交复制应用到当前分支 {branch_name}")
+        i18n.ctx_cherry_pick_branch_fmt.replace("{}", branch_name)
     } else {
-        "当前为 detached HEAD，不能直接摘取到当前分支".to_string()
+        i18n.ctx_detached_no_cherry_pick.to_string()
     };
     let revert_detail = if !commit_detail_ready {
-        "提交详情还没加载完成，请稍后再试".to_string()
+        i18n.ctx_commit_detail_not_ready.to_string()
     } else if is_merge_commit {
-        "merge 提交暂不支持直接回退".to_string()
+        i18n.ctx_merge_no_revert.to_string()
     } else if let Some(branch_name) = state.current_branch_name.as_ref() {
-        format!("在当前分支 {branch_name} 上生成一条新的反向提交")
+        i18n.ctx_revert_branch_fmt.replace("{}", branch_name)
     } else {
-        "当前为 detached HEAD，不能直接回退提交".to_string()
+        i18n.ctx_detached_no_revert.to_string()
     };
     let reset_detail = if let Some(branch_name) = state.current_branch_name.as_ref() {
-        format!("把当前分支 {branch_name} 重置到这条提交；若不是祖先提交，确认时会阻止")
+        i18n.ctx_reset_branch_fmt.replace("{}", branch_name)
     } else {
-        "当前为 detached HEAD，无法重置当前分支".to_string()
+        i18n.ctx_detached_no_reset.to_string()
     };
     let push_to_here_detail = if let Some(upstream_ref) = state.current_upstream_ref.as_ref() {
-        format!("只访问当前分支的上游 {upstream_ref}，把远端推进到这条提交")
+        i18n.ctx_push_upstream_fmt.replace("{}", upstream_ref)
     } else if has_current_branch {
-        "当前分支还没有上游，暂时不能推送到这里".to_string()
+        i18n.ctx_no_upstream_no_push.to_string()
     } else {
-        "当前为 detached HEAD，无法执行“推送到这里”".to_string()
+        i18n.ctx_detached_no_push_here.to_string()
     };
     let edit_message_detail = if !commit_detail_ready {
-        "提交详情还没加载完成，请稍后再试".to_string()
+        i18n.ctx_commit_detail_not_ready.to_string()
     } else if is_merge_commit {
-        "merge 提交暂不支持直接改说明".to_string()
+        i18n.ctx_merge_no_reword.to_string()
     } else if let Some(branch_name) = state.current_branch_name.as_ref() {
-        format!("围绕当前分支 {branch_name} 启动改说明流程，并在停住后进入 amend 面板")
+        i18n.ctx_reword_branch_fmt.replace("{}", branch_name)
     } else {
-        "当前为 detached HEAD，不能直接改写当前分支历史".to_string()
+        i18n.ctx_detached_no_rewrite.to_string()
     };
     let fixup_detail = if !commit_detail_ready {
-        "提交详情还没加载完成，请稍后再试".to_string()
+        i18n.ctx_commit_detail_not_ready.to_string()
     } else if is_merge_commit {
-        "merge 提交暂不支持直接 Fixup".to_string()
+        i18n.ctx_merge_no_fixup.to_string()
     } else if is_root_commit {
-        "根提交前面没有可合并的目标提交".to_string()
+        i18n.ctx_root_no_merge_target.to_string()
     } else {
-        "把这条提交压进前一条提交，并尽量自动完成后续整理".to_string()
+        i18n.ctx_fixup_hint.to_string()
     };
     let squash_detail = if !commit_detail_ready {
-        "提交详情还没加载完成，请稍后再试".to_string()
+        i18n.ctx_commit_detail_not_ready.to_string()
     } else if is_merge_commit {
-        "merge 提交暂不支持直接压缩".to_string()
+        i18n.ctx_merge_no_squash.to_string()
     } else if is_root_commit {
-        "根提交前面没有可合并的目标提交".to_string()
+        i18n.ctx_root_no_merge_target.to_string()
     } else {
-        "把这条提交压缩到前一条提交，并保留自动生成的合并说明".to_string()
+        i18n.ctx_squash_hint.to_string()
     };
     let drop_detail = if !commit_detail_ready {
-        "提交详情还没加载完成，请稍后再试".to_string()
+        i18n.ctx_commit_detail_not_ready.to_string()
     } else if is_merge_commit {
-        "merge 提交暂不支持直接删除".to_string()
+        i18n.ctx_merge_no_drop.to_string()
     } else {
-        "从当前分支历史里移除这条提交；若后续提交依赖它，可能进入冲突处理".to_string()
+        i18n.ctx_drop_hint.to_string()
     };
     let interactive_rebase_detail = if has_current_branch {
-        "打开 Rebase 面板并保留这条提交的整理上下文，后续 todo 编辑会继续接到这里".to_string()
+        i18n.ctx_rebase_hint.to_string()
     } else {
-        "当前为 detached HEAD，不能直接围绕当前分支开始交互式变基".to_string()
+        i18n.ctx_detached_no_rebase.to_string()
     };
 
     // IDEA Git.Log.ContextMenu — exact order from intellij.vcs.git.xml
     let actions = Column::new()
         .spacing(theme::spacing::XS)
-        // Group 1: 回退操作 — Reset, Revert, Uncommit (IDEA: first group)
+        // Group 1: Reset, Revert, Uncommit (IDEA: first group)
         .push(history_context_group(
-            "回退",
+            i18n.reset_group,
             "",
             vec![
                 history_context_action_row(
-                    "重置当前分支到此处",
+                    i18n.reset_to_here,
                     reset_detail,
                     (!state.is_loading && has_current_branch).then_some(
                         HistoryMessage::PrepareResetCurrentBranchToCommit(entry.id.clone()),
@@ -840,7 +841,7 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Danger,
                 ),
                 history_context_action_row(
-                    "还原提交",
+                    i18n.revert_commit_label,
                     revert_detail,
                     (!state.is_loading
                         && commit_detail_ready
@@ -850,21 +851,21 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "撤销提交",
-                    "软重置到此提交的父提交，改动返回暂存区".to_string(),
+                    i18n.uncommit_label,
+                    i18n.soft_reset_hint.to_string(),
                     (!state.is_loading && has_current_branch)
                         .then_some(HistoryMessage::UncommitToHere(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
             ],
         ))
-        // Group 2: 历史重写 — Reword, Fixup, Squash, Drop, Interactive Rebase
+        // Group 2: History Rewrite — Reword, Fixup, Squash, Drop, Interactive Rebase
         .push(history_context_group(
-            "历史重写",
+            i18n.history_rewrite_group,
             "",
             vec![
                 history_context_action_row(
-                    "修改提交消息...",
+                    i18n.reword_commit,
                     edit_message_detail,
                     (!state.is_loading
                         && commit_detail_ready
@@ -874,7 +875,7 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "Fixup 到此提交",
+                    i18n.fixup_to_commit,
                     fixup_detail,
                     (!state.is_loading
                         && commit_detail_ready
@@ -885,7 +886,7 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "Squash 到此提交",
+                    i18n.squash_into_commit,
                     squash_detail,
                     (!state.is_loading
                         && commit_detail_ready
@@ -896,7 +897,7 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "丢弃提交",
+                    i18n.drop_commit,
                     drop_detail,
                     (!state.is_loading
                         && commit_detail_ready
@@ -906,7 +907,7 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Danger,
                 ),
                 history_context_action_row(
-                    "交互式变基...",
+                    i18n.interactive_rebase,
                     interactive_rebase_detail,
                     (!state.is_loading && has_current_branch).then_some(
                         HistoryMessage::OpenInteractiveRebaseFromCommit(entry.id.clone()),
@@ -914,7 +915,7 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "推送到此提交",
+                    i18n.push_up_to_commit,
                     push_to_here_detail,
                     (!state.is_loading && has_current_branch && has_upstream).then_some(
                         HistoryMessage::PreparePushCurrentBranchToCommit(entry.id.clone()),
@@ -923,27 +924,27 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                 ),
             ],
         ))
-        // Group 3: 分支与标签 — Branch, Tag, Cherry-pick
+        // Group 3: Ref Actions — Branch, Tag, Cherry-pick
         .push(history_context_group(
-            "分支与标签",
+            i18n.ref_actions_group,
             "",
             vec![
                 history_context_action_row(
-                    "新建分支...",
-                    "基于这条提交创建新分支".to_string(),
+                    i18n.create_branch,
+                    i18n.ctx_create_branch_hint.to_string(),
                     (!state.is_loading)
                         .then_some(HistoryMessage::PrepareCreateBranch(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "新建标签...",
-                    "在这条提交上创建标签".to_string(),
+                    i18n.create_tag,
+                    i18n.ctx_create_tag_hint.to_string(),
                     (!state.is_loading)
                         .then_some(HistoryMessage::PrepareTagFromCommit(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "Cherry-pick",
+                    i18n.cherry_pick,
                     cherry_pick_detail,
                     (!state.is_loading
                         && commit_detail_ready
@@ -954,19 +955,19 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                 ),
             ],
         ))
-        // Group 4: 复制
+        // Group 4: Copy
         .push(history_context_group(
-            "复制",
+            i18n.copy_group,
             "",
             vec![
                 history_context_action_row(
-                    "复制提交哈希",
+                    i18n.copy_hash,
                     "".to_string(),
                     Some(HistoryMessage::CopyCommitHash(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
                 ),
                 history_context_action_row(
-                    "导出 Patch",
+                    i18n.export_patch,
                     "".to_string(),
                     Some(HistoryMessage::ExportCommitPatch(entry.id.clone())),
                     widgets::menu::MenuTone::Neutral,
@@ -984,23 +985,15 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
 }
 
 fn history_context_group<'a>(
-    title: &'static str,
-    detail: &'static str,
+    title: &str,
+    detail: &str,
     rows: Vec<Element<'a, HistoryMessage>>,
 ) -> Element<'a, HistoryMessage> {
-    let tone = match title {
-        "危险动作" => widgets::menu::MenuTone::Danger,
-        "应用到当前分支" | "比较与派生" | "历史整理" => {
-            widgets::menu::MenuTone::Accent
-        }
-        _ => widgets::menu::MenuTone::Neutral,
-    };
-
-    widgets::menu::group(title, detail, tone, rows)
+    widgets::menu::group(title, detail, widgets::menu::MenuTone::Neutral, rows)
 }
 
 fn history_context_action_row<'a>(
-    title: &'static str,
+    title: &str,
     detail: String,
     message: Option<HistoryMessage>,
     tone: widgets::menu::MenuTone,
@@ -1104,19 +1097,20 @@ fn history_graph_color(index: usize) -> Color {
 fn build_commit_detail<'a>(
     state: &'a HistoryState,
     info: &'a git_core::commit::CommitInfo,
+    i18n: &'a I18n,
 ) -> Element<'a, HistoryMessage> {
     Container::new(
         Column::new()
             .spacing(theme::spacing::XS)
             .height(Length::Fill)
-            .push(build_commit_summary_panel(info))
-            .push(build_commit_files_panel(state, info.id.as_str())),
+            .push(build_commit_summary_panel(info, i18n))
+            .push(build_commit_files_panel(state, info.id.as_str(), i18n)),
     )
     .height(Length::Fill)
     .into()
 }
 
-fn build_commit_summary_panel(info: &git_core::commit::CommitInfo) -> Element<'_, HistoryMessage> {
+fn build_commit_summary_panel<'a>(info: &'a git_core::commit::CommitInfo, i18n: &'a I18n) -> Element<'a, HistoryMessage> {
     Container::new(
         Column::new()
             .spacing(theme::spacing::SM)
@@ -1125,7 +1119,7 @@ fn build_commit_summary_panel(info: &git_core::commit::CommitInfo) -> Element<'_
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
                     .push(
-                        Text::new("提交详情")
+                        Text::new(i18n.commit_detail_label)
                             .size(12)
                             .color(theme::darcula::TEXT_PRIMARY),
                     )
@@ -1142,12 +1136,12 @@ fn build_commit_summary_panel(info: &git_core::commit::CommitInfo) -> Element<'_
                 Column::new()
                     .spacing(2)
                     .push(detail_meta_row(
-                        "作者",
+                        i18n.author_label,
                         format!("{} <{}>", info.author_name, info.author_email),
                     ))
-                    .push(detail_meta_row("时间", format_timestamp(info.author_time)))
+                    .push(detail_meta_row(i18n.time_label, format_timestamp(info.author_time)))
                     .push(detail_meta_row(
-                        "父提交",
+                        i18n.parent_commits,
                         format!("{}", info.parent_ids.len()),
                     )),
             ),
@@ -1160,12 +1154,13 @@ fn build_commit_summary_panel(info: &git_core::commit::CommitInfo) -> Element<'_
 fn build_commit_files_panel<'a>(
     state: &'a HistoryState,
     commit_id: &'a str,
+    i18n: &'a I18n,
 ) -> Element<'a, HistoryMessage> {
     let file_count = state.selected_commit_files.len();
     let content = if state.selected_commit_files.is_empty() {
         widgets::panel_empty_state_compact(
-            "这个提交没有文件变化",
-            "如果这是 merge 或空提交，文件列表会保持为空。",
+            i18n.no_file_changes,
+            i18n.no_file_changes_hint,
         )
     } else {
         match state.selected_commit_file_display {
@@ -1183,23 +1178,23 @@ fn build_commit_files_panel<'a>(
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
                     .push(
-                        Text::new("变动文件")
+                        Text::new(i18n.changed_files)
                             .size(12)
                             .color(theme::darcula::TEXT_PRIMARY),
                     )
                     .push(widgets::info_chip::<HistoryMessage>(
-                        format!("{file_count} 个文件"),
+                        i18n.n_files_fmt.replace("{}", &file_count.to_string()),
                         BadgeTone::Neutral,
                     ))
                     .push(Space::new().width(Length::Fill))
                     .push(button::tab(
-                        "平铺",
+                        i18n.flat_label,
                         state.selected_commit_file_display == FileDisplayMode::Flat,
                         (state.selected_commit_file_display != FileDisplayMode::Flat)
                             .then_some(HistoryMessage::ToggleCommitFileDisplayMode),
                     ))
                     .push(button::tab(
-                        "树状",
+                        i18n.tree_label,
                         state.selected_commit_file_display == FileDisplayMode::Tree,
                         (state.selected_commit_file_display != FileDisplayMode::Tree)
                             .then_some(HistoryMessage::ToggleCommitFileDisplayMode),
@@ -1478,6 +1473,7 @@ pub fn view_with_tabs<'a>(
     local_branches: &'a [git_core::branch::Branch],
     remote_branches: &'a [git_core::branch::Branch],
     dashboard_visible: bool,
+    i18n: &'a I18n,
 ) -> Element<'a, HistoryMessage> {
     // Build inline tab bar to avoid lifetime issues with TabDescriptor references
     let mut tab_row = Row::new().spacing(0).align_y(Alignment::End);
@@ -1527,11 +1523,11 @@ pub fn view_with_tabs<'a>(
             .on_press(HistoryMessage::NewLogTab),
     );
 
-    let main_content = view(state);
+    let main_content = view(state, i18n);
 
     // Build branches dashboard sidebar
     let content_area: Element<'a, HistoryMessage> = if dashboard_visible {
-        let dashboard = build_branches_dashboard(local_branches, remote_branches);
+        let dashboard = build_branches_dashboard(local_branches, remote_branches, i18n);
         Row::new()
             .spacing(0)
             .height(Length::Fill)
@@ -1578,13 +1574,14 @@ pub fn view_with_tabs<'a>(
 fn build_branches_dashboard<'a>(
     local_branches: &'a [git_core::branch::Branch],
     remote_branches: &'a [git_core::branch::Branch],
+    i18n: &'a I18n,
 ) -> Element<'a, HistoryMessage> {
     let header = Container::new(
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
             .push(
-                Text::new("分支")
+                Text::new(i18n.branches_label)
                     .size(11)
                     .color(theme::darcula::TEXT_SECONDARY),
             ),
@@ -1601,7 +1598,7 @@ fn build_branches_dashboard<'a>(
                 .align_y(Alignment::Center)
                 .push(Text::new("▼").size(9).color(theme::darcula::TEXT_DISABLED))
                 .push(
-                    Text::new("本地分支")
+                    Text::new(i18n.local_branches)
                         .size(10)
                         .color(theme::darcula::TEXT_SECONDARY),
                 )
@@ -1649,7 +1646,7 @@ fn build_branches_dashboard<'a>(
                 .align_y(Alignment::Center)
                 .push(Text::new("▶").size(9).color(theme::darcula::TEXT_DISABLED))
                 .push(
-                    Text::new("远程分支")
+                    Text::new(i18n.remote_branches)
                         .size(10)
                         .color(theme::darcula::TEXT_SECONDARY),
                 )
@@ -1677,29 +1674,29 @@ fn build_branches_dashboard<'a>(
         .into()
 }
 
-pub fn view(state: &HistoryState) -> Element<'_, HistoryMessage> {
+pub fn view<'a>(state: &'a HistoryState, i18n: &'a I18n) -> Element<'a, HistoryMessage> {
     let status_panel = if state.is_loading {
         Some(build_status_panel::<HistoryMessage>(
-            "加载中",
-            "正在读取提交历史。",
+            i18n.loading_label,
+            i18n.loading_history_detail,
             BadgeTone::Neutral,
         ))
     } else if state.is_searching {
         Some(build_status_panel::<HistoryMessage>(
-            "搜索中",
-            "正在按关键词筛选提交历史。",
+            i18n.searching_label,
+            i18n.searching_detail,
             BadgeTone::Neutral,
         ))
     } else if let Some(error) = state.error.as_ref() {
         Some(build_status_panel::<HistoryMessage>(
-            "失败",
+            i18n.failed_label,
             error,
             BadgeTone::Danger,
         ))
     } else if state.filtered_entries.is_empty() && !state.search_query.trim().is_empty() {
         Some(build_status_panel::<HistoryMessage>(
-            "无匹配结果",
-            format!("没有找到与“{}”匹配的提交。", state.search_query.trim()),
+            i18n.no_match,
+            i18n.no_match_fmt.replace("{}", state.search_query.trim()),
             BadgeTone::Warning,
         ))
     } else {
@@ -1712,17 +1709,17 @@ pub fn view(state: &HistoryState) -> Element<'_, HistoryMessage> {
                 .spacing(theme::spacing::XS)
                 .align_x(Alignment::Center)
                 .push(
-                    Text::new("当前仓库还没有提交历史")
+                    Text::new(i18n.no_commit_history)
                         .size(13)
                         .color(theme::darcula::TEXT_SECONDARY),
                 )
                 .push(
-                    Text::new("先完成一次提交，或刷新历史列表后再回来查看时间线。")
+                    Text::new(i18n.no_commit_history_hint)
                         .size(10)
                         .color(theme::darcula::TEXT_DISABLED),
                 )
                 .push(Space::new().height(Length::Fixed(theme::spacing::SM)))
-                .push(button::ghost("刷新", Some(HistoryMessage::Refresh))),
+                .push(button::ghost(i18n.refresh, Some(HistoryMessage::Refresh))),
         )
         .width(Length::Fill)
         .align_x(iced::alignment::Horizontal::Center)
@@ -1734,16 +1731,16 @@ pub fn view(state: &HistoryState) -> Element<'_, HistoryMessage> {
 
     let detail_panel: Element<'_, HistoryMessage> =
         if let Some(info) = state.selected_commit_info.as_ref() {
-            build_commit_detail(state, info)
+            build_commit_detail(state, info, i18n)
         } else if !state.search_query.trim().is_empty() && state.filtered_entries.is_empty() {
             widgets::panel_empty_state_compact(
-                "没有匹配的提交",
-                format!("没有找到与“{}”匹配的提交。", state.search_query.trim()),
+                i18n.no_match,
+                i18n.no_match_fmt.replace("{}", state.search_query.trim()),
             )
         } else {
             widgets::panel_empty_state_compact(
-                "还没有选中任何提交",
-                "选中一条提交后查看作者、时间和完整提交消息。",
+                i18n.no_commit_selected,
+                i18n.select_commit_hint,
             )
         };
 
@@ -1753,17 +1750,17 @@ pub fn view(state: &HistoryState) -> Element<'_, HistoryMessage> {
             || state.filtered_entries.len() != state.entries.len());
 
     let search_actions: Element<'_, HistoryMessage> = if state.is_searching {
-        widgets::inline_loading("搜索")
+        widgets::inline_loading(i18n.search)
     } else {
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
             .push(button::secondary(
-                "搜索",
+                i18n.search,
                 can_search.then_some(HistoryMessage::Search),
             ))
             .push(button::ghost(
-                "清除",
+                i18n.clear,
                 can_clear.then_some(HistoryMessage::ClearSearch),
             ))
             .into()
@@ -1773,35 +1770,35 @@ pub fn view(state: &HistoryState) -> Element<'_, HistoryMessage> {
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
-            .push(Text::new("提交历史").size(12))
+            .push(Text::new(i18n.commit_history).size(12))
             .push_maybe(state.current_branch_name.as_ref().map(|branch| {
                 widgets::info_chip::<HistoryMessage>(
-                    format!("当前分支 {branch}"),
+                    format!("{} {branch}", i18n.current_branch),
                     BadgeTone::Accent,
                 )
             }))
             .push_maybe(state.current_upstream_ref.as_ref().map(|upstream| {
-                widgets::info_chip::<HistoryMessage>(format!("上游 {upstream}"), BadgeTone::Neutral)
+                widgets::info_chip::<HistoryMessage>(format!("{} {upstream}", i18n.upstream_label), BadgeTone::Neutral)
             }))
             .push(Space::new().width(Length::Fill))
             .push(
                 text_input::styled(
-                    "搜索关键词...",
+                    i18n.search_placeholder,
                     &state.search_query,
                     HistoryMessage::SetSearchQuery,
                 )
                 .width(Length::Fixed(200.0)),
             )
             .push(search_actions)
-            .push(button::ghost("刷新", Some(HistoryMessage::Refresh))),
+            .push(button::ghost(i18n.refresh, Some(HistoryMessage::Refresh))),
     )
     .padding(theme::density::SECONDARY_BAR_PADDING)
     .style(theme::panel_style(Surface::Toolbar));
 
     let list_area = Container::new(
         stack([
-            build_history_list(state),
-            build_commit_context_menu_overlay(state),
+            build_history_list(state, i18n),
+            build_commit_context_menu_overlay(state, i18n),
         ])
         .width(Length::Fill)
         .height(Length::Fill),

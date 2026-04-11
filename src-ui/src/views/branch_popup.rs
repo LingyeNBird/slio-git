@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::i18n::I18n;
 use crate::theme::{self, BadgeTone, Surface};
 use crate::widgets::{self, button, diff_viewer, scrollable, text_input, OptionalPush};
 use chrono::DateTime;
@@ -207,7 +208,7 @@ impl BranchPopupState {
         }
     }
 
-    pub fn load_branches(&mut self, repo: &Repository) {
+    pub fn load_branches(&mut self, repo: &Repository, i18n: &I18n) {
         self.search_query = normalize_branch_search_text(&self.search_query);
         self.is_loading = true;
         self.error = None;
@@ -256,11 +257,11 @@ impl BranchPopupState {
                 if let Some(selected) = self.selected_branch.clone() {
                     self.ensure_branch_visible(&selected);
                 }
-                self.load_selected_branch_history(repo);
+                self.load_selected_branch_history(repo, i18n);
                 self.is_loading = false;
             }
             Err(error) => {
-                self.error = Some(format!("加载分支失败: {error}"));
+                self.error = Some(i18n.bp_load_branches_failed_fmt.replace("{}", &error.to_string()));
                 self.success_message = None;
                 self.is_loading = false;
             }
@@ -387,16 +388,16 @@ impl BranchPopupState {
         self.error = None;
     }
 
-    pub fn confirm_inline_action(&mut self, repo: &Repository) {
+    pub fn confirm_inline_action(&mut self, repo: &Repository, i18n: &I18n) {
         match self.inline_action.clone() {
             Some(InlineBranchAction::CreateFromSelected { base }) => {
-                self.create_branch_from_selected(repo, &base, self.inline_branch_name.clone())
+                self.create_branch_from_selected(repo, &base, self.inline_branch_name.clone(), i18n)
             }
             Some(InlineBranchAction::RenameBranch { branch }) => {
-                self.rename_branch(repo, branch, self.inline_branch_name.clone())
+                self.rename_branch(repo, branch, self.inline_branch_name.clone(), i18n)
             }
             None => {
-                self.error = Some("没有待执行的分支操作".to_string());
+                self.error = Some(i18n.bp_no_pending_action.to_string());
                 self.success_message = None;
             }
         }
@@ -408,10 +409,10 @@ impl BranchPopupState {
         self.error = None;
     }
 
-    pub fn create_branch(&mut self, repo: &Repository, name: String) {
+    pub fn create_branch(&mut self, repo: &Repository, name: String, i18n: &I18n) {
         let name = name.trim().to_string();
         if name.is_empty() {
-            self.error = Some("分支名称不能为空".to_string());
+            self.error = Some(i18n.bp_branch_name_empty.to_string());
             self.success_message = None;
             return;
         }
@@ -424,7 +425,7 @@ impl BranchPopupState {
         {
             Some(oid) if !oid.is_empty() => oid,
             _ => {
-                self.error = Some("当前 HEAD 不可用，无法创建分支。".to_string());
+                self.error = Some(i18n.bp_head_unavailable.to_string());
                 self.success_message = None;
                 return;
             }
@@ -438,20 +439,20 @@ impl BranchPopupState {
             Ok(_) => {
                 self.selected_branch = Some(name.clone());
                 self.new_branch_name.clear();
-                self.success_message = Some(format!("已创建 {name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_created_fmt.replace("{}", &name));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("创建分支失败: {error}"));
+                self.error = Some(i18n.bp_create_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn create_branch_from_selected(&mut self, repo: &Repository, base: &str, name: String) {
+    pub fn create_branch_from_selected(&mut self, repo: &Repository, base: &str, name: String, i18n: &I18n) {
         let name = name.trim().to_string();
         if name.is_empty() {
-            self.error = Some("新分支名称不能为空".to_string());
+            self.error = Some(i18n.bp_new_branch_name_empty.to_string());
             self.success_message = None;
             return;
         }
@@ -465,20 +466,20 @@ impl BranchPopupState {
                 self.selected_branch = Some(name.clone());
                 self.inline_action = None;
                 self.inline_branch_name.clear();
-                self.success_message = Some(format!("已从 {base} 创建 {name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_created_from_fmt.replacen("{}", base, 1).replacen("{}", &name, 1));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("基于 {base} 创建分支失败: {error}"));
+                self.error = Some(i18n.bp_create_from_failed_fmt.replacen("{}", base, 1).replacen("{}", &error.to_string(), 1));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn rename_branch(&mut self, repo: &Repository, old_name: String, new_name: String) {
+    pub fn rename_branch(&mut self, repo: &Repository, old_name: String, new_name: String, i18n: &I18n) {
         let new_name = new_name.trim().to_string();
         if new_name.is_empty() {
-            self.error = Some("新的分支名称不能为空".to_string());
+            self.error = Some(i18n.bp_new_name_empty.to_string());
             self.success_message = None;
             return;
         }
@@ -492,11 +493,11 @@ impl BranchPopupState {
                 self.selected_branch = Some(new_name.clone());
                 self.inline_action = None;
                 self.inline_branch_name.clear();
-                self.success_message = Some(format!("已将 {old_name} 重命名为 {new_name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_renamed_fmt.replacen("{}", &old_name, 1).replacen("{}", &new_name, 1));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("重命名分支失败: {error}"));
+                self.error = Some(i18n.bp_rename_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
@@ -504,14 +505,14 @@ impl BranchPopupState {
 
     /// Prepare a branch for deletion by checking if it's fully merged.
     /// Sets `pending_delete_branch` and `pending_delete_not_merged` for the confirmation dialog.
-    pub fn prepare_delete_branch(&mut self, repo: &Repository, name: String) {
+    pub fn prepare_delete_branch(&mut self, repo: &Repository, name: String, i18n: &I18n) {
         let can_delete = self
             .local_branches
             .iter()
             .any(|branch| branch.name == name && !branch.is_head);
 
         if !can_delete {
-            self.error = Some("只能删除非当前本地分支".to_string());
+            self.error = Some(i18n.bp_only_delete_non_current.to_string());
             return;
         }
 
@@ -522,14 +523,14 @@ impl BranchPopupState {
         self.pending_delete_not_merged = !is_merged;
     }
 
-    pub fn delete_branch(&mut self, repo: &Repository, name: String) {
+    pub fn delete_branch(&mut self, repo: &Repository, name: String, i18n: &I18n) {
         let can_delete = self
             .local_branches
             .iter()
             .any(|branch| branch.name == name && !branch.is_head);
 
         if !can_delete {
-            self.error = Some("只能删除非当前本地分支".to_string());
+            self.error = Some(i18n.bp_only_delete_non_current.to_string());
             self.success_message = None;
             return;
         }
@@ -543,24 +544,24 @@ impl BranchPopupState {
                 if self.selected_branch.as_deref() == Some(name.as_str()) {
                     self.selected_branch = None;
                 }
-                self.success_message = Some(format!("已删除 {name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_deleted_fmt.replace("{}", &name));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("删除分支失败: {error}"));
+                self.error = Some(i18n.bp_delete_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn checkout_branch(&mut self, repo: &Repository, name: String) {
+    pub fn checkout_branch(&mut self, repo: &Repository, name: String, i18n: &I18n) {
         if self
             .local_branches
             .iter()
             .any(|branch| branch.name == name && branch.is_head)
         {
             self.error = None;
-            self.success_message = Some(format!("{name} 已在当前"));
+            self.success_message = Some(i18n.bp_already_current_fmt.replace("{}", &name));
             return;
         }
 
@@ -571,23 +572,23 @@ impl BranchPopupState {
         match repo.checkout_branch(&name) {
             Ok(()) => {
                 self.selected_branch = Some(name.clone());
-                self.success_message = Some(format!("已切到 {name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_checked_out_fmt.replace("{}", &name));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("切换分支失败: {error}"));
+                self.error = Some(i18n.bp_checkout_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn checkout_remote_branch(&mut self, repo: &Repository, remote_ref: String) {
+    pub fn checkout_remote_branch(&mut self, repo: &Repository, remote_ref: String, i18n: &I18n) {
         if !self
             .remote_branches
             .iter()
             .any(|branch| branch.name == remote_ref)
         {
-            self.error = Some("只能从远程分支创建本地跟踪分支".to_string());
+            self.error = Some(i18n.bp_only_from_remote.to_string());
             self.success_message = None;
             return;
         }
@@ -599,19 +600,17 @@ impl BranchPopupState {
         match repo.checkout_remote_branch(&remote_ref) {
             Ok(local_branch_name) => {
                 self.selected_branch = Some(local_branch_name.clone());
-                self.success_message = Some(format!(
-                    "已基于 {remote_ref} 签出本地分支 {local_branch_name}"
-                ));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_checked_out_remote_fmt.replacen("{}", &remote_ref, 1).replacen("{}", &local_branch_name, 1));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("签出远程分支失败: {error}"));
+                self.error = Some(i18n.bp_checkout_remote_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn checkout_and_rebase(&mut self, repo: &Repository, name: &str, onto: &str) {
+    pub fn checkout_and_rebase(&mut self, repo: &Repository, name: &str, onto: &str, i18n: &I18n) {
         self.is_loading = true;
         self.error = None;
         self.success_message = None;
@@ -622,45 +621,45 @@ impl BranchPopupState {
                     self.selected_branch = Some(name.to_string());
                     self.inline_action = None;
                     self.inline_branch_name.clear();
-                    self.success_message = Some(format!("已切到 {name}，并开始变基到 {onto}"));
-                    self.load_branches(repo);
+                    self.success_message = Some(i18n.bp_checkout_rebase_done_fmt.replacen("{}", name, 1).replacen("{}", onto, 1));
+                    self.load_branches(repo, i18n);
                 }
                 Err(error) => {
-                    self.error = Some(format!("切换后开始变基失败: {error}"));
+                    self.error = Some(i18n.bp_rebase_after_checkout_failed_fmt.replace("{}", &error.to_string()));
                     self.is_loading = false;
                 }
             },
             Err(error) => {
-                self.error = Some(format!("切换分支失败: {error}"));
+                self.error = Some(i18n.bp_checkout_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn rebase_current_onto(&mut self, repo: &Repository, onto: &str) {
+    pub fn rebase_current_onto(&mut self, repo: &Repository, onto: &str, i18n: &I18n) {
         self.is_loading = true;
         self.error = None;
         self.success_message = None;
 
         match rebase::rebase_start(repo, onto) {
             Ok(_) => {
-                self.success_message = Some(format!("已开始将当前分支变基到 {onto}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_rebase_started_fmt.replace("{}", onto));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("开始变基失败: {error}"));
+                self.error = Some(i18n.bp_rebase_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn merge_branch(&mut self, repo: &Repository, name: String) {
+    pub fn merge_branch(&mut self, repo: &Repository, name: String, i18n: &I18n) {
         if self
             .local_branches
             .iter()
             .any(|branch| branch.name == name && branch.is_head)
         {
-            self.error = Some("当前分支不能合并自身".to_string());
+            self.error = Some(i18n.bp_cannot_merge_self.to_string());
             self.success_message = None;
             return;
         }
@@ -671,35 +670,35 @@ impl BranchPopupState {
 
         match repo.merge_branch(&name) {
             Ok(()) => {
-                self.success_message = Some(format!("已合并 {name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_merged_fmt.replace("{}", &name));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
                 if git_core::index::has_conflicts(repo) {
                     self.error = None;
                     self.success_message =
-                        Some(format!("合并 {name} 时产生冲突，请继续处理冲突文件"));
+                        Some(i18n.bp_merge_conflict_fmt.replace("{}", &name));
                     self.is_loading = false;
                 } else {
-                    self.error = Some(format!("合并分支失败: {error}"));
+                    self.error = Some(i18n.bp_merge_failed_fmt.replace("{}", &error.to_string()));
                     self.is_loading = false;
                 }
             }
         }
     }
 
-    pub fn fetch_remote(&mut self, repo: &Repository, remote_name: &str) {
+    pub fn fetch_remote(&mut self, repo: &Repository, remote_name: &str, i18n: &I18n) {
         self.is_loading = true;
         self.error = None;
         self.success_message = None;
 
         match remote::fetch(repo, remote_name, None) {
             Ok(()) => {
-                self.success_message = Some(format!("已更新远程 {remote_name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_fetched_fmt.replace("{}", remote_name));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("更新远程失败: {error}"));
+                self.error = Some(i18n.bp_fetch_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
@@ -710,6 +709,7 @@ impl BranchPopupState {
         repo: &Repository,
         remote_name: &str,
         branch_name: &str,
+        i18n: &I18n,
     ) {
         self.is_loading = true;
         self.error = None;
@@ -717,66 +717,66 @@ impl BranchPopupState {
 
         match remote::push(repo, remote_name, branch_name, None) {
             Ok(()) => {
-                self.success_message = Some(format!("已推送 {branch_name} -> {remote_name}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_pushed_fmt.replacen("{}", branch_name, 1).replacen("{}", remote_name, 1));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("推送分支失败: {error}"));
+                self.error = Some(i18n.bp_push_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn set_upstream(&mut self, repo: &Repository, branch_name: &str, upstream: &str) {
+    pub fn set_upstream(&mut self, repo: &Repository, branch_name: &str, upstream: &str, i18n: &I18n) {
         self.is_loading = true;
         self.error = None;
         self.success_message = None;
 
         match repo.set_branch_upstream(branch_name, upstream) {
             Ok(()) => {
-                self.success_message = Some(format!("已让 {branch_name} 跟踪 {upstream}"));
-                self.load_branches(repo);
+                self.success_message = Some(i18n.bp_tracking_set_fmt.replacen("{}", branch_name, 1).replacen("{}", upstream, 1));
+                self.load_branches(repo, i18n);
             }
             Err(error) => {
-                self.error = Some(format!("设置跟踪分支失败: {error}"));
+                self.error = Some(i18n.bp_tracking_set_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn compare_refs_preview(&mut self, repo: &Repository, left: &str, right: &str) {
+    pub fn compare_refs_preview(&mut self, repo: &Repository, left: &str, right: &str, i18n: &I18n) {
         self.is_loading = true;
         self.error = None;
         self.success_message = None;
 
         match git_core::diff::diff_refs(repo, left, right) {
             Ok(diff) => {
-                self.comparison_summary = Some(format_diff_summary(&diff));
+                self.comparison_summary = Some(format_diff_summary(&diff, i18n));
                 self.comparison_diff = Some(diff);
-                self.success_message = Some(format!("已加载 {left} 与 {right} 的比较结果"));
+                self.success_message = Some(i18n.bp_comparison_loaded_fmt.replacen("{}", left, 1).replacen("{}", right, 1));
                 self.is_loading = false;
             }
             Err(error) => {
-                self.error = Some(format!("加载分支比较失败: {error}"));
+                self.error = Some(i18n.bp_comparison_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
     }
 
-    pub fn compare_ref_to_workdir_preview(&mut self, repo: &Repository, reference: &str) {
+    pub fn compare_ref_to_workdir_preview(&mut self, repo: &Repository, reference: &str, i18n: &I18n) {
         self.is_loading = true;
         self.error = None;
         self.success_message = None;
 
         match git_core::diff::diff_ref_to_workdir(repo, reference) {
             Ok(diff) => {
-                self.comparison_summary = Some(format_diff_summary(&diff));
+                self.comparison_summary = Some(format_diff_summary(&diff, i18n));
                 self.comparison_diff = Some(diff);
-                self.success_message = Some(format!("已加载 {reference} 与工作树的差异"));
+                self.success_message = Some(i18n.bp_workdir_diff_loaded_fmt.replace("{}", reference));
                 self.is_loading = false;
             }
             Err(error) => {
-                self.error = Some(format!("加载工作树差异失败: {error}"));
+                self.error = Some(i18n.bp_workdir_diff_failed_fmt.replace("{}", &error.to_string()));
                 self.is_loading = false;
             }
         }
@@ -789,7 +789,7 @@ impl BranchPopupState {
         self.error = None;
     }
 
-    pub fn load_selected_branch_history(&mut self, repo: &Repository) {
+    pub fn load_selected_branch_history(&mut self, repo: &Repository, i18n: &I18n) {
         let Some(reference) = self.selected_branch.clone() else {
             self.branch_history_entries.clear();
             self.selected_branch_commit = None;
@@ -816,7 +816,7 @@ impl BranchPopupState {
                     });
 
                 if let Some(commit_id) = next_selected {
-                    self.select_branch_commit(repo, commit_id);
+                    self.select_branch_commit(repo, commit_id, i18n);
                 } else {
                     self.selected_branch_commit = None;
                     self.selected_branch_commit_info = None;
@@ -826,12 +826,12 @@ impl BranchPopupState {
                 self.branch_history_entries.clear();
                 self.selected_branch_commit = None;
                 self.selected_branch_commit_info = None;
-                self.error = Some(format!("加载分支提交失败: {error}"));
+                self.error = Some(i18n.bp_history_load_failed_fmt.replace("{}", &error.to_string()));
             }
         }
     }
 
-    pub fn select_branch_commit(&mut self, repo: &Repository, commit_id: String) {
+    pub fn select_branch_commit(&mut self, repo: &Repository, commit_id: String, i18n: &I18n) {
         self.selected_branch_commit = Some(commit_id.clone());
         self.context_menu_commit = None;
 
@@ -842,7 +842,7 @@ impl BranchPopupState {
             }
             Err(error) => {
                 self.selected_branch_commit_info = None;
-                self.error = Some(format!("加载提交详情失败: {error}"));
+                self.error = Some(i18n.bp_commit_detail_failed_fmt.replace("{}", &error.to_string()));
             }
         }
     }
@@ -851,16 +851,17 @@ impl BranchPopupState {
         &mut self,
         repo: &Repository,
         commit_id: String,
+        i18n: &I18n,
     ) -> Option<CommitActionConfirmation> {
         let current_branch = match repo.current_branch() {
             Ok(Some(branch)) => branch,
             Ok(None) => {
-                self.error = Some("当前为 detached HEAD，不能直接摘取到当前分支".to_string());
+                self.error = Some(i18n.bp_detached_no_cherry_pick.to_string());
                 self.success_message = None;
                 return None;
             }
             Err(error) => {
-                self.error = Some(format!("读取当前分支失败: {error}"));
+                self.error = Some(i18n.bp_read_branch_failed_fmt.replace("{}", &error.to_string()));
                 self.success_message = None;
                 return None;
             }
@@ -869,14 +870,14 @@ impl BranchPopupState {
         let info = match git_core::commit::get_commit(repo, &commit_id) {
             Ok(info) => info,
             Err(error) => {
-                self.error = Some(format!("读取提交详情失败: {error}"));
+                self.error = Some(i18n.bp_read_commit_failed_fmt.replace("{}", &error.to_string()));
                 self.success_message = None;
                 return None;
             }
         };
 
         if info.parent_ids.len() > 1 {
-            self.error = Some("暂不支持直接摘取 merge 提交".to_string());
+            self.error = Some(i18n.bp_no_merge_cherry_pick.to_string());
             self.success_message = None;
             return None;
         }
@@ -887,15 +888,14 @@ impl BranchPopupState {
             action: PendingCommitAction::CherryPick {
                 commit_id: commit_id.clone(),
             },
-            title: "摘取该提交".to_string(),
-            summary: format!(
-                "会把提交 {} 应用到当前分支 {current_branch}，并生成一条新的提交。",
-                short_commit_id(&commit_id)
-            ),
+            title: i18n.bp_cherry_pick_title.to_string(),
+            summary: i18n.bp_cherry_pick_summary_fmt
+                .replacen("{}", short_commit_id(&commit_id), 1)
+                .replacen("{}", &current_branch, 1),
             impact_items: vec![
-                format!("只会修改当前分支 {current_branch}，不会移动原始提交所在分支"),
-                format!("提交标题：{}", commit_subject(&info.message)),
-                "若内容冲突，仓库会进入 Cherry-pick 处理中状态".to_string(),
+                i18n.bp_cherry_pick_impact_branch_fmt.replace("{}", &current_branch),
+                i18n.commit_subject_label.replace("{}", commit_subject(&info.message)),
+                i18n.bp_cherry_pick_impact_conflict.to_string(),
             ],
         })
     }
@@ -904,16 +904,17 @@ impl BranchPopupState {
         &mut self,
         repo: &Repository,
         commit_id: String,
+        i18n: &I18n,
     ) -> Option<CommitActionConfirmation> {
         let current_branch = match repo.current_branch() {
             Ok(Some(branch)) => branch,
             Ok(None) => {
-                self.error = Some("当前为 detached HEAD，不能直接回退提交".to_string());
+                self.error = Some(i18n.bp_detached_no_revert.to_string());
                 self.success_message = None;
                 return None;
             }
             Err(error) => {
-                self.error = Some(format!("读取当前分支失败: {error}"));
+                self.error = Some(i18n.bp_read_branch_failed_fmt.replace("{}", &error.to_string()));
                 self.success_message = None;
                 return None;
             }
@@ -922,14 +923,14 @@ impl BranchPopupState {
         let info = match git_core::commit::get_commit(repo, &commit_id) {
             Ok(info) => info,
             Err(error) => {
-                self.error = Some(format!("读取提交详情失败: {error}"));
+                self.error = Some(i18n.bp_read_commit_failed_fmt.replace("{}", &error.to_string()));
                 self.success_message = None;
                 return None;
             }
         };
 
         if info.parent_ids.len() > 1 {
-            self.error = Some("暂不支持直接回退 merge 提交".to_string());
+            self.error = Some(i18n.bp_no_merge_revert.to_string());
             self.success_message = None;
             return None;
         }
@@ -940,15 +941,14 @@ impl BranchPopupState {
             action: PendingCommitAction::Revert {
                 commit_id: commit_id.clone(),
             },
-            title: "回退该提交".to_string(),
-            summary: format!(
-                "会在当前分支 {current_branch} 上生成一条新的反向提交，用来撤销 {} 的影响。",
-                short_commit_id(&commit_id)
-            ),
+            title: i18n.bp_revert_title.to_string(),
+            summary: i18n.bp_revert_summary_fmt
+                .replacen("{}", &current_branch, 1)
+                .replacen("{}", short_commit_id(&commit_id), 1),
             impact_items: vec![
-                "原始提交仍然会保留在历史里，只会新增一条回退提交".to_string(),
-                format!("提交标题：{}", commit_subject(&info.message)),
-                "若内容冲突，仓库会进入回退处理中状态".to_string(),
+                i18n.bp_revert_impact_keep_history.to_string(),
+                i18n.commit_subject_label.replace("{}", commit_subject(&info.message)),
+                i18n.bp_revert_impact_conflict.to_string(),
             ],
         })
     }
@@ -957,16 +957,17 @@ impl BranchPopupState {
         &mut self,
         repo: &Repository,
         commit_id: String,
+        i18n: &I18n,
     ) -> Option<CommitActionConfirmation> {
         let current_branch = match repo.current_branch() {
             Ok(Some(branch)) => branch,
             Ok(None) => {
-                self.error = Some("当前为 detached HEAD，无法重置当前分支".to_string());
+                self.error = Some(i18n.bp_detached_no_reset.to_string());
                 self.success_message = None;
                 return None;
             }
             Err(error) => {
-                self.error = Some(format!("读取当前分支失败: {error}"));
+                self.error = Some(i18n.bp_read_branch_failed_fmt.replace("{}", &error.to_string()));
                 self.success_message = None;
                 return None;
             }
@@ -979,15 +980,14 @@ impl BranchPopupState {
                 commit_id: commit_id.clone(),
                 reset_mode: git_core::ResetMode::Mixed,
             },
-            title: "重置当前分支到这里".to_string(),
-            summary: format!(
-                "会把当前分支 {current_branch} 移动到提交 {}。",
-                short_commit_id(&commit_id)
-            ),
+            title: i18n.bp_reset_title.to_string(),
+            summary: i18n.bp_reset_summary_fmt
+                .replacen("{}", &current_branch, 1)
+                .replacen("{}", short_commit_id(&commit_id), 1),
             impact_items: vec![
-                "Soft — 保留改动在暂存区（适合重新组织提交）".to_string(),
-                "Mixed — 保留改动在工作区，取消暂存（默认）".to_string(),
-                "Hard — 丢弃所有改动（需要干净工作区）".to_string(),
+                i18n.bp_reset_soft_hint.to_string(),
+                i18n.bp_reset_mixed_hint.to_string(),
+                i18n.bp_reset_hard_hint.to_string(),
             ],
         })
     }
@@ -996,27 +996,22 @@ impl BranchPopupState {
         &mut self,
         repo: &Repository,
         commit_id: String,
+        i18n: &I18n,
     ) -> Option<CommitActionConfirmation> {
         match git_core::resolve_push_current_branch_target(repo, &commit_id) {
             Ok(target) => {
                 let mut impact_items = vec![
-                    format!(
-                        "只会影响当前分支 {} 的上游 {}",
-                        target.local_branch_name, target.upstream_ref
-                    ),
-                    format!(
-                        "远端最终会指向提交 {}",
-                        short_commit_id(&target.selected_commit)
-                    ),
+                    i18n.bp_push_impact_branch_fmt
+                        .replacen("{}", &target.local_branch_name, 1)
+                        .replacen("{}", &target.upstream_ref, 1),
+                    i18n.bp_push_impact_target_fmt
+                        .replace("{}", short_commit_id(&target.selected_commit)),
                 ];
 
                 if target.requires_force_with_lease {
-                    impact_items.push(
-                        "这次发布不是快进推送，会使用 force-with-lease 保护远端最新状态"
-                            .to_string(),
-                    );
+                    impact_items.push(i18n.bp_push_force_lease_hint.to_string());
                 } else {
-                    impact_items.push("这次发布可以按快进方式推进远端分支".to_string());
+                    impact_items.push(i18n.bp_push_fast_forward_hint.to_string());
                 }
 
                 self.error = None;
@@ -1025,18 +1020,16 @@ impl BranchPopupState {
                     action: PendingCommitAction::PushCurrentBranchToCommit {
                         target: target.clone(),
                     },
-                    title: "推送当前分支到这里".to_string(),
-                    summary: format!(
-                        "会把当前分支 {} 的上游 {} 发布到提交 {}。",
-                        target.local_branch_name,
-                        target.upstream_ref,
-                        short_commit_id(&target.selected_commit)
-                    ),
+                    title: i18n.bp_push_here_title.to_string(),
+                    summary: i18n.bp_push_here_summary_fmt
+                        .replacen("{}", &target.local_branch_name, 1)
+                        .replacen("{}", &target.upstream_ref, 1)
+                        .replacen("{}", short_commit_id(&target.selected_commit), 1),
                     impact_items,
                 })
             }
             Err(error) => {
-                self.error = Some(format!("无法准备推送到这里: {error}"));
+                self.error = Some(i18n.bp_push_prepare_failed_fmt.replace("{}", &error.to_string()));
                 self.success_message = None;
                 None
             }
@@ -1047,6 +1040,7 @@ impl BranchPopupState {
         &mut self,
         repo: &Repository,
         confirmation: CommitActionConfirmation,
+        i18n: &I18n,
     ) -> Option<PendingCommitActionKind> {
         let kind = confirmation.action.kind();
 
@@ -1080,16 +1074,16 @@ impl BranchPopupState {
                 self.is_loading = false;
                 self.success_message = Some(match kind {
                     PendingCommitActionKind::CherryPick => {
-                        format!("已把提交 {} 摘取到当前分支", short_commit_id(&commit_id))
+                        i18n.bp_cherry_picked_fmt.replace("{}", short_commit_id(&commit_id))
                     }
                     PendingCommitActionKind::Revert => {
-                        format!("已回退提交 {}", short_commit_id(&commit_id))
+                        i18n.bp_reverted_fmt.replace("{}", short_commit_id(&commit_id))
                     }
                     PendingCommitActionKind::ResetCurrentBranch => {
-                        format!("当前分支已重置到 {}", short_commit_id(&commit_id))
+                        i18n.bp_reset_done_fmt.replace("{}", short_commit_id(&commit_id))
                     }
                     PendingCommitActionKind::PushCurrentBranchToCommit => {
-                        format!("已把当前分支发布到 {}", short_commit_id(&commit_id))
+                        i18n.bp_pushed_to_fmt.replace("{}", short_commit_id(&commit_id))
                     }
                 });
                 Some(kind)
@@ -1110,20 +1104,18 @@ impl BranchPopupState {
                 if requires_follow_up {
                     self.error = None;
                     self.success_message = Some(match kind {
-                        PendingCommitActionKind::CherryPick => format!(
-                            "摘取提交 {} 时产生冲突，请先处理冲突文件",
-                            short_commit_id(&commit_id)
-                        ),
-                        PendingCommitActionKind::Revert => format!(
-                            "回退提交 {} 时产生冲突，请先处理冲突文件",
-                            short_commit_id(&commit_id)
-                        ),
+                        PendingCommitActionKind::CherryPick => {
+                            i18n.bp_cherry_pick_conflict_fmt.replace("{}", short_commit_id(&commit_id))
+                        }
+                        PendingCommitActionKind::Revert => {
+                            i18n.bp_revert_conflict_fmt.replace("{}", short_commit_id(&commit_id))
+                        }
                         PendingCommitActionKind::ResetCurrentBranch
                         | PendingCommitActionKind::PushCurrentBranchToCommit => unreachable!(),
                     });
                     Some(kind)
                 } else {
-                    self.error = Some(format!("提交操作失败: {error}"));
+                    self.error = Some(i18n.bp_commit_action_failed_fmt.replace("{}", &error.to_string()));
                     None
                 }
             }
@@ -1134,9 +1126,9 @@ impl BranchPopupState {
         self.error = None;
     }
 
-    pub fn continue_in_progress_commit_action(&mut self, repo: &Repository) {
+    pub fn continue_in_progress_commit_action(&mut self, repo: &Repository, i18n: &I18n) {
         let Some(in_progress) = self.in_progress_commit_action.clone() else {
-            self.error = Some("当前没有需要继续的提交级 Git 流程".to_string());
+            self.error = Some(i18n.bp_no_continue_action.to_string());
             self.success_message = None;
             return;
         };
@@ -1149,20 +1141,20 @@ impl BranchPopupState {
             Ok(()) => {
                 self.is_loading = false;
                 self.success_message = Some(match in_progress.kind {
-                    InProgressCommitActionKind::CherryPick => "已继续 Cherry-pick 流程".to_string(),
-                    InProgressCommitActionKind::Revert => "已继续回退提交流程".to_string(),
+                    InProgressCommitActionKind::CherryPick => i18n.bp_continued_cherry_pick.to_string(),
+                    InProgressCommitActionKind::Revert => i18n.bp_continued_revert.to_string(),
                 });
             }
             Err(error) => {
                 self.is_loading = false;
-                self.error = Some(format!("继续流程失败: {error}"));
+                self.error = Some(i18n.bp_continue_failed_fmt.replace("{}", &error.to_string()));
             }
         }
     }
 
-    pub fn abort_in_progress_commit_action(&mut self, repo: &Repository) {
+    pub fn abort_in_progress_commit_action(&mut self, repo: &Repository, i18n: &I18n) {
         let Some(in_progress) = self.in_progress_commit_action.clone() else {
-            self.error = Some("当前没有需要中止的提交级 Git 流程".to_string());
+            self.error = Some(i18n.bp_no_abort_action.to_string());
             self.success_message = None;
             return;
         };
@@ -1175,13 +1167,13 @@ impl BranchPopupState {
             Ok(()) => {
                 self.is_loading = false;
                 self.success_message = Some(match in_progress.kind {
-                    InProgressCommitActionKind::CherryPick => "已中止当前 Cherry-pick".to_string(),
-                    InProgressCommitActionKind::Revert => "已中止当前回退提交流程".to_string(),
+                    InProgressCommitActionKind::CherryPick => i18n.bp_aborted_cherry_pick.to_string(),
+                    InProgressCommitActionKind::Revert => i18n.bp_aborted_revert.to_string(),
                 });
             }
             Err(error) => {
                 self.is_loading = false;
-                self.error = Some(format!("中止流程失败: {error}"));
+                self.error = Some(i18n.bp_abort_failed_fmt.replace("{}", &error.to_string()));
             }
         }
     }
@@ -1405,7 +1397,7 @@ fn normalize_branch_search_text(raw: &str) -> String {
         .to_string()
 }
 
-pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
+pub fn view<'a>(state: &'a BranchPopupState, i18n: &'a I18n) -> Element<'a, BranchPopupMessage> {
     let current_branch = state.current_branch();
     let selected_branch = state.selected_branch_ref();
     let local_branches = state.visible_local_branches();
@@ -1418,7 +1410,7 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
             .push(
-                Text::new("分支")
+                Text::new(i18n.branches_title)
                     .size(theme::typography::TITLE_SIZE)
                     .color(theme::darcula::TEXT_PRIMARY),
             )
@@ -1430,7 +1422,7 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
             }))
             .push(Space::new().width(Length::Fill))
             .push(button::compact_ghost(
-                "关闭",
+                i18n.close,
                 Some(BranchPopupMessage::Close),
             )),
     )
@@ -1440,7 +1432,7 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
 
     // ── IDEA search bar ──
     let search_bar = Container::new(text_input::search_with_clear(
-        "搜索分支",
+        i18n.branch_search_placeholder,
         &state.search_query,
         BranchPopupMessage::SetSearchQuery,
         BranchPopupMessage::ClearSearch,
@@ -1448,26 +1440,26 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
     .padding([4, 12])
     .width(Length::Fill);
 
-    // ── IDEA quick actions: 新建分支 + 创建 + 刷新 ──
+    // ── IDEA quick actions: new branch + create + refresh ──
     let quick_actions = Container::new(
         Row::new()
             .spacing(theme::spacing::XS)
             .align_y(Alignment::Center)
             .push(
                 Container::new(text_input::styled(
-                    "新建分支",
+                    i18n.create_branch,
                     &state.new_branch_name,
                     BranchPopupMessage::SetNewBranchName,
                 ))
                 .width(Length::Fill),
             )
             .push(button::secondary(
-                "创建",
+                i18n.create,
                 (!state.new_branch_name.trim().is_empty() && !state.is_loading)
                     .then(|| BranchPopupMessage::CreateBranch(state.new_branch_name.clone())),
             ))
             .push(button::compact_ghost(
-                "刷新",
+                i18n.refresh,
                 Some(BranchPopupMessage::Refresh),
             )),
     )
@@ -1485,6 +1477,7 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
                 recent_branches,
                 local_branches,
                 remote_branches,
+                i18n,
             ))
             .width(Length::FillPortion(5))
             .height(Length::Fill),
@@ -1499,7 +1492,7 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
                 }),
         )
         .push(
-            Container::new(build_selected_branch_panel(state, selected_branch))
+            Container::new(build_selected_branch_panel(state, selected_branch, i18n))
                 .width(Length::FillPortion(4))
                 .height(Length::Fill),
         );
@@ -1514,7 +1507,7 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
         .push(search_bar)
         .push(quick_actions)
         .push(iced::widget::rule::horizontal(1))
-        .push_maybe(build_status_panel(state))
+        .push_maybe(build_status_panel(state, i18n))
         .push(branch_workspace);
 
     let base: Element<'_, BranchPopupMessage> = Container::new(content)
@@ -1527,20 +1520,20 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
     if state.context_menu_commit.is_some() {
         let selected_branch_ref = state.selected_branch_ref();
         if let Some(selected_branch) = selected_branch_ref {
-            let overlay = build_commit_context_menu_overlay(state, selected_branch);
+            let overlay = build_commit_context_menu_overlay(state, selected_branch, i18n);
             return stack![base, overlay].into();
         }
     }
 
     if state.context_menu_branch.is_some() {
-        let overlay = build_branch_context_menu_overlay(state, current_branch);
+        let overlay = build_branch_context_menu_overlay(state, current_branch, i18n);
         return stack![base, overlay].into();
     }
 
     // IDEA-style: Smart checkout confirmation dialog overlay
     if let Some(target_branch) = &state.smart_checkout_branch {
         let dialog =
-            build_smart_checkout_dialog(target_branch, &state.smart_checkout_affected_files);
+            build_smart_checkout_dialog(target_branch, &state.smart_checkout_affected_files, i18n);
         return stack![
             base,
             opaque(
@@ -1576,13 +1569,14 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
 fn build_smart_checkout_dialog<'a>(
     target_branch: &str,
     affected_files: &'a [String],
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     // ── Header ──
     let header = Container::new(
         Row::new()
             .align_y(Alignment::Center)
             .push(
-                Text::new("Git 签出问题")
+                Text::new(i18n.git_checkout_problem)
                     .size(theme::typography::TITLE_SIZE)
                     .color(theme::darcula::TEXT_PRIMARY),
             )
@@ -1598,10 +1592,7 @@ fn build_smart_checkout_dialog<'a>(
 
     // ── Description (matches IDEA's north panel label) ──
     let description = Container::new(
-        Text::new(format!(
-            "签出 {} 时，以下文件的本地更改将被覆盖。",
-            target_branch
-        ))
+        Text::new(i18n.checkout_overwrite_warning_fmt.replace("{}", target_branch))
         .size(theme::typography::BODY_SIZE)
         .color(theme::darcula::TEXT_PRIMARY)
         .wrapping(text::Wrapping::WordOrGlyph),
@@ -1610,7 +1601,7 @@ fn build_smart_checkout_dialog<'a>(
 
     // ── Affected file list (matches IDEA's ChangesBrowser / SimplePathsBrowser) ──
     let file_list_content: Element<'a, BranchPopupMessage> = if affected_files.is_empty() {
-        Text::new("（无法获取受影响的文件列表）")
+        Text::new(i18n.cannot_get_affected_files)
             .size(theme::typography::CAPTION_SIZE)
             .color(theme::darcula::TEXT_DISABLED)
             .into()
@@ -1634,7 +1625,7 @@ fn build_smart_checkout_dialog<'a>(
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
                     .push(
-                        Text::new("受影响的文件")
+                        Text::new(i18n.affected_files)
                             .size(theme::typography::MICRO_SIZE)
                             .color(theme::darcula::TEXT_DISABLED),
                     )
@@ -1658,16 +1649,16 @@ fn build_smart_checkout_dialog<'a>(
             .spacing(8)
             .align_y(Alignment::Center)
             .push(button::ghost(
-                "强制签出",
+                i18n.force_checkout,
                 Some(BranchPopupMessage::ForceCheckout(target_branch.to_string())),
             ))
             .push(Space::new().width(Length::Fill))
             .push(button::ghost(
-                "不签出",
+                i18n.dont_checkout,
                 Some(BranchPopupMessage::CancelSmartCheckout),
             ))
             .push(button::primary(
-                "智能签出",
+                i18n.smart_checkout,
                 Some(BranchPopupMessage::SmartCheckout(target_branch.to_string())),
             )),
     )
@@ -1700,7 +1691,7 @@ fn build_smart_checkout_dialog<'a>(
     .into()
 }
 
-fn build_status_panel<'a>(state: &'a BranchPopupState) -> Option<Element<'a, BranchPopupMessage>> {
+fn build_status_panel<'a>(state: &'a BranchPopupState, i18n: &'a I18n) -> Option<Element<'a, BranchPopupMessage>> {
     if state.is_loading {
         // IDEA-style: compact loading indicator in-place of full status banner
         return Some(
@@ -1710,7 +1701,7 @@ fn build_status_panel<'a>(state: &'a BranchPopupState) -> Option<Element<'a, Bra
                     .align_y(Alignment::Center)
                     .push(widgets::loading_spinner::<BranchPopupMessage>())
                     .push(
-                        Text::new("正在刷新分支列表...")
+                        Text::new(i18n.loading_branches)
                             .size(theme::typography::CAPTION_SIZE)
                             .color(theme::darcula::TEXT_SECONDARY),
                     ),
@@ -1722,11 +1713,11 @@ fn build_status_panel<'a>(state: &'a BranchPopupState) -> Option<Element<'a, Bra
     }
 
     if let Some(error) = state.error.as_ref() {
-        return Some(status_panel("失败", error, BadgeTone::Danger));
+        return Some(status_panel(i18n.failed_status, error, BadgeTone::Danger));
     }
 
     if let Some(message) = state.success_message.as_ref() {
-        return Some(status_panel("完成", message, BadgeTone::Success));
+        return Some(status_panel(i18n.done_status, message, BadgeTone::Success));
     }
 
     None
@@ -1745,37 +1736,41 @@ fn build_branch_navigator<'a>(
     recent_branches: Vec<&'a Branch>,
     local_branches: Vec<&'a Branch>,
     remote_branches: Vec<&'a Branch>,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let mut branch_lists = Column::new()
         .spacing(theme::spacing::SM)
         .width(Length::Fill);
     if !recent_branches.is_empty() {
         branch_lists = branch_lists.push(build_flat_branch_section(
-            "最近分支",
+            i18n.recent_branches,
             recent_branches,
             state,
+            i18n,
         ));
         // IDEA-style: add separator between recent and local branches
         if !local_branches.is_empty() {
-            branch_lists = branch_lists.push(widgets::separator_with_text(Some("本地分支")));
+            branch_lists = branch_lists.push(widgets::separator_with_text(Some(i18n.local_branches)));
         }
     }
 
     branch_lists = branch_lists.push(build_tree_branch_section(
-        "本地分支",
+        i18n.local_branches,
         BranchSection::Local,
         local_branches,
         state,
+        i18n,
     ));
     // IDEA-style: add separator between local and remote branches
     if !remote_branches.is_empty() {
-        branch_lists = branch_lists.push(widgets::separator_with_text(Some("远程分支")));
+        branch_lists = branch_lists.push(widgets::separator_with_text(Some(i18n.remote_branches)));
     }
     branch_lists = branch_lists.push(build_tree_branch_section(
-        "远程分支",
+        i18n.remote_branches,
         BranchSection::Remote,
         remote_branches,
         state,
+        i18n,
     ));
 
     let navigator = Container::new(scrollable::styled(branch_lists).height(Length::Fill))
@@ -1790,6 +1785,7 @@ fn build_flat_branch_section<'a>(
     title: &'a str,
     branches: Vec<&'a Branch>,
     state: &'a BranchPopupState,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let branch_count = branches.len();
 
@@ -1799,13 +1795,13 @@ fn build_flat_branch_section<'a>(
 
     if branches.is_empty() {
         list = list.push(
-            Text::new("没有匹配项")
+            Text::new(i18n.no_match_items)
                 .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         );
     } else {
         for branch in branches {
-            list = list.push(build_branch_row(branch, &branch.name, 0, state));
+            list = list.push(build_branch_row(branch, &branch.name, 0, state, i18n));
         }
     }
 
@@ -1817,11 +1813,12 @@ fn build_tree_branch_section<'a>(
     section: BranchSection,
     branches: Vec<&'a Branch>,
     state: &'a BranchPopupState,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let branch_count = branches.len();
     let list = if branches.is_empty() {
         Column::new().width(Length::Fill).push(
-            Text::new("没有匹配项")
+            Text::new(i18n.no_match_items)
                 .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         )
@@ -1835,6 +1832,7 @@ fn build_tree_branch_section<'a>(
             section,
             &tree,
             0,
+            i18n,
         )
     };
 
@@ -1878,6 +1876,7 @@ fn build_tree_branch_nodes<'a>(
     section: BranchSection,
     folder: &BranchTreeFolder<'a>,
     depth: usize,
+    i18n: &'a I18n,
 ) -> Column<'a, BranchPopupMessage> {
     for child in folder.folders.values() {
         let path_key = folder_key(section, &child.path);
@@ -1885,7 +1884,7 @@ fn build_tree_branch_nodes<'a>(
         column = column.push(build_folder_row(child, depth, expanded, path_key));
 
         if expanded {
-            column = build_tree_branch_nodes(column, state, section, child, depth + 1);
+            column = build_tree_branch_nodes(column, state, section, child, depth + 1, i18n);
         }
     }
 
@@ -1904,6 +1903,7 @@ fn build_tree_branch_nodes<'a>(
             branch_leaf_name(&branch.name),
             depth,
             state,
+            i18n,
         ));
     }
 
@@ -1968,6 +1968,7 @@ fn build_branch_row<'a>(
     label: &'a str,
     depth: usize,
     state: &'a BranchPopupState,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let is_selected = state.selected_branch.as_deref() == Some(branch.name.as_str());
     let is_menu_open = state.is_context_menu_open_for(&branch.name);
@@ -2033,11 +2034,11 @@ fn build_branch_row<'a>(
         row = row.push(sync);
     }
 
-    // "当前" badge for HEAD branch
+    // current badge for HEAD branch
     if branch.is_head {
         row = row.push(
             Container::new(
-                Text::new("当前")
+                Text::new(i18n.current_label)
                     .size(theme::typography::MICRO_SIZE)
                     .color(theme::darcula::SUCCESS),
             )
@@ -2116,6 +2117,7 @@ fn build_branch_row<'a>(
 fn build_branch_context_menu_overlay<'a>(
     state: &'a BranchPopupState,
     current_branch: Option<&'a Branch>,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let Some(selected_branch) = state
         .context_menu_branch
@@ -2138,7 +2140,7 @@ fn build_branch_context_menu_overlay<'a>(
                         .spacing(2)
                         .width(Length::Fill)
                         .push(
-                            Text::new("分支动作".to_uppercase())
+                            Text::new(i18n.branch_actions_label.to_uppercase())
                                 .size(theme::typography::MICRO_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
@@ -2150,7 +2152,7 @@ fn build_branch_context_menu_overlay<'a>(
                         ),
                 )
                 .push(button::compact_ghost(
-                    "关闭",
+                    i18n.close,
                     Some(BranchPopupMessage::CloseBranchContextMenu),
                 )),
         )
@@ -2160,11 +2162,11 @@ fn build_branch_context_menu_overlay<'a>(
                 .align_y(Alignment::Center)
                 .push(widgets::info_chip::<BranchPopupMessage>(
                     if selected_branch.is_remote {
-                        "远程"
+                        i18n.remote_label
                     } else if selected_branch.is_head {
-                        "当前"
+                        i18n.current_label
                     } else {
-                        "本地"
+                        i18n.local_label
                     },
                     if selected_branch.is_remote {
                         BadgeTone::Neutral
@@ -2181,10 +2183,10 @@ fn build_branch_context_menu_overlay<'a>(
                     )
                 }))
                 .push_maybe(upstream_ref.as_ref().map(|_| {
-                    widgets::info_chip::<BranchPopupMessage>("已跟踪", BadgeTone::Accent)
+                    widgets::info_chip::<BranchPopupMessage>(i18n.tracked_label, BadgeTone::Accent)
                 })),
         )
-        .push_maybe(branch_meta_summary(selected_branch).map(|meta| {
+        .push_maybe(branch_meta_summary(selected_branch, i18n).map(|meta| {
             Text::new(meta)
                 .size(theme::typography::CAPTION_SIZE)
                 .width(Length::Fill)
@@ -2197,10 +2199,10 @@ fn build_branch_context_menu_overlay<'a>(
             .then(|| {
                 let mut parts = Vec::new();
                 if let Some(remote) = selected_remote_name.as_ref() {
-                    parts.push(format!("默认远程 {remote}"));
+                    parts.push(i18n.default_remote_fmt.replace("{}", remote).replace("：", " "));
                 }
                 if let Some(upstream) = upstream_ref.as_ref() {
-                    parts.push(format!("跟踪 {upstream}"));
+                    parts.push(i18n.tracking_fmt.replace("{}", upstream).replace("：", " "));
                 }
                 Text::new(parts.join(" · "))
                     .size(theme::typography::CAPTION_SIZE)
@@ -2210,7 +2212,7 @@ fn build_branch_context_menu_overlay<'a>(
             }),
         );
 
-    let action_groups = build_branch_action_groups(state, selected_branch, current_branch)
+    let action_groups = build_branch_action_groups(state, selected_branch, current_branch, i18n)
         .into_iter()
         .fold(
             Column::new().spacing(theme::spacing::XS),
@@ -2244,19 +2246,20 @@ fn build_branch_context_menu_overlay<'a>(
 fn build_selected_branch_panel<'a>(
     state: &'a BranchPopupState,
     selected_branch: Option<&'a Branch>,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let Some(selected_branch) = selected_branch else {
-        return widgets::panel_empty_state("分支操作", "先从左侧选择一个分支", "", None);
+        return widgets::panel_empty_state(i18n.branch_operations, i18n.select_branch_first, "", None);
     };
 
     let content = Column::new()
         .spacing(theme::spacing::SM)
-        .push(build_selected_branch_summary(state, selected_branch))
-        .push_maybe(build_in_progress_commit_action_panel(state))
-        .push(build_selected_commit_history_panel(state, selected_branch))
-        .push_maybe(build_inline_action_panel(state))
-        .push(build_selected_commit_detail_panel(state, selected_branch))
-        .push_maybe(build_comparison_panel(state));
+        .push(build_selected_branch_summary(state, selected_branch, i18n))
+        .push_maybe(build_in_progress_commit_action_panel(state, i18n))
+        .push(build_selected_commit_history_panel(state, selected_branch, i18n))
+        .push_maybe(build_inline_action_panel(state, i18n))
+        .push(build_selected_commit_detail_panel(state, selected_branch, i18n))
+        .push_maybe(build_comparison_panel(state, i18n));
 
     Container::new(scrollable::styled(content).height(Length::Fill))
         .padding([0, 0])
@@ -2269,6 +2272,7 @@ fn build_selected_branch_panel<'a>(
 fn build_selected_branch_summary<'a>(
     state: &'a BranchPopupState,
     selected_branch: &'a Branch,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let selected_remote_name = inferred_remote_name(state, selected_branch);
     let upstream_ref = inferred_upstream_ref(state, selected_branch);
@@ -2286,11 +2290,11 @@ fn build_selected_branch_summary<'a>(
                     )
                     .push(widgets::info_chip::<BranchPopupMessage>(
                         if selected_branch.is_remote {
-                            "远程"
+                            i18n.remote_label
                         } else if selected_branch.is_head {
-                            "当前"
+                            i18n.current_label
                         } else {
-                            "本地"
+                            i18n.local_label
                         },
                         if selected_branch.is_remote {
                             BadgeTone::Neutral
@@ -2301,7 +2305,7 @@ fn build_selected_branch_summary<'a>(
                         },
                     )),
             )
-            .push_maybe(branch_meta_summary(selected_branch).map(|meta| {
+            .push_maybe(branch_meta_summary(selected_branch, i18n).map(|meta| {
                 Text::new(meta)
                     .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
@@ -2309,12 +2313,12 @@ fn build_selected_branch_summary<'a>(
                     .color(theme::darcula::TEXT_SECONDARY)
             }))
             .push_maybe(selected_remote_name.as_ref().map(|remote| {
-                Text::new(format!("默认远程：{remote}"))
+                Text::new(i18n.default_remote_fmt.replace("{}", remote))
                     .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY)
             }))
             .push_maybe(upstream_ref.as_ref().map(|upstream| {
-                Text::new(format!("跟踪关系：{upstream}"))
+                Text::new(i18n.tracking_fmt.replace("{}", upstream))
                     .size(theme::typography::CAPTION_SIZE)
                     .color(theme::darcula::TEXT_SECONDARY)
             })),
@@ -2327,12 +2331,13 @@ fn build_selected_branch_summary<'a>(
 fn build_selected_commit_history_panel<'a>(
     state: &'a BranchPopupState,
     selected_branch: &'a Branch,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let history_count = state.branch_history_entries.len();
 
     let history_rows = if state.branch_history_entries.is_empty() {
         Column::new().push(
-            Text::new("当前没有可显示的提交历史。")
+            Text::new(i18n.no_commits_to_display)
                 .size(theme::typography::CAPTION_SIZE)
                 .color(theme::darcula::TEXT_SECONDARY),
         )
@@ -2354,7 +2359,7 @@ fn build_selected_commit_history_panel<'a>(
                 Row::new()
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
-                    .push(Text::new("提交时间线").size(theme::typography::TITLE_SIZE))
+                    .push(Text::new(i18n.commit_timeline).size(theme::typography::TITLE_SIZE))
                     .push(widgets::info_chip::<BranchPopupMessage>(
                         history_count.to_string(),
                         BadgeTone::Neutral,
@@ -2362,19 +2367,19 @@ fn build_selected_commit_history_panel<'a>(
                     .push(Space::new().width(Length::Fill))
                     .push_maybe(state.selected_branch_commit.clone().map(|commit_id| {
                         button::ghost(
-                            "提交动作",
+                            i18n.commit_actions_label,
                             Some(BranchPopupMessage::OpenCommitContextMenu(commit_id)),
                         )
                     }))
                     .push(button::ghost(
-                        "分支动作",
+                        i18n.branch_actions_label,
                         Some(BranchPopupMessage::OpenBranchContextMenu(
                             selected_branch.name.clone(),
                         )),
                     )),
             )
             .push(
-                Text::new("最近提交记录")
+                Text::new(i18n.recent_commit_records)
                     .size(theme::typography::CAPTION_SIZE)
                     .width(Length::Fill)
                     .wrapping(text::Wrapping::WordOrGlyph)
@@ -2394,21 +2399,22 @@ fn build_selected_commit_history_panel<'a>(
 fn build_selected_commit_detail_panel<'a>(
     state: &'a BranchPopupState,
     selected_branch: &'a Branch,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let Some(info) = state.selected_branch_commit_info.as_ref() else {
-        return widgets::panel_empty_state("提交详情", "还没有选中提交", "", None);
+        return widgets::panel_empty_state(i18n.commit_detail_label, i18n.no_commit_selected, "", None);
     };
 
     Container::new(
         Column::new()
             .spacing(theme::spacing::SM)
-            .push(widgets::section_header("提交详情", "当前选中提交", ""))
+            .push(widgets::section_header(i18n.commit_detail_label, i18n.current_selected_commit, ""))
             .push(
                 Row::new()
                     .spacing(theme::spacing::XS)
                     .align_y(Alignment::Center)
                     .push(widgets::info_chip::<BranchPopupMessage>(
-                        format!("提交 {}", short_commit_id(&info.id)),
+                        i18n.commit_id_fmt.replace("{}", short_commit_id(&info.id)),
                         BadgeTone::Accent,
                     ))
                     .push(widgets::info_chip::<BranchPopupMessage>(
@@ -2428,11 +2434,11 @@ fn build_selected_commit_detail_panel<'a>(
             )
             .push(
                 Text::new(format!(
-                    "{} <{}> · {} · 父提交 {} 个",
+                    "{} <{}> · {} · {}",
                     info.author_name,
                     info.author_email,
                     format_timestamp(info.author_time),
-                    info.parent_ids.len()
+                    i18n.parent_commits_count_fmt.replace("{}", &info.parent_ids.len().to_string())
                 ))
                 .size(theme::typography::CAPTION_SIZE)
                 .width(Length::Fill)
@@ -2449,7 +2455,7 @@ fn build_selected_commit_detail_panel<'a>(
                 .height(Length::Fixed(120.0)),
             )
             .push(button::secondary(
-                "提交动作 ···",
+                format!("{} ···", i18n.commit_actions_label),
                 (!state.is_loading)
                     .then_some(BranchPopupMessage::OpenCommitContextMenu(info.id.clone())),
             )),
@@ -2462,6 +2468,7 @@ fn build_selected_commit_detail_panel<'a>(
 pub fn build_pending_commit_action_dialog<'a>(
     confirmation: Option<&'a CommitActionConfirmation>,
     is_loading: bool,
+    i18n: &'a I18n,
 ) -> Option<Element<'a, BranchPopupMessage>> {
     let confirmation = confirmation?;
 
@@ -2497,7 +2504,7 @@ pub fn build_pending_commit_action_dialog<'a>(
                     .spacing(theme::spacing::SM)
                     .align_y(Alignment::Center)
                     .push(
-                        Text::new("模式:")
+                        Text::new(i18n.mode_label)
                             .size(theme::typography::BODY_SIZE)
                             .color(theme::darcula::TEXT_SECONDARY),
                     )
@@ -2543,11 +2550,11 @@ pub fn build_pending_commit_action_dialog<'a>(
                 Row::new()
                     .spacing(theme::spacing::SM)
                     .push(button::warning(
-                        "继续执行",
+                        i18n.proceed_label,
                         (!is_loading).then_some(BranchPopupMessage::ConfirmPendingCommitAction),
                     ))
                     .push(button::ghost(
-                        "取消",
+                        i18n.cancel,
                         (!is_loading).then_some(BranchPopupMessage::CancelPendingCommitAction),
                     )),
             ),
@@ -2604,30 +2611,31 @@ fn reset_mode_button(
 
 fn build_in_progress_commit_action_panel<'a>(
     state: &'a BranchPopupState,
+    i18n: &'a I18n,
 ) -> Option<Element<'a, BranchPopupMessage>> {
     let in_progress = state.in_progress_commit_action.as_ref()?;
     let label = match in_progress.kind {
         InProgressCommitActionKind::CherryPick => "Cherry-pick",
-        InProgressCommitActionKind::Revert => "回退提交",
+        InProgressCommitActionKind::Revert => i18n.revert_commit_action,
     };
     let summary = match (
         in_progress.commit_id.as_deref(),
         in_progress.subject.as_deref(),
     ) {
-        (Some(commit_id), Some(subject)) => format!(
-            "{} 正停在提交 {} · {}",
-            label,
-            short_commit_id(commit_id),
-            subject
-        ),
-        (Some(commit_id), None) => format!("{} 正停在提交 {}", label, short_commit_id(commit_id)),
-        (None, _) => format!("{label} 正等待你继续处理当前流程"),
+        (Some(commit_id), Some(subject)) => i18n.bp_stopped_at_fmt
+            .replacen("{}", label, 1)
+            .replacen("{}", short_commit_id(commit_id), 1)
+            .replacen("{}", subject, 1),
+        (Some(commit_id), None) => i18n.bp_stopped_at_commit_fmt
+            .replacen("{}", label, 1)
+            .replacen("{}", short_commit_id(commit_id), 1),
+        (None, _) => i18n.bp_waiting_for_continue.replace("{}", label),
     };
     let conflict_count = in_progress.conflicted_files.len();
     let detail = if conflict_count > 0 {
-        format!("还有 {conflict_count} 个冲突文件，先处理冲突再继续。")
+        i18n.bp_conflict_remaining_fmt.replace("{}", &conflict_count.to_string())
     } else {
-        "当前看起来已经没有冲突文件了，可以继续完成这个流程。".to_string()
+        i18n.bp_no_conflict_continue.to_string()
     };
 
     Some(
@@ -2638,15 +2646,15 @@ fn build_in_progress_commit_action_panel<'a>(
                     Column::new()
                         .spacing(2)
                         .push(
-                            Text::new("进行中")
+                            Text::new(i18n.in_progress_label)
                                 .size(theme::typography::MICRO_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
                         .push(
-                            Text::new(format!("{label} 暂停")).size(theme::typography::TITLE_SIZE),
+                            Text::new(format!("{label} {}", i18n.paused_label)).size(theme::typography::TITLE_SIZE),
                         )
                         .push(
-                            Text::new("在界面中直接继续或中止当前 rebase/cherry-pick 操作。")
+                            Text::new(i18n.bp_in_progress_hint)
                                 .size(theme::typography::CAPTION_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         ),
@@ -2660,7 +2668,7 @@ fn build_in_progress_commit_action_panel<'a>(
                             BadgeTone::Warning,
                         ))
                         .push(widgets::info_chip::<BranchPopupMessage>(
-                            format!("冲突文件 {}", conflict_count),
+                            i18n.conflict_files_fmt.replace("{}", &conflict_count.to_string()),
                             if conflict_count > 0 {
                                 BadgeTone::Danger
                             } else {
@@ -2685,17 +2693,17 @@ fn build_in_progress_commit_action_panel<'a>(
                     Row::new()
                         .spacing(theme::spacing::XS)
                         .push(button::secondary(
-                            "继续",
+                            i18n.continue_label,
                             (!state.is_loading && conflict_count == 0)
                                 .then_some(BranchPopupMessage::ContinueInProgressCommitAction),
                         ))
                         .push(button::ghost(
-                            "处理冲突",
+                            i18n.resolve_conflicts,
                             (!state.is_loading && conflict_count > 0)
                                 .then_some(BranchPopupMessage::OpenConflictList),
                         ))
                         .push(button::ghost(
-                            "中止",
+                            i18n.abort_label,
                             (!state.is_loading)
                                 .then_some(BranchPopupMessage::AbortInProgressCommitAction),
                         )),
@@ -2710,6 +2718,7 @@ fn build_in_progress_commit_action_panel<'a>(
 fn build_commit_context_menu_overlay<'a>(
     state: &'a BranchPopupState,
     selected_branch: &'a Branch,
+    i18n: &'a I18n,
 ) -> Element<'a, BranchPopupMessage> {
     let Some(commit_id) = state.context_menu_commit.as_deref() else {
         return Space::new().width(Length::Shrink).into();
@@ -2733,7 +2742,7 @@ fn build_commit_context_menu_overlay<'a>(
                         .spacing(2)
                         .width(Length::Fill)
                         .push(
-                            Text::new("提交动作")
+                            Text::new(i18n.commit_actions_label)
                                 .size(theme::typography::MICRO_SIZE)
                                 .color(theme::darcula::TEXT_SECONDARY),
                         )
@@ -2745,7 +2754,7 @@ fn build_commit_context_menu_overlay<'a>(
                         ),
                 )
                 .push(button::compact_ghost(
-                    "关闭",
+                    i18n.close,
                     Some(BranchPopupMessage::CloseCommitContextMenu),
                 )),
         )
@@ -2772,7 +2781,7 @@ fn build_commit_context_menu_overlay<'a>(
                     )
                 }))
                 .push_maybe(info.parent_ids.is_empty().then(|| {
-                    widgets::info_chip::<BranchPopupMessage>("根提交", BadgeTone::Neutral)
+                    widgets::info_chip::<BranchPopupMessage>(i18n.root_commit, BadgeTone::Neutral)
                 })),
         )
         .push(
@@ -2788,7 +2797,7 @@ fn build_commit_context_menu_overlay<'a>(
             .color(theme::darcula::TEXT_SECONDARY),
         );
 
-    let action_groups = build_commit_action_groups(state, selected_branch, info)
+    let action_groups = build_commit_action_groups(state, selected_branch, info, i18n)
         .into_iter()
         .fold(
             Column::new().spacing(theme::spacing::SM),
@@ -2823,6 +2832,7 @@ fn build_commit_action_groups<'a>(
     state: &'a BranchPopupState,
     selected_branch: &'a Branch,
     info: &'a CommitInfo,
+    i18n: &'a I18n,
 ) -> Vec<Element<'a, BranchPopupMessage>> {
     let current_branch = state.current_branch();
     let can_compare_with_current = current_branch
@@ -2842,12 +2852,12 @@ fn build_commit_action_groups<'a>(
 
     let compare_with_current_row = commit_menu_action_row(
         Some("<>"),
-        "与当前分支比较",
+        i18n.compare_with_current,
         Some(
             can_compare_with_current
                 .as_ref()
-                .map(|branch| format!("直接比较当前提交与 {branch} 的差异"))
-                .unwrap_or_else(|| "当前已经在这条分支上下文里，无法再和自身比较".to_string()),
+                .map(|branch| i18n.ctx_compare_branch_fmt.replace("{}", branch))
+                .unwrap_or_else(|| i18n.ctx_detached_no_branch_compare.to_string()),
         ),
         can_compare_with_current.map(|current| BranchPopupMessage::CompareWithCurrent {
             selected: info.id.clone(),
@@ -2857,26 +2867,26 @@ fn build_commit_action_groups<'a>(
     );
     let parent_row = commit_menu_action_row(
         Some("^"),
-        "跳到父提交",
+        i18n.jump_to_parent,
         Some(if parent_commit_id.is_some() {
-            "把焦点移到当前提交的父提交".to_string()
+            i18n.bp_jump_parent_hint.to_string()
         } else if info.parent_ids.is_empty() {
-            "当前已经是根提交，没有父提交".to_string()
+            i18n.bp_already_root.to_string()
         } else {
-            "父提交不在已加载范围里，请先滚动时间线继续查看".to_string()
+            i18n.bp_parent_not_loaded.to_string()
         }),
         parent_commit_id.map(BranchPopupMessage::SelectBranchCommit),
         CommitMenuTone::Accent,
     );
     let child_row = commit_menu_action_row(
         Some("v"),
-        "跳到子提交",
+        i18n.jump_to_child,
         Some(if child_commit_id.is_some() {
-            "把焦点移到当前提交的直接子提交".to_string()
+            i18n.bp_jump_child_hint.to_string()
         } else if child_commit_ids.len() > 1 {
-            "检测到多个子提交，请直接在时间线中选择目标提交".to_string()
+            i18n.bp_multiple_children.to_string()
         } else {
-            "当前已是已加载时间线的末端，没有子提交".to_string()
+            i18n.bp_no_children.to_string()
         }),
         child_commit_id.map(BranchPopupMessage::SelectBranchCommit),
         CommitMenuTone::Accent,
@@ -2884,22 +2894,22 @@ fn build_commit_action_groups<'a>(
 
     vec![
         build_commit_action_group(
-            "常用".to_uppercase(),
+            i18n.common_actions.to_uppercase(),
             "",
             CommitMenuTone::Neutral,
             vec![
                 commit_menu_action_row(
                     Some("#"),
-                    "复制哈希",
-                    Some("把完整提交哈希复制到系统剪贴板".to_string()),
+                    i18n.copy_hash_label,
+                    Some(i18n.bp_copy_hash_hint.to_string()),
                     (!state.is_loading)
                         .then_some(BranchPopupMessage::CopyCommitHash(info.id.clone())),
                     CommitMenuTone::Neutral,
                 ),
                 commit_menu_action_row(
                     Some("PT"),
-                    "导出 Patch",
-                    Some("用 git format-patch 导出这条提交的补丁文件".to_string()),
+                    i18n.export_patch_label,
+                    Some(i18n.bp_export_patch_hint.to_string()),
                     (!state.is_loading)
                         .then_some(BranchPopupMessage::ExportCommitPatch(info.id.clone())),
                     CommitMenuTone::Neutral,
@@ -2907,14 +2917,14 @@ fn build_commit_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "比较与定位".to_uppercase(),
+            i18n.compare_and_navigate.to_uppercase(),
             "",
             CommitMenuTone::Accent,
             vec![
                 commit_menu_action_row(
                     None,
-                    "查看与工作树差异",
-                    Some("把这条提交和当前工作区直接做比较".to_string()),
+                    i18n.view_worktree_diff,
+                    Some(i18n.bp_view_worktree_diff_hint.to_string()),
                     (!state.is_loading)
                         .then_some(BranchPopupMessage::CompareWithWorktree(info.id.clone())),
                     CommitMenuTone::Accent,
@@ -2925,14 +2935,14 @@ fn build_commit_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "派生".to_uppercase(),
+            i18n.derive_group.to_uppercase(),
             "",
             CommitMenuTone::Neutral,
             vec![
                 commit_menu_action_row(
                     None,
-                    "从该提交建分支",
-                    Some("保留当前分支不动，基于这条提交创建新分支".to_string()),
+                    i18n.create_branch_from_commit,
+                    Some(i18n.bp_create_branch_from_commit_hint.to_string()),
                     (!state.is_loading).then_some(BranchPopupMessage::PrepareCreateFromSelected(
                         info.id.clone(),
                     )),
@@ -2940,8 +2950,8 @@ fn build_commit_action_groups<'a>(
                 ),
                 commit_menu_action_row(
                     Some("TG"),
-                    "给该提交打标签",
-                    Some("在这条提交上创建一个新的标签".to_string()),
+                    i18n.tag_commit,
+                    Some(i18n.bp_tag_commit_hint.to_string()),
                     (!state.is_loading)
                         .then_some(BranchPopupMessage::PrepareTagFromCommit(info.id.clone())),
                     CommitMenuTone::Neutral,
@@ -2949,7 +2959,7 @@ fn build_commit_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "应用到当前分支".to_uppercase(),
+            i18n.apply_to_current_branch.to_uppercase(),
             "",
             CommitMenuTone::Accent,
             vec![
@@ -2957,9 +2967,9 @@ fn build_commit_action_groups<'a>(
                     Some("CP"),
                     "Cherry-pick",
                     Some(if info.parent_ids.len() > 1 {
-                        "merge 提交暂不支持直接 Cherry-pick".to_string()
+                        i18n.ctx_merge_no_cherry_pick.to_string()
                     } else {
-                        "把这条提交复制应用到当前分支".to_string()
+                        i18n.bp_cherry_pick_to_current_hint.to_string()
                     }),
                     can_prepare_cherry_pick
                         .then_some(BranchPopupMessage::PrepareCherryPickCommit(info.id.clone())),
@@ -2969,9 +2979,9 @@ fn build_commit_action_groups<'a>(
                     Some("RV"),
                     "Revert",
                     Some(if info.parent_ids.len() > 1 {
-                        "merge 提交暂不支持直接回退".to_string()
+                        i18n.ctx_merge_no_revert.to_string()
                     } else {
-                        "生成一条新的反向提交来撤销它".to_string()
+                        i18n.bp_revert_generate_hint.to_string()
                     }),
                     can_prepare_revert
                         .then_some(BranchPopupMessage::PrepareRevertCommit(info.id.clone())),
@@ -2980,17 +2990,17 @@ fn build_commit_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "危险动作".to_uppercase(),
+            i18n.dangerous_actions.to_uppercase(),
             "",
             CommitMenuTone::Danger,
             vec![
                 commit_menu_action_row(
                     None,
-                    "重置当前分支到这里",
+                    i18n.reset_current_branch_to_here,
                     Some(if selected_branch.is_head {
-                        "把当前分支硬重置到这个祖先提交".to_string()
+                        i18n.bp_reset_ancestor_hint.to_string()
                     } else {
-                        "只对当前分支启用，选中当前分支后再操作".to_string()
+                        i18n.bp_reset_select_current_first.to_string()
                     }),
                     can_reset_current_branch.then_some(
                         BranchPopupMessage::PrepareResetCurrentBranchToCommit(info.id.clone()),
@@ -2999,13 +3009,13 @@ fn build_commit_action_groups<'a>(
                 ),
                 commit_menu_action_row(
                     None,
-                    "推送当前分支到这里",
+                    i18n.push_current_branch_to_here,
                     Some(if !selected_branch.is_head {
-                        "只对当前分支启用".to_string()
+                        i18n.bp_push_only_current.to_string()
                     } else if current_branch.is_some_and(|branch| branch.upstream.is_none()) {
-                        "当前分支还没有上游，暂时不能推送到这里".to_string()
+                        i18n.bp_push_no_upstream.to_string()
                     } else {
-                        "仅访问当前分支的上游，把远端分支发布到这里".to_string()
+                        i18n.bp_push_upstream_hint.to_string()
                     }),
                     can_push_current_branch_to_here.then_some(
                         BranchPopupMessage::PreparePushCurrentBranchToCommit(info.id.clone()),
@@ -3094,6 +3104,7 @@ fn build_branch_action_groups<'a>(
     state: &'a BranchPopupState,
     selected_branch: &'a Branch,
     current_branch: Option<&'a Branch>,
+    i18n: &'a I18n,
 ) -> Vec<Element<'a, BranchPopupMessage>> {
     let selected_remote_name = inferred_remote_name(state, selected_branch);
     let upstream_ref = inferred_upstream_ref(state, selected_branch);
@@ -3120,27 +3131,27 @@ fn build_branch_action_groups<'a>(
 
     vec![
         build_commit_action_group(
-            "常用".to_uppercase(),
+            i18n.common_actions.to_uppercase(),
             "",
             CommitMenuTone::Neutral,
             vec![
                 commit_menu_action_row(
                     None,
                     if selected_branch.is_remote {
-                        "签出为本地分支"
+                        i18n.checkout_as_local
                     } else {
-                        "签出"
+                        i18n.checkout_label
                     },
                     Some(if selected_branch.is_remote {
                         if can_checkout_remote {
-                            "创建同名本地跟踪分支并立即切换过去".to_string()
+                            i18n.bp_checkout_create_tracking.to_string()
                         } else {
-                            "远程分支当前不可直接签出".to_string()
+                            i18n.bp_remote_cannot_checkout.to_string()
                         }
                     } else if can_checkout {
-                        "切换到这个本地分支".to_string()
+                        i18n.bp_checkout_switch_hint.to_string()
                     } else {
-                        "当前已经在这个分支上".to_string()
+                        i18n.bp_already_on_branch.to_string()
                     }),
                     if selected_branch.is_remote {
                         can_checkout_remote.then(|| {
@@ -3155,8 +3166,8 @@ fn build_branch_action_groups<'a>(
                 ),
                 commit_menu_action_row(
                     None,
-                    format!("从 '{}' 新建分支...", selected_branch.name),
-                    Some("保留当前分支不动，基于所选分支创建一个新分支".to_string()),
+                    i18n.bp_new_branch_from_fmt.replace("{}", &selected_branch.name),
+                    Some(i18n.bp_new_branch_from_selected_hint.to_string()),
                     (!state.is_loading).then(|| {
                         BranchPopupMessage::PrepareCreateFromSelected(selected_branch.name.clone())
                     }),
@@ -3166,16 +3177,16 @@ fn build_branch_action_groups<'a>(
                     None,
                     checkout_and_rebase_target
                         .as_ref()
-                        .map(|target| format!("签出并变基到 '{target}'"))
-                        .unwrap_or_else(|| "签出并变基".to_string()),
+                        .map(|target| i18n.bp_checkout_rebase_fmt.replace("{}", target))
+                        .unwrap_or_else(|| i18n.checkout_and_rebase.to_string()),
                     Some(if let Some(target) = checkout_and_rebase_target.as_ref() {
-                        format!("先切到 {}，再把它变基到 {target}", selected_branch.name)
+                        i18n.bp_checkout_rebase_hint_fmt.replacen("{}", &selected_branch.name, 1).replacen("{}", target, 1)
                     } else if selected_branch.is_head {
-                        "当前分支不能对自己执行「签出并变基」".to_string()
+                        i18n.bp_cannot_checkout_rebase_self.to_string()
                     } else if selected_branch.is_remote {
-                        "远程分支请先签出为本地分支，再执行这类操作".to_string()
+                        i18n.bp_remote_checkout_first.to_string()
                     } else {
-                        "当前没有可作为目标的本地分支".to_string()
+                        i18n.bp_no_target_branch.to_string()
                     }),
                     checkout_and_rebase_target.map(|onto| BranchPopupMessage::CheckoutAndRebase {
                         branch: selected_branch.name.clone(),
@@ -3186,7 +3197,7 @@ fn build_branch_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "比较".to_uppercase(),
+            i18n.compare_group.to_uppercase(),
             "",
             CommitMenuTone::Accent,
             vec![
@@ -3194,12 +3205,12 @@ fn build_branch_action_groups<'a>(
                     None,
                     compare_target
                         .as_ref()
-                        .map(|target| format!("与 '{target}' 比较"))
-                        .unwrap_or_else(|| "与当前分支比较".to_string()),
+                        .map(|target| i18n.bp_compare_with_fmt.replace("{}", target))
+                        .unwrap_or_else(|| i18n.bp_compare_with_current_label.to_string()),
                     Some(if let Some(target) = compare_target.as_ref() {
-                        format!("在右侧直接预览 {} 和 {target} 的差异", selected_branch.name)
+                        i18n.bp_compare_preview_fmt.replacen("{}", &selected_branch.name, 1).replacen("{}", target, 1)
                     } else {
-                        "当前已经在这条分支上下文里，无法再和自身比较".to_string()
+                        i18n.bp_cannot_compare_self.to_string()
                     }),
                     compare_target.map(|current| BranchPopupMessage::CompareWithCurrent {
                         selected: selected_branch.name.clone(),
@@ -3209,8 +3220,8 @@ fn build_branch_action_groups<'a>(
                 ),
                 commit_menu_action_row(
                     None,
-                    "显示与工作树的差异",
-                    Some("预览所选分支与当前工作区（含已暂存改动）的差别".to_string()),
+                    i18n.show_worktree_diff,
+                    Some(i18n.bp_worktree_diff_hint.to_string()),
                     (!state.is_loading).then(|| {
                         BranchPopupMessage::CompareWithWorktree(selected_branch.name.clone())
                     }),
@@ -3219,17 +3230,17 @@ fn build_branch_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "集成".to_uppercase(),
+            i18n.integration_group.to_uppercase(),
             "",
             CommitMenuTone::Accent,
             vec![
                 commit_menu_action_row(
                     None,
-                    format!("将当前分支变基到 '{}'", selected_branch.name),
+                    i18n.bp_rebase_onto_fmt.replace("{}", &selected_branch.name),
                     Some(if !selected_branch.is_head {
-                        "把当前分支移动到所选分支之后，适合保持提交线性".to_string()
+                        i18n.bp_rebase_onto_hint.to_string()
                     } else {
-                        "当前分支不需要再变基到自己".to_string()
+                        i18n.bp_rebase_self_hint.to_string()
                     }),
                     (!state.is_loading && !selected_branch.is_head).then(|| {
                         BranchPopupMessage::RebaseCurrentOnto(selected_branch.name.clone())
@@ -3241,15 +3252,15 @@ fn build_branch_action_groups<'a>(
                     current_branch_name
                         .as_ref()
                         .map(|current| {
-                            format!("将 '{}' 合并到 '{}' 中", selected_branch.name, current)
+                            i18n.bp_merge_into_fmt.replacen("{}", &selected_branch.name, 1).replacen("{}", current, 1)
                         })
-                        .unwrap_or_else(|| "合并所选分支".to_string()),
+                        .unwrap_or_else(|| i18n.bp_merge_selected.to_string()),
                     Some(if selected_branch.is_remote {
-                        "远程分支请先签出或更新到本地后再合并".to_string()
+                        i18n.bp_merge_remote_hint.to_string()
                     } else if !selected_branch.is_head {
-                        "把所选分支的提交合并到当前分支".to_string()
+                        i18n.bp_merge_selected_hint.to_string()
                     } else {
-                        "当前分支不能合并自己".to_string()
+                        i18n.bp_cannot_merge_self.to_string()
                     }),
                     (!state.is_loading && !selected_branch.is_head && !selected_branch.is_remote)
                         .then(|| BranchPopupMessage::MergeBranch(selected_branch.name.clone())),
@@ -3258,18 +3269,18 @@ fn build_branch_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "远程".to_uppercase(),
+            i18n.remote_group.to_uppercase(),
             "",
             CommitMenuTone::Accent,
             vec![
                 commit_menu_action_row(
                     None,
-                    "更新",
+                    i18n.update_remote,
                     Some(
                         selected_remote_name
                             .as_ref()
-                            .map(|remote| format!("从 {remote} 获取最新远程状态"))
-                            .unwrap_or_else(|| "当前分支没有可推断的远程".to_string()),
+                            .map(|remote| i18n.bp_fetch_from_fmt.replace("{}", remote))
+                            .unwrap_or_else(|| i18n.bp_no_inferred_remote.to_string()),
                     ),
                     if can_fetch {
                         selected_remote_name
@@ -3282,14 +3293,14 @@ fn build_branch_action_groups<'a>(
                 ),
                 commit_menu_action_row(
                     None,
-                    "推送...",
+                    i18n.push_ellipsis,
                     Some(if selected_branch.is_remote {
-                        "远程分支不能直接作为推送源".to_string()
+                        i18n.bp_remote_not_push_source.to_string()
                     } else {
                         selected_remote_name
                             .as_ref()
-                            .map(|remote| format!("直接把所选本地分支推送到 {remote}"))
-                            .unwrap_or_else(|| "当前分支没有可推断的远程".to_string())
+                            .map(|remote| i18n.bp_push_to_remote_fmt.replace("{}", remote))
+                            .unwrap_or_else(|| i18n.bp_no_inferred_remote.to_string())
                     }),
                     if can_push {
                         selected_remote_name
@@ -3307,16 +3318,16 @@ fn build_branch_action_groups<'a>(
                     None,
                     upstream_ref
                         .as_ref()
-                        .map(|upstream| format!("跟踪分支 '{upstream}'"))
-                        .unwrap_or_else(|| "设置跟踪分支".to_string()),
+                        .map(|upstream| i18n.bp_track_branch_fmt.replace("{}", upstream))
+                        .unwrap_or_else(|| i18n.set_tracking_branch.to_string()),
                     Some(if selected_branch.is_remote {
-                        "远程分支本身不需要设置跟踪关系".to_string()
+                        i18n.bp_remote_no_tracking.to_string()
                     } else if selected_branch.upstream.is_some() {
-                        "这个分支已经有跟踪关系".to_string()
+                        i18n.bp_already_tracking.to_string()
                     } else if upstream_ref.is_some() {
-                        "让这个本地分支与同名远程分支建立跟踪关系".to_string()
+                        i18n.bp_set_tracking_hint.to_string()
                     } else {
-                        "没有匹配到可跟踪的远程分支".to_string()
+                        i18n.bp_no_matching_remote.to_string()
                     }),
                     if can_track {
                         upstream_ref
@@ -3333,16 +3344,16 @@ fn build_branch_action_groups<'a>(
             ],
         ),
         build_commit_action_group(
-            "维护",
+            i18n.maintenance_group,
             "",
             CommitMenuTone::Neutral,
             vec![commit_menu_action_row(
                 None,
-                "重命名...",
+                i18n.rename_ellipsis,
                 Some(if can_rename {
-                    "修改本地分支名称，支持直接编辑完整路径".to_string()
+                    i18n.bp_rename_local_hint.to_string()
                 } else {
-                    "远程分支暂不支持直接重命名".to_string()
+                    i18n.bp_remote_no_rename.to_string()
                 }),
                 can_rename
                     .then(|| BranchPopupMessage::PrepareRenameBranch(selected_branch.name.clone())),
@@ -3350,18 +3361,18 @@ fn build_branch_action_groups<'a>(
             )],
         ),
         build_commit_action_group(
-            "危险动作",
+            i18n.dangerous_actions,
             "",
             CommitMenuTone::Danger,
             vec![commit_menu_action_row(
                 None,
-                "删除",
+                i18n.delete,
                 Some(if can_delete {
-                    "删除这个本地分支；当前分支不可删除".to_string()
+                    i18n.bp_delete_local_hint.to_string()
                 } else if selected_branch.is_remote {
-                    "远程分支请通过远程操作删除".to_string()
+                    i18n.bp_delete_remote_hint.to_string()
                 } else {
-                    "当前分支不可删除".to_string()
+                    i18n.bp_cannot_delete_current.to_string()
                 }),
                 can_delete.then(|| BranchPopupMessage::DeleteBranch(selected_branch.name.clone())),
                 CommitMenuTone::Danger,
@@ -3608,11 +3619,12 @@ fn commit_menu_action_row<'a>(
 
 fn build_inline_action_panel<'a>(
     state: &'a BranchPopupState,
+    i18n: &'a I18n,
 ) -> Option<Element<'a, BranchPopupMessage>> {
     let action = state.inline_action.as_ref()?;
     let title = match action {
-        InlineBranchAction::CreateFromSelected { base } => format!("从 '{base}' 新建分支"),
-        InlineBranchAction::RenameBranch { branch } => format!("重命名 '{branch}'"),
+        InlineBranchAction::CreateFromSelected { base } => i18n.new_branch_from_fmt.replace("{}", base),
+        InlineBranchAction::RenameBranch { branch } => i18n.bp_rename_inline_fmt.replace("{}", branch),
     };
 
     Some(
@@ -3621,12 +3633,12 @@ fn build_inline_action_panel<'a>(
                 .spacing(theme::spacing::SM)
                 .push(Text::new(title).size(theme::typography::BODY_SIZE))
                 .push(
-                    Text::new("输入名称后回车执行")
+                    Text::new(i18n.enter_name_then_enter)
                         .size(theme::typography::CAPTION_SIZE)
                         .color(theme::darcula::TEXT_SECONDARY),
                 )
                 .push(text_input::styled(
-                    "输入分支名称",
+                    i18n.enter_branch_name,
                     &state.inline_branch_name,
                     BranchPopupMessage::SetInlineBranchName,
                 ))
@@ -3634,12 +3646,12 @@ fn build_inline_action_panel<'a>(
                     Row::new()
                         .spacing(theme::spacing::XS)
                         .push(button::secondary(
-                            "确定",
+                            i18n.confirm_label,
                             (!state.is_loading && !state.inline_branch_name.trim().is_empty())
                                 .then_some(BranchPopupMessage::ConfirmInlineAction),
                         ))
                         .push(button::ghost(
-                            "取消",
+                            i18n.cancel,
                             (!state.is_loading).then_some(BranchPopupMessage::CancelInlineAction),
                         )),
                 ),
@@ -3652,9 +3664,10 @@ fn build_inline_action_panel<'a>(
 
 fn build_comparison_panel<'a>(
     state: &'a BranchPopupState,
+    i18n: &'a I18n,
 ) -> Option<Element<'a, BranchPopupMessage>> {
     let diff = state.comparison_diff.as_ref()?;
-    let title = state.comparison_title.as_deref().unwrap_or("比较结果");
+    let title = state.comparison_title.as_deref().unwrap_or(i18n.comparison_result);
 
     Some(
         Container::new(
@@ -3667,7 +3680,7 @@ fn build_comparison_panel<'a>(
                         .push(Text::new(title).size(theme::typography::BODY_SIZE))
                         .push(Space::new().width(Length::Fill))
                         .push(button::compact_ghost(
-                            "清空",
+                            i18n.clear_comparison,
                             Some(BranchPopupMessage::ClearPreview),
                         )),
                 )
@@ -3787,13 +3800,13 @@ fn build_sync_indicators<'a>(branch: &Branch) -> Option<Element<'a, BranchPopupM
     Some(row.into())
 }
 
-fn branch_meta_summary(branch: &Branch) -> Option<String> {
+fn branch_meta_summary(branch: &Branch, i18n: &I18n) -> Option<String> {
     let mut parts = Vec::new();
 
     if let Some(sync_hint) = branch.sync_hint.as_ref() {
         parts.push(sync_hint.clone());
     } else if let Some(upstream) = branch.upstream.as_ref() {
-        parts.push(format!("跟踪 {upstream}"));
+        parts.push(i18n.tracking_fmt.replace("{}", upstream).replace("：", " "));
     }
 
     if let Some(recency_hint) = branch.recency_hint.as_ref() {
@@ -3941,13 +3954,11 @@ fn blend_color(base: Color, overlay: Color, amount: f32) -> Color {
     }
 }
 
-fn format_diff_summary(diff: &Diff) -> String {
-    format!(
-        "共影响 {} 个文件，+{} / -{} 行。",
-        diff.files.len(),
-        diff.total_additions,
-        diff.total_deletions
-    )
+fn format_diff_summary(diff: &Diff, i18n: &I18n) -> String {
+    i18n.diff_summary_fmt
+        .replacen("{}", &diff.files.len().to_string(), 1)
+        .replacen("{}", &diff.total_additions.to_string(), 1)
+        .replacen("{}", &diff.total_deletions.to_string(), 1)
 }
 
 #[cfg(test)]
@@ -4049,6 +4060,6 @@ mod tests {
         state.recent_branches = vec![branch("main")];
         state.selected_branch = Some(current.name.clone());
 
-        let _ = view(&state);
+        let _ = view(&state, &crate::i18n::ZH_CN);
     }
 }
