@@ -16,7 +16,7 @@ import driver
 
 # 分支按钮在顶部栏的位置 (紧跟在 repo 名后面)
 # 对于临时 repo "slio_e2e_xxx", branch 按钮在 x ≈ 0.09
-BRANCH_BTN = (0.09, 0.04)
+BRANCH_BTN = (0.11, 0.04)
 
 
 class Test分支切换:

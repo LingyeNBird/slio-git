@@ -27,7 +27,7 @@ from scenarios.conftest import add_unstaged_change
 # ═══════════════════════════════════════════════════════════════════════
 
 # 顶部工具栏
-BRANCH_BTN = (0.09, 0.04)
+BRANCH_BTN = (0.11, 0.04)
 PULL_BTN = (0.835, 0.03)
 PUSH_BTN = (0.88, 0.03)
 COMMIT_BTN = (0.925, 0.03)
@@ -35,7 +35,7 @@ SETTINGS_BTN = (0.975, 0.03)
 
 # Tab 栏
 CHANGES_TAB = (0.045, 0.07)
-LOG_TAB = (0.085, 0.07)
+LOG_TAB = (0.06, 0.07)
 
 # 变更列表
 STAGE_ALL_BTN = (0.31, 0.105)

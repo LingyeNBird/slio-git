@@ -19,7 +19,7 @@ import subprocess
 
 import driver
 
-LOG_TAB = (0.085, 0.07)
+LOG_TAB = (0.06, 0.07)
 CHANGES_TAB = (0.045, 0.07)
 
 # 历史视图坐标

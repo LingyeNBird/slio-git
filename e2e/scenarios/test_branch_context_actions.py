@@ -38,7 +38,7 @@ from scenarios.conftest import add_unstaged_change
 # 坐标常量
 # ═══════════════════════════════════════════════════════════════════════
 
-BRANCH_BTN = (0.09, 0.04)
+BRANCH_BTN = (0.11, 0.04)
 CHANGES_TAB = (0.045, 0.07)
 
 # 分支弹窗内部坐标

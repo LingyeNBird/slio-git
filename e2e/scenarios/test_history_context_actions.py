@@ -40,7 +40,7 @@ from scenarios.conftest import add_unstaged_change
 # ═══════════════════════════════════════════════════════════════════════
 
 CHANGES_TAB = (0.045, 0.07)
-LOG_TAB = (0.085, 0.07)
+LOG_TAB = (0.06, 0.07)
 
 # 历史列表中的提交行
 HISTORY_ROW_1 = (0.30, 0.18)

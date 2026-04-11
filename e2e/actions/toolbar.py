@@ -9,7 +9,7 @@ REFRESH_BTN = (0.77, 0.03)
 COMMIT_BTN = (0.925, 0.03)
 SETTINGS_BTN = (0.975, 0.03)
 CHANGES_TAB = (0.045, 0.07)
-LOG_TAB = (0.085, 0.07)
+LOG_TAB = (0.06, 0.07)
 
 
 @auto_screenshot_on_failure

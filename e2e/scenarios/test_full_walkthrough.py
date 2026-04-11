@@ -34,7 +34,7 @@ from scenarios.conftest import add_unstaged_change
 # ═══════════════════════════════════════
 
 # 顶部工具栏
-BRANCH_BTN = (0.09, 0.04)           # 分支名按钮
+BRANCH_BTN = (0.11, 0.04)           # 分支名按钮
 PULL_BTN = (0.835, 0.03)            # Pull 按钮
 PUSH_BTN = (0.88, 0.03)             # Push 按钮
 COMMIT_BTN = (0.925, 0.03)          # Commit 按钮
@@ -42,7 +42,7 @@ SETTINGS_BTN = (0.975, 0.03)        # Settings 按钮
 
 # Tab 栏
 CHANGES_TAB = (0.045, 0.07)         # Changes tab
-LOG_TAB = (0.085, 0.07)             # Log tab
+LOG_TAB = (0.06, 0.07)              # Log tab
 
 # 变更列表工具栏
 STAGE_ALL_BTN = (0.31, 0.105)       # 全部暂存
