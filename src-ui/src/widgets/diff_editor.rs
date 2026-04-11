@@ -546,7 +546,7 @@ struct DecorationCacheState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DecorationCacheKey {
-    scroll_q: i32,       // scroll quantized to 2px
+    scroll_q: i32, // scroll quantized to 2px
     h_scroll_q: i32,
     active_start: i32,
     active_end: i32,
@@ -789,8 +789,7 @@ impl<Message> canvas::Program<Message> for LinkMapCanvas {
                     builder.close();
                 });
 
-                let fill =
-                    link_map_fill(block.kind, self.current_hunk == Some(block.hunk_id));
+                let fill = link_map_fill(block.kind, self.current_hunk == Some(block.hunk_id));
                 frame.fill(&path, fill);
                 frame.stroke(
                     &path,
@@ -1558,6 +1557,7 @@ pub struct UnifiedDiffEditorState {
     editor: CodeEditor,
     decorations: Arc<PaneDecorations>,
     line_count: usize,
+    hunk_start_lines: Arc<[usize]>,
     /// Stored for clone/rebuild
     source_diff: git_core::diff::Diff,
     font_size: f32,
@@ -1582,6 +1582,7 @@ impl UnifiedDiffEditorState {
     pub fn from_diff(diff: &git_core::diff::Diff, font_size: f32) -> Self {
         let mut text = String::new();
         let mut line_kinds: Vec<UnifiedLineKind> = Vec::new();
+        let mut hunk_start_lines = Vec::new();
 
         let path_hint = diff
             .files
@@ -1590,6 +1591,7 @@ impl UnifiedDiffEditorState {
 
         for file in &diff.files {
             for hunk in &file.hunks {
+                hunk_start_lines.push(line_kinds.len());
                 // Hunk header line — only show the @@ range part, not the trailing context
                 let header_display = hunk
                     .header
@@ -1633,6 +1635,7 @@ impl UnifiedDiffEditorState {
             editor,
             decorations: Arc::new(decorations),
             line_count,
+            hunk_start_lines: Arc::from(hunk_start_lines),
             source_diff: diff.clone(),
             font_size,
         }
@@ -1645,6 +1648,15 @@ impl UnifiedDiffEditorState {
         self.editor
             .update(&message)
             .map(|m| UnifiedDiffEditorEvent::Editor(m))
+    }
+
+    pub fn scroll_to_hunk(&mut self, hunk_index: usize) -> iced::Task<UnifiedDiffEditorEvent> {
+        let Some(line_index) = self.hunk_start_lines.get(hunk_index).copied() else {
+            return iced::Task::none();
+        };
+        self.editor
+            .scroll_to_offset(None, Some(line_index as f32 * self.editor.line_height()))
+            .map(UnifiedDiffEditorEvent::Editor)
     }
 
     pub fn view(&self) -> Element<'_, UnifiedDiffEditorEvent> {
@@ -1663,10 +1675,7 @@ impl UnifiedDiffEditorState {
         .width(Length::Fill)
         .height(Length::Fill);
 
-        let editor_view = self
-            .editor
-            .view()
-            .map(UnifiedDiffEditorEvent::Editor);
+        let editor_view = self.editor.view().map(UnifiedDiffEditorEvent::Editor);
 
         Container::new(Stack::new().push(background).push(editor_view))
             .width(Length::Fill)
@@ -1680,7 +1689,10 @@ pub enum UnifiedDiffEditorEvent {
     Editor(EditorMessage),
 }
 
-fn build_unified_decorations(line_kinds: &[UnifiedLineKind], total_lines: usize) -> PaneDecorations {
+fn build_unified_decorations(
+    line_kinds: &[UnifiedLineKind],
+    total_lines: usize,
+) -> PaneDecorations {
     let mut lines: Vec<Option<DecoratedLine>> = vec![None; total_lines];
 
     for (i, kind) in line_kinds.iter().enumerate() {

@@ -3,10 +3,11 @@
 //! Provides a view for browsing commit history.
 
 use crate::theme::{self, BadgeTone, Surface};
+use crate::state::FileDisplayMode;
 use crate::widgets::{self, button, scrollable, text_input, OptionalPush};
 use chrono::DateTime;
 use git_core::{
-    commit::get_commit,
+    commit::{get_commit, get_commit_changed_files, CommitChangeStatus, CommitChangedFile},
     history::{get_history, search_history, HistoryEntry},
     Repository,
 };
@@ -14,7 +15,7 @@ use iced::mouse;
 use iced::widget::canvas::{self, Canvas};
 use iced::widget::{mouse_area, opaque, stack, text, Button, Column, Container, Row, Space, Text};
 use iced::{Alignment, Color, Element, Font, Length, Point, Rectangle, Renderer, Theme};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 /// Message types for history view.
 #[derive(Debug, Clone)]
@@ -22,6 +23,9 @@ pub enum HistoryMessage {
     Refresh,
     SelectCommit(String),
     ViewDiff(String),
+    ViewCommitFileDiff(String, String),
+    ToggleCommitFileDisplayMode,
+    CommitFileTreeEvent(crate::widgets::tree_widget::TreeMessage),
     SetSearchQuery(String),
     Search,
     ClearSearch,
@@ -74,6 +78,10 @@ pub struct HistoryState {
     pub filtered_entries: Vec<HistoryEntry>,
     pub selected_commit: Option<String>,
     pub selected_commit_info: Option<git_core::commit::CommitInfo>,
+    pub selected_commit_files: Vec<CommitChangedFile>,
+    pub selected_commit_file_display: FileDisplayMode,
+    pub selected_commit_file_path: Option<String>,
+    pub expanded_commit_file_directories: HashSet<String>,
     pub is_loading: bool,
     pub error: Option<String>,
     pub search_query: String,
@@ -94,6 +102,10 @@ impl HistoryState {
             filtered_entries: Vec::new(),
             selected_commit: None,
             selected_commit_info: None,
+            selected_commit_files: Vec::new(),
+            selected_commit_file_display: FileDisplayMode::default(),
+            selected_commit_file_path: None,
+            expanded_commit_file_directories: HashSet::new(),
             is_loading: false,
             error: None,
             search_query: String::new(),
@@ -136,12 +148,26 @@ impl HistoryState {
 
     pub fn select_commit(&mut self, repo: &Repository, commit_id: String) {
         self.selected_commit = Some(commit_id.clone());
+        self.selected_commit_info = None;
+        self.selected_commit_files.clear();
+        self.selected_commit_file_path = None;
+        self.expanded_commit_file_directories.clear();
         self.error = None;
         self.refresh_repo_context(repo);
 
         match get_commit(repo, &commit_id) {
             Ok(info) => {
                 self.selected_commit_info = Some(info);
+                match get_commit_changed_files(repo, &commit_id) {
+                    Ok(files) => {
+                        self.expanded_commit_file_directories =
+                            default_expanded_commit_file_directories(&files);
+                        self.selected_commit_files = files;
+                    }
+                    Err(error) => {
+                        self.error = Some(format!("加载提交文件失败: {error}"));
+                    }
+                }
             }
             Err(error) => {
                 self.error = Some(format!("加载提交详情失败: {error}"));
@@ -188,6 +214,19 @@ impl HistoryState {
         self.is_searching = false;
         self.context_menu_commit = None;
         self.context_menu_anchor = None;
+    }
+
+    pub fn toggle_commit_file_display_mode(&mut self) {
+        self.selected_commit_file_display = match self.selected_commit_file_display {
+            FileDisplayMode::Flat => FileDisplayMode::Tree,
+            FileDisplayMode::Tree => FileDisplayMode::Flat,
+        };
+    }
+
+    pub fn toggle_commit_file_tree_node(&mut self, node_id: String) {
+        if !self.expanded_commit_file_directories.remove(&node_id) {
+            self.expanded_commit_file_directories.insert(node_id);
+        }
     }
 }
 
@@ -877,8 +916,9 @@ fn build_commit_context_menu_overlay<'a>(state: &'a HistoryState) -> Element<'a,
                 history_context_action_row(
                     "推送到此提交",
                     push_to_here_detail,
-                    (!state.is_loading && has_current_branch && has_upstream)
-                        .then_some(HistoryMessage::PreparePushCurrentBranchToCommit(entry.id.clone())),
+                    (!state.is_loading && has_current_branch && has_upstream).then_some(
+                        HistoryMessage::PreparePushCurrentBranchToCommit(entry.id.clone()),
+                    ),
                     widgets::menu::MenuTone::Neutral,
                 ),
             ],
@@ -1061,7 +1101,22 @@ fn history_graph_color(index: usize) -> Color {
     }
 }
 
-fn build_commit_detail(info: &git_core::commit::CommitInfo) -> Element<'_, HistoryMessage> {
+fn build_commit_detail<'a>(
+    state: &'a HistoryState,
+    info: &'a git_core::commit::CommitInfo,
+) -> Element<'a, HistoryMessage> {
+    Container::new(
+        Column::new()
+            .spacing(theme::spacing::XS)
+            .height(Length::Fill)
+            .push(build_commit_summary_panel(info))
+            .push(build_commit_files_panel(state, info.id.as_str())),
+    )
+    .height(Length::Fill)
+    .into()
+}
+
+fn build_commit_summary_panel(info: &git_core::commit::CommitInfo) -> Element<'_, HistoryMessage> {
     Container::new(
         Column::new()
             .spacing(theme::spacing::SM)
@@ -1081,7 +1136,7 @@ fn build_commit_detail(info: &git_core::commit::CommitInfo) -> Element<'_, Histo
                     .push(Space::new().width(Length::Fill)),
             )
             .push(iced::widget::rule::horizontal(1))
-            .push(scrollable::styled(Text::new(&info.message).size(13)).height(Length::Fill))
+            .push(scrollable::styled(Text::new(&info.message).size(13)).height(Length::Fixed(120.0)))
             .push(iced::widget::rule::horizontal(1))
             .push(
                 Column::new()
@@ -1100,6 +1155,300 @@ fn build_commit_detail(info: &git_core::commit::CommitInfo) -> Element<'_, Histo
     .padding([8, 10])
     .style(theme::panel_style(Surface::Panel))
     .into()
+}
+
+fn build_commit_files_panel<'a>(
+    state: &'a HistoryState,
+    commit_id: &'a str,
+) -> Element<'a, HistoryMessage> {
+    let file_count = state.selected_commit_files.len();
+    let content = if state.selected_commit_files.is_empty() {
+        widgets::panel_empty_state_compact(
+            "这个提交没有文件变化",
+            "如果这是 merge 或空提交，文件列表会保持为空。",
+        )
+    } else {
+        match state.selected_commit_file_display {
+            FileDisplayMode::Flat => build_commit_file_flat_list(state, commit_id),
+            FileDisplayMode::Tree => build_commit_file_tree(state),
+        }
+    };
+
+    Container::new(
+        Column::new()
+            .spacing(theme::spacing::XS)
+            .height(Length::Fill)
+            .push(
+                Row::new()
+                    .spacing(theme::spacing::XS)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Text::new("变动文件")
+                            .size(12)
+                            .color(theme::darcula::TEXT_PRIMARY),
+                    )
+                    .push(widgets::info_chip::<HistoryMessage>(
+                        format!("{file_count} 个文件"),
+                        BadgeTone::Neutral,
+                    ))
+                    .push(Space::new().width(Length::Fill))
+                    .push(button::tab(
+                        "平铺",
+                        state.selected_commit_file_display == FileDisplayMode::Flat,
+                        (state.selected_commit_file_display != FileDisplayMode::Flat)
+                            .then_some(HistoryMessage::ToggleCommitFileDisplayMode),
+                    ))
+                    .push(button::tab(
+                        "树状",
+                        state.selected_commit_file_display == FileDisplayMode::Tree,
+                        (state.selected_commit_file_display != FileDisplayMode::Tree)
+                            .then_some(HistoryMessage::ToggleCommitFileDisplayMode),
+                    )),
+            )
+            .push(iced::widget::rule::horizontal(1))
+            .push(Container::new(scrollable::styled(content).height(Length::Fill)).height(Length::Fill)),
+    )
+    .padding([8, 10])
+    .height(Length::Fill)
+    .style(theme::panel_style(Surface::Panel))
+    .into()
+}
+
+fn build_commit_file_flat_list<'a>(
+    state: &'a HistoryState,
+    commit_id: &'a str,
+) -> Element<'a, HistoryMessage> {
+    state
+        .selected_commit_files
+        .iter()
+        .fold(Column::new().spacing(2), |column, file| {
+            column.push(build_commit_file_row(
+                file,
+                commit_id,
+                state.selected_commit_file_path.as_deref() == Some(file.path.as_str()),
+            ))
+        })
+        .into()
+}
+
+fn build_commit_file_tree<'a>(state: &'a HistoryState) -> Element<'a, HistoryMessage> {
+    let mut groups: BTreeMap<String, Vec<&CommitChangedFile>> = BTreeMap::new();
+    let mut root_files = Vec::new();
+
+    for file in &state.selected_commit_files {
+        let directory = std::path::Path::new(&file.path)
+            .parent()
+            .and_then(|path| path.to_str())
+            .filter(|path| !path.is_empty());
+        if let Some(directory) = directory {
+            groups.entry(directory.to_string()).or_default().push(file);
+        } else {
+            root_files.push(file);
+        }
+    }
+
+    let mut column = Column::new().spacing(2);
+
+    for file in root_files {
+        column = column.push(build_commit_file_tree_leaf_row(
+            file,
+            state.selected_commit_file_path.as_deref() == Some(file.path.as_str()),
+        ));
+    }
+
+    for (directory, group_files) in groups {
+        let node_id = commit_file_directory_node_id(&directory);
+        let expanded = state.expanded_commit_file_directories.contains(&node_id);
+        column = column.push(
+            Button::new(
+                Container::new(
+                    Row::new()
+                        .spacing(4)
+                        .align_y(Alignment::Center)
+                        .push(
+                            Text::new(if expanded { "▼" } else { "▶" })
+                                .size(10)
+                                .color(theme::darcula::TEXT_SECONDARY),
+                        )
+                        .push(
+                            Text::new("📁")
+                                .size(11)
+                                .color(theme::darcula::TEXT_DISABLED),
+                        )
+                        .push(
+                            Text::new(directory.clone())
+                                .size(11)
+                                .color(theme::darcula::TEXT_SECONDARY),
+                        )
+                        .push(
+                            Text::new(format!("({})", group_files.len()))
+                                .size(10)
+                                .color(theme::darcula::TEXT_DISABLED),
+                        ),
+                )
+                .padding([2, 4])
+                .width(Length::Fill),
+            )
+            .width(Length::Fill)
+            .style(theme::button_style(theme::ButtonTone::Ghost))
+            .on_press(HistoryMessage::CommitFileTreeEvent(
+                crate::widgets::tree_widget::TreeMessage::ToggleNode(node_id.clone()),
+            )),
+        );
+
+        if expanded {
+            for file in group_files {
+                column = column.push(build_commit_file_tree_leaf_row(
+                    file,
+                    state.selected_commit_file_path.as_deref() == Some(file.path.as_str()),
+                ));
+            }
+        }
+    }
+
+    column.into()
+}
+
+fn build_commit_file_tree_leaf_row<'a>(
+    file: &'a CommitChangedFile,
+    is_selected: bool,
+) -> Element<'a, HistoryMessage> {
+    let file_name = std::path::Path::new(&file.path)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(&file.path);
+
+    Button::new(
+        Container::new(
+            Row::new()
+                .spacing(theme::spacing::XS)
+                .align_y(Alignment::Center)
+                .push(Space::new().width(Length::Fixed(18.0)))
+                .push(
+                    Text::new(commit_change_status_symbol(file.status))
+                        .size(12)
+                        .color(commit_change_status_color(file.status)),
+                )
+                .push(
+                    Column::new()
+                        .spacing(1)
+                        .width(Length::Fill)
+                        .push(
+                            Text::new(file_name)
+                                .size(12)
+                                .width(Length::Fill)
+                                .wrapping(text::Wrapping::WordOrGlyph),
+                        )
+                        .push_maybe(file.old_path.as_ref().map(|old_path| {
+                            Text::new(old_path.as_str())
+                                .size(10)
+                                .width(Length::Fill)
+                                .wrapping(text::Wrapping::WordOrGlyph)
+                                .color(theme::darcula::TEXT_SECONDARY)
+                        })),
+                ),
+        )
+        .padding([3, 6])
+        .width(Length::Fill)
+        .style(theme::panel_style(if is_selected {
+            Surface::ListSelection
+        } else {
+            Surface::ListRow
+        })),
+    )
+    .width(Length::Fill)
+    .style(theme::button_style(theme::ButtonTone::Ghost))
+    .on_press(HistoryMessage::CommitFileTreeEvent(
+        crate::widgets::tree_widget::TreeMessage::SelectNode(format!("file:{}", file.path)),
+    ))
+    .into()
+}
+
+fn build_commit_file_row<'a>(
+    file: &'a CommitChangedFile,
+    commit_id: &'a str,
+    is_selected: bool,
+) -> Element<'a, HistoryMessage> {
+    let path_row = Column::new()
+        .spacing(1)
+        .width(Length::Fill)
+        .push(
+            Text::new(file.path.as_str())
+                .size(12)
+                .width(Length::Fill)
+                .wrapping(text::Wrapping::WordOrGlyph),
+        )
+        .push_maybe(file.old_path.as_ref().map(|old_path| {
+            Text::new(format!("{old_path} → {}", file.path))
+                .size(10)
+                .width(Length::Fill)
+                .wrapping(text::Wrapping::WordOrGlyph)
+                .color(theme::darcula::TEXT_SECONDARY)
+        }));
+
+    Button::new(
+        Container::new(
+            Row::new()
+                .spacing(theme::spacing::XS)
+                .align_y(Alignment::Center)
+                .push(
+                    Text::new(commit_change_status_symbol(file.status))
+                        .size(12)
+                        .color(commit_change_status_color(file.status)),
+                )
+                .push(path_row),
+        )
+        .padding([4, 6])
+        .width(Length::Fill)
+        .style(theme::panel_style(if is_selected {
+            Surface::ListSelection
+        } else {
+            Surface::ListRow
+        })),
+    )
+    .width(Length::Fill)
+    .style(theme::button_style(theme::ButtonTone::Ghost))
+    .on_press(HistoryMessage::ViewCommitFileDiff(
+        commit_id.to_string(),
+        file.path.clone(),
+    ))
+    .into()
+}
+
+fn commit_change_status_symbol(status: CommitChangeStatus) -> &'static str {
+    match status {
+        CommitChangeStatus::Added => "A",
+        CommitChangeStatus::Modified => "M",
+        CommitChangeStatus::Deleted => "D",
+        CommitChangeStatus::Renamed => "R",
+    }
+}
+
+fn commit_change_status_color(status: CommitChangeStatus) -> Color {
+    match status {
+        CommitChangeStatus::Added => theme::darcula::STATUS_ADDED,
+        CommitChangeStatus::Modified => theme::darcula::STATUS_MODIFIED,
+        CommitChangeStatus::Deleted => theme::darcula::STATUS_DELETED,
+        CommitChangeStatus::Renamed => theme::darcula::STATUS_RENAMED,
+    }
+}
+
+fn commit_file_directory_node_id(directory: &str) -> String {
+    format!("dir:{directory}")
+}
+
+fn default_expanded_commit_file_directories(
+    files: &[CommitChangedFile],
+) -> HashSet<String> {
+    files.iter()
+        .filter_map(|file| {
+            std::path::Path::new(&file.path)
+                .parent()
+                .and_then(|path| path.to_str())
+                .filter(|path| !path.is_empty())
+                .map(commit_file_directory_node_id)
+        })
+        .collect()
 }
 
 fn detail_meta_row<'a>(label: &'a str, value: impl ToString) -> Element<'a, HistoryMessage> {
@@ -1385,7 +1734,7 @@ pub fn view(state: &HistoryState) -> Element<'_, HistoryMessage> {
 
     let detail_panel: Element<'_, HistoryMessage> =
         if let Some(info) = state.selected_commit_info.as_ref() {
-            build_commit_detail(info)
+            build_commit_detail(state, info)
         } else if !state.search_query.trim().is_empty() && state.filtered_entries.is_empty() {
             widgets::panel_empty_state_compact(
                 "没有匹配的提交",

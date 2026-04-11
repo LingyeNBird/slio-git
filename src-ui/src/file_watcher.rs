@@ -1,98 +1,158 @@
-//! File watcher for repository changes
-//!
-//! Uses notify crate to monitor file system changes in git repositories
+//! Repository file watching for event-driven workspace refresh.
 
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use iced::{futures::SinkExt, stream, Subscription};
+use log::{info, warn};
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::thread;
-use log::{info, error};
+use tokio::sync::mpsc;
+use tokio::time::{sleep_until, Duration, Instant as TokioInstant};
 
-/// File change event
-#[derive(Debug, Clone)]
-pub enum FileChange {
-    Created(PathBuf),
-    Modified(PathBuf),
-    Deleted(PathBuf),
-    Unknown(PathBuf),
+const WATCH_DEBOUNCE: Duration = Duration::from_millis(180);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepositoryWatchEvent {
+    pub repo_path: PathBuf,
 }
 
-/// File watcher that monitors a directory for changes
-pub struct FileWatcher {
-    watcher: RecommendedWatcher,
-    receiver: Receiver<Result<Event, notify::Error>>,
+pub fn subscription(repo_path: PathBuf) -> Subscription<RepositoryWatchEvent> {
+    Subscription::run_with(repo_path, watch_repository)
 }
 
-impl FileWatcher {
-    /// Create a new file watcher for the given path
-    pub fn new(path: &Path) -> Result<Self, notify::Error> {
-        let (tx, rx) = channel();
+fn watch_repository(
+    repo_path: &PathBuf,
+) -> impl iced::futures::Stream<Item = RepositoryWatchEvent> {
+    let repo_path = repo_path.clone();
 
-        let mut watcher = RecommendedWatcher::new(
-            move |res| {
-                let _ = tx.send(res);
+    stream::channel(32, async move |mut output| {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut watcher = match RecommendedWatcher::new(
+            move |result| {
+                let _ = tx.send(result);
             },
             Config::default(),
-        )?;
+        ) {
+            Ok(watcher) => watcher,
+            Err(error) => {
+                warn!(
+                    "Failed to create repository watcher for {}: {}",
+                    repo_path.display(),
+                    error
+                );
+                return;
+            }
+        };
 
-        watcher.watch(path, RecursiveMode::Recursive)?;
-
-        info!("File watcher started for: {:?}", path);
-
-        Ok(Self {
-            watcher,
-            receiver: rx,
-        })
-    }
-
-    /// Check for file changes
-    pub fn poll_changes(&self) -> Vec<FileChange> {
-        let mut changes = Vec::new();
-
-        while let Ok(result) = self.receiver.try_recv() {
-            match result {
-                Ok(event) => {
-                    for path in event.paths {
-                        let change = match event.kind {
-                            notify::EventKind::Create(_) => FileChange::Created(path),
-                            notify::EventKind::Modify(_) => FileChange::Modified(path),
-                            notify::EventKind::Remove(_) => FileChange::Deleted(path),
-                            _ => FileChange::Unknown(path),
-                        };
-                        changes.push(change);
-                    }
-                }
-                Err(e) => {
-                    error!("File watcher error: {}", e);
-                }
+        let mut watched_any = false;
+        for path in watch_paths(&repo_path) {
+            match watcher.watch(&path, RecursiveMode::Recursive) {
+                Ok(()) => watched_any = true,
+                Err(error) => warn!(
+                    "Failed to watch {} for repository {}: {}",
+                    path.display(),
+                    repo_path.display(),
+                    error
+                ),
             }
         }
 
-        changes
+        if !watched_any {
+            warn!(
+                "Repository watcher did not attach to any paths for {}",
+                repo_path.display()
+            );
+            return;
+        }
+
+        info!("Watching repository changes for {}", repo_path.display());
+
+        let mut pending_deadline: Option<TokioInstant> = None;
+
+        loop {
+            if let Some(deadline) = pending_deadline {
+                tokio::select! {
+                    maybe_result = rx.recv() => {
+                        let Some(result) = maybe_result else {
+                            break;
+                        };
+
+                        if should_schedule_refresh(&result) {
+                            pending_deadline = Some(TokioInstant::now() + WATCH_DEBOUNCE);
+                        }
+                    }
+                    _ = sleep_until(deadline) => {
+                        pending_deadline = None;
+
+                        if output
+                            .send(RepositoryWatchEvent {
+                                repo_path: repo_path.clone(),
+                            })
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                let Some(result) = rx.recv().await else {
+                    break;
+                };
+
+                if should_schedule_refresh(&result) {
+                    pending_deadline = Some(TokioInstant::now() + WATCH_DEBOUNCE);
+                }
+            }
+        }
+    })
+}
+
+fn should_schedule_refresh(result: &Result<Event, notify::Error>) -> bool {
+    match result {
+        Ok(event) => is_relevant_event(event),
+        Err(error) => {
+            warn!("Repository watcher error: {}", error);
+            false
+        }
     }
 }
 
-/// Start a background file watching task
-pub fn start_watcher(path: PathBuf) -> Sender<FileChange> {
-    let (tx, rx) = channel();
+fn is_relevant_event(event: &Event) -> bool {
+    matches!(
+        event.kind,
+        EventKind::Any | EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+    ) && !event.paths.is_empty()
+}
 
-    thread::spawn(move || {
-        match FileWatcher::new(&path) {
-            Ok(watcher) => {
-                info!("Background file watcher started");
-                loop {
-                    let changes = watcher.poll_changes();
-                    for change in changes {
-                        let _ = tx.send(change);
-                    }
-                    thread::sleep(std::time::Duration::from_millis(100));
-                }
-            }
-            Err(e) => {
-                error!("Failed to start file watcher: {}", e);
-            }
+fn watch_paths(repo_path: &Path) -> Vec<PathBuf> {
+    let mut paths = vec![repo_path.to_path_buf()];
+
+    if let Some(git_dir) = resolve_git_dir(repo_path) {
+        if !git_dir.starts_with(repo_path) && !paths.iter().any(|candidate| candidate == &git_dir) {
+            paths.push(git_dir);
         }
-    });
+    }
 
-    tx
+    paths
+}
+
+fn resolve_git_dir(repo_path: &Path) -> Option<PathBuf> {
+    let dot_git = repo_path.join(".git");
+
+    if dot_git.is_dir() {
+        return Some(dot_git);
+    }
+
+    if !dot_git.is_file() {
+        return None;
+    }
+
+    let contents = std::fs::read_to_string(&dot_git).ok()?;
+    let gitdir = contents.strip_prefix("gitdir:")?.trim();
+    let path = PathBuf::from(gitdir);
+
+    Some(if path.is_absolute() {
+        path
+    } else {
+        repo_path.join(path)
+    })
 }

@@ -14,6 +14,7 @@ env_logger = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt", "rt-multi-thread"] }
 rfd = { workspace = true }
 anyhow = { workspace = true }
+notify = { workspace = true }
 dirs = "6"
 num_cpus = "1"
 chrono = { workspace = true }

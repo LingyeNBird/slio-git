@@ -18,6 +18,23 @@ pub struct CommitInfo {
     pub parent_ids: Vec<String>,
 }
 
+/// File-level change status for a commit diff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CommitChangeStatus {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+}
+
+/// A file changed by a specific commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitChangedFile {
+    pub path: String,
+    pub old_path: Option<String>,
+    pub status: CommitChangeStatus,
+}
+
 /// Create a new commit
 pub fn create_commit(
     repo: &Repository,
@@ -210,6 +227,97 @@ pub fn get_commit(repo: &Repository, commit_id: &str) -> Result<CommitInfo, GitE
     })
 }
 
+/// Get the list of files changed by a commit compared with its first parent.
+pub fn get_commit_changed_files(
+    repo: &Repository,
+    commit_id: &str,
+) -> Result<Vec<CommitChangedFile>, GitError> {
+    let repo_lock = repo.inner.read().unwrap();
+
+    let oid = git2::Oid::from_str(commit_id).map_err(|_| GitError::CommitNotFound {
+        id: commit_id.to_string(),
+    })?;
+
+    let commit = repo_lock
+        .find_commit(oid)
+        .map_err(|_| GitError::CommitNotFound {
+            id: commit_id.to_string(),
+        })?;
+
+    let commit_tree = commit.tree().map_err(|e| GitError::OperationFailed {
+        operation: "get_commit_changed_files".to_string(),
+        details: e.to_string(),
+    })?;
+
+    let parent_tree = if commit.parent_count() == 0 {
+        None
+    } else {
+        Some(
+            commit
+                .parent(0)
+                .and_then(|parent| parent.tree())
+                .map_err(|e| GitError::OperationFailed {
+                    operation: "get_commit_changed_files".to_string(),
+                    details: e.to_string(),
+                })?,
+        )
+    };
+
+    let mut diff = repo_lock
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)
+        .map_err(|e| GitError::OperationFailed {
+            operation: "get_commit_changed_files".to_string(),
+            details: e.to_string(),
+        })?;
+
+    let mut find_options = git2::DiffFindOptions::new();
+    find_options.renames(true);
+    diff.find_similar(Some(&mut find_options))
+        .map_err(|e| GitError::OperationFailed {
+            operation: "get_commit_changed_files".to_string(),
+            details: e.to_string(),
+        })?;
+
+    let mut changed_files = diff
+        .deltas()
+        .map(|delta| {
+            let status = match delta.status() {
+                git2::Delta::Added => CommitChangeStatus::Added,
+                git2::Delta::Deleted => CommitChangeStatus::Deleted,
+                git2::Delta::Renamed => CommitChangeStatus::Renamed,
+                _ => CommitChangeStatus::Modified,
+            };
+
+            let old_path = delta
+                .old_file()
+                .path()
+                .map(|path| path.to_string_lossy().to_string());
+            let new_path = delta
+                .new_file()
+                .path()
+                .map(|path| path.to_string_lossy().to_string());
+
+            CommitChangedFile {
+                path: new_path
+                    .clone()
+                    .or_else(|| old_path.clone())
+                    .unwrap_or_default(),
+                old_path: (status == CommitChangeStatus::Renamed).then_some(old_path).flatten(),
+                status,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    changed_files.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then(left.old_path.cmp(&right.old_path))
+            .then(left.status.cmp(&right.status))
+    });
+
+    Ok(changed_files)
+}
+
 // --- Commit message history persistence ---
 
 use std::collections::HashMap;
@@ -283,4 +391,179 @@ pub fn save_recent_message(repo_path: &Path, message: &str) {
     }
 
     info!("Saved commit message to history");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{get_commit_changed_files, CommitChangeStatus};
+    use crate::commit;
+    use crate::index;
+    use crate::repository::Repository;
+    use std::fs;
+    use std::path::Path;
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    fn configure_signature(repo: &Repository) {
+        let repo_lock = repo.inner.read().expect("repo lock");
+        let mut config = repo_lock.config().expect("config");
+        config
+            .set_str("user.name", "slio-git tests")
+            .expect("user.name");
+        config
+            .set_str("user.email", "tests@slio-git.local")
+            .expect("user.email");
+    }
+
+    fn write_file(root: &Path, path: &str, content: &str) {
+        let file_path = root.join(path);
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).expect("parent dir");
+        }
+        fs::write(file_path, content).expect("write file");
+    }
+
+    fn commit_all(repo: &Repository, message: &str) -> String {
+        index::stage_all(repo).expect("stage all");
+        commit::create_commit(repo, message, "", "").expect("create commit")
+    }
+
+    fn remove_from_index(repo: &Repository, path: &str) {
+        let repo_lock = repo.inner.write().expect("repo lock");
+        let mut index = repo_lock.index().expect("index");
+        index
+            .remove_path(Path::new(path))
+            .expect("remove path from index");
+        index.write().expect("write index");
+    }
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn head_oid(root: &Path) -> String {
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(root)
+            .output()
+            .expect("git rev-parse");
+        assert!(
+            output.status.success(),
+            "git rev-parse failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    #[test]
+    fn get_commit_changed_files_reports_root_commit_as_added_files() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+
+        write_file(temp_dir.path(), "src/main.rs", "fn main() {}\n");
+        let commit_id = commit_all(&repo, "initial");
+
+        let files = get_commit_changed_files(&repo, &commit_id).expect("load changed files");
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "src/main.rs");
+        assert_eq!(files[0].old_path, None);
+        assert_eq!(files[0].status, CommitChangeStatus::Added);
+    }
+
+    #[test]
+    fn get_commit_changed_files_reports_modify_delete_and_rename_statuses() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+
+        write_file(temp_dir.path(), "modified.txt", "before\n");
+        write_file(temp_dir.path(), "deleted.txt", "remove me\n");
+        write_file(temp_dir.path(), "old-name.txt", "rename me\n");
+        commit_all(&repo, "baseline");
+
+        write_file(temp_dir.path(), "modified.txt", "after\n");
+        fs::remove_file(temp_dir.path().join("deleted.txt")).expect("remove deleted file");
+        fs::rename(
+            temp_dir.path().join("old-name.txt"),
+            temp_dir.path().join("new-name.txt"),
+        )
+        .expect("rename file");
+        index::stage_file(&repo, Path::new("modified.txt")).expect("stage modified");
+        index::stage_file(&repo, Path::new("new-name.txt")).expect("stage renamed target");
+        remove_from_index(&repo, "deleted.txt");
+        remove_from_index(&repo, "old-name.txt");
+
+        let commit_id = commit::create_commit(&repo, "change set", "", "").expect("create commit");
+        let files = get_commit_changed_files(&repo, &commit_id).expect("load changed files");
+
+        assert_eq!(files.len(), 3);
+
+        let deleted = files
+            .iter()
+            .find(|file| file.path == "deleted.txt")
+            .expect("deleted entry");
+        assert_eq!(deleted.status, CommitChangeStatus::Deleted);
+        assert_eq!(deleted.old_path, None);
+
+        let modified = files
+            .iter()
+            .find(|file| file.path == "modified.txt")
+            .expect("modified entry");
+        assert_eq!(modified.status, CommitChangeStatus::Modified);
+        assert_eq!(modified.old_path, None);
+
+        let renamed = files
+            .iter()
+            .find(|file| file.path == "new-name.txt")
+            .expect("renamed entry");
+        assert_eq!(renamed.status, CommitChangeStatus::Renamed);
+        assert_eq!(renamed.old_path.as_deref(), Some("old-name.txt"));
+    }
+
+    #[test]
+    fn get_commit_changed_files_compares_merge_commit_with_first_parent() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("init repo");
+        configure_signature(&repo);
+
+        write_file(temp_dir.path(), "base.txt", "base\n");
+        commit_all(&repo, "baseline");
+
+        let base_branch = repo
+            .current_branch()
+            .expect("current branch")
+            .expect("branch name");
+
+        run_git(temp_dir.path(), &["checkout", "-b", "feature"]);
+        write_file(temp_dir.path(), "feature.txt", "feature\n");
+        commit_all(&repo, "feature commit");
+
+        run_git(temp_dir.path(), &["checkout", &base_branch]);
+        write_file(temp_dir.path(), "main.txt", "main\n");
+        commit_all(&repo, "main commit");
+
+        run_git(
+            temp_dir.path(),
+            &["merge", "feature", "--no-ff", "-m", "merge feature"],
+        );
+
+        let merge_commit_id = head_oid(temp_dir.path());
+        let files = get_commit_changed_files(&repo, &merge_commit_id).expect("load changed files");
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "feature.txt");
+        assert_eq!(files[0].status, CommitChangeStatus::Added);
+    }
 }

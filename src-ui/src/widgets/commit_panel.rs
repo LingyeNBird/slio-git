@@ -58,7 +58,11 @@ pub fn view<'a>(
     let amend_checkbox: Element<'_, CommitDialogMessage> = if state.is_committing {
         Space::new().width(Length::Shrink).into()
     } else {
-        widgets::compact_checkbox(state.is_amend, "修正提交", CommitDialogMessage::SetAmendMode)
+        widgets::compact_checkbox(
+            state.is_amend,
+            "修正提交",
+            CommitDialogMessage::SetAmendMode,
+        )
     };
 
     let ai_button: Element<'_, CommitDialogMessage> = if llm_enabled {

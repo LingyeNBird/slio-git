@@ -1,5 +1,6 @@
 //! slio-git UI - Pure Iced desktop application.
 
+mod file_watcher;
 mod i18n;
 mod keyboard;
 mod logging;
@@ -11,6 +12,7 @@ pub mod views;
 pub mod widgets;
 
 use crate::components::status_icons::FileStatus;
+use crate::file_watcher::RepositoryWatchEvent;
 use crate::keyboard::{get_shortcuts, ShortcutAction};
 use crate::state::{
     is_docked_auxiliary_view, AppState, AuxiliaryView, DiffPresentation, GitToolWindowTab,
@@ -92,12 +94,12 @@ pub fn main() -> iced::Result {
         update,
         view,
     )
-        .title("slio-git")
-        .default_font(theme::app_font())
-        .theme(app_theme)
-        .window(window_settings)
-        .subscription(app_subscription)
-        .run()
+    .title("slio-git")
+    .default_font(theme::app_font())
+    .theme(app_theme)
+    .window(window_settings)
+    .subscription(app_subscription)
+    .run()
 }
 
 fn app_subscription(state: &AppState) -> Subscription<Message> {
@@ -113,7 +115,9 @@ fn app_subscription(state: &AppState) -> Subscription<Message> {
 
     let mut subscriptions = vec![keyboard];
 
-    if state.current_repository.is_some() && !state.auto_refresh_suspended() {
+    if let Some(repo_path) = state.active_project_path().map(Path::to_path_buf) {
+        subscriptions
+            .push(file_watcher::subscription(repo_path).map(Message::RepositoryWatchEvent));
         subscriptions.push(time::every(AUTO_REFRESH_TICK_INTERVAL).map(Message::AutoRefreshTick));
     }
 
@@ -128,6 +132,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
     if !matches!(
         &message,
         Message::AutoRefreshTick(_)
+            | Message::RepositoryWatchEvent(_)
             | Message::AutoRemoteCheckFinished(_)
             | Message::ToastTick(_)
             | Message::ToggleToolbarRemoteMenu(_)
@@ -234,8 +239,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         if previous_section != ShellSection::Conflicts || !state.has_conflicts() {
                             state.navigate_to(previous_section);
                         }
-                        update_editor_diff_model(state);
-                        refresh_open_auxiliary_view(state);
+                        refresh_workspace_views(state);
                         state.set_success("仓库状态已刷新", None, "repository.refresh");
                     }
                     Err(error) => report_async_failure(
@@ -260,7 +264,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 if let Err(error) = state.refresh_current_repository(false) {
                     warn!("Auto refresh workspace failed: {}", error);
                 } else {
-                    refresh_open_auxiliary_view(state);
+                    refresh_workspace_views(state);
                 }
             }
 
@@ -295,7 +299,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                 error
                             );
                         } else {
-                            refresh_open_auxiliary_view(state);
+                            refresh_workspace_views(state);
                         }
                     }
 
@@ -313,6 +317,26 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         remote_label,
                         error
                     );
+                }
+            }
+        }
+        Message::RepositoryWatchEvent(event) => {
+            if state
+                .active_project_path()
+                .is_some_and(|path| path == event.repo_path.as_path())
+            {
+                state.mark_workspace_refresh_pending();
+
+                if !state.auto_refresh_suspended() {
+                    if let Err(error) = state.refresh_current_repository(false) {
+                        warn!(
+                            "Repository watcher refresh failed for {}: {}",
+                            event.repo_path.display(),
+                            error
+                        );
+                    } else {
+                        refresh_workspace_views(state);
+                    }
                 }
             }
         }
@@ -423,10 +447,32 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             update_editor_diff_model(state);
         }
         Message::ToggleDiffPresentation => {
+            if let Some(popup) = state.history_commit_diff_popup.as_mut() {
+                if !popup.supports_split_diff() {
+                    return iced::Task::none();
+                }
+                popup.diff_presentation = match popup.diff_presentation {
+                    DiffPresentation::Unified => DiffPresentation::Split,
+                    DiffPresentation::Split => DiffPresentation::Unified,
+                };
+                return iced::Task::none();
+            }
+            if matches!(state.diff_source, state::DiffSource::HistoryCommit { .. }) {
+                return iced::Task::none();
+            }
             state.toggle_diff_presentation();
             update_editor_diff_model(state);
         }
         Message::UnifiedDiffEditorEvent(event) => {
+            if let Some(popup) = state.history_commit_diff_popup.as_mut() {
+                if let Some(editor) = popup.unified_diff_editor.as_mut() {
+                    let task = editor.update(match event {
+                        widgets::diff_editor::UnifiedDiffEditorEvent::Editor(m) => m,
+                    });
+                    return task.map(Message::UnifiedDiffEditorEvent);
+                }
+                return Task::none();
+            }
             if let Some(editor) = state.unified_diff_editor.as_mut() {
                 let task = editor.update(match event {
                     widgets::diff_editor::UnifiedDiffEditorEvent::Editor(m) => m,
@@ -435,6 +481,18 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
         }
         Message::SplitDiffEditorEvent(event) => {
+            if let Some(popup) = state.history_commit_diff_popup.as_mut() {
+                if let Some(editor) = popup.split_diff_editor.as_mut() {
+                    let (task, current_hunk) = editor.update(event);
+                    if let Some(hunk_index) = current_hunk {
+                        if popup.selected_hunk_index != Some(hunk_index) {
+                            popup.selected_hunk_index = Some(hunk_index);
+                        }
+                    }
+                    return task.map(Message::SplitDiffEditorEvent);
+                }
+                return Task::none();
+            }
             if let Some(editor) = state.split_diff_editor.as_mut() {
                 let (task, current_hunk) = editor.update(event);
                 if let Some(hunk_index) = current_hunk {
@@ -476,8 +534,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             let resolved_text = editor.resolved_text();
                             if let Some(repo) = &state.current_repository {
                                 if let Some(conflict_index) = state.conflict_merge_index {
-                                    if let Some(conflict) =
-                                        state.conflict_files.get(conflict_index)
+                                    if let Some(conflict) = state.conflict_files.get(conflict_index)
                                     {
                                         let path = std::path::Path::new(&conflict.path);
                                         match git_core::diff::resolve_conflict(
@@ -495,8 +552,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                                 );
                                                 state.close_conflict_merge();
                                                 state.merge_editor = None;
-                                                let _ =
-                                                    state.refresh_current_repository(true);
+                                                let _ = state.refresh_current_repository(true);
                                             }
                                             Err(e) => {
                                                 state.set_error(format!(
@@ -699,8 +755,18 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::NavigatePrevFile => select_relative_file(state, -1),
         Message::NavigateNextFile => select_relative_file(state, 1),
-        Message::PrevHunk => return navigate_hunk(state, -1),
-        Message::NextHunk => return navigate_hunk(state, 1),
+        Message::PrevHunk => {
+            if state.history_commit_diff_popup.is_some() {
+                return navigate_history_commit_diff_popup_hunk(state, -1);
+            }
+            return navigate_hunk(state, -1);
+        }
+        Message::NextHunk => {
+            if state.history_commit_diff_popup.is_some() {
+                return navigate_history_commit_diff_popup_hunk(state, 1);
+            }
+            return navigate_hunk(state, 1);
+        }
         Message::TrackChangeContextMenuCursor(position) => {
             state.track_change_context_menu_cursor(position);
         }
@@ -941,6 +1007,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
         }
         Message::CloseToolbarRemoteMenu => state.close_toolbar_remote_menu(),
+        Message::CloseHistoryCommitDiffPopup => state.close_history_commit_diff_popup(),
         Message::CloseAuxiliary => state.close_auxiliary_view(),
         Message::ToolbarRemoteActionSelected { action, remote } => {
             if let Err(error) = run_toolbar_remote_action(state, action, remote) {
@@ -963,6 +1030,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
         }
         Message::ShowBranches => {
+            state.close_history_commit_diff_popup();
             // Toggle IDEA-style floating branch dropdown
             state.show_branch_dropdown = !state.show_branch_dropdown;
             if state.show_branch_dropdown {
@@ -2263,6 +2331,54 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     "workspace.history",
                 );
             }
+            HistoryMessage::ViewCommitFileDiff(commit_id, file_path) => {
+                if let Ok(repo) = require_repository(state) {
+                    match load_history_commit_file_diff(&repo, &commit_id, &file_path) {
+                        Ok(history_diff) => {
+                            state.history_view.context_menu_commit = None;
+                            state.history_view.context_menu_anchor = None;
+                            show_history_commit_file_diff(
+                                state,
+                                commit_id,
+                                file_path,
+                                history_diff.diff,
+                                history_diff.editor_diff,
+                            );
+                        }
+                        Err(error) => report_async_failure(
+                            state,
+                            "加载提交文件差异失败",
+                            error,
+                            "workspace.history",
+                            "workspace.history.file_diff",
+                        ),
+                    }
+                }
+            }
+            HistoryMessage::ToggleCommitFileDisplayMode => {
+                state.history_view.toggle_commit_file_display_mode();
+            }
+            HistoryMessage::CommitFileTreeEvent(tree_message) => match tree_message {
+                crate::widgets::tree_widget::TreeMessage::SelectNode(node_id) => {
+                    if let Some(path) = node_id.strip_prefix("file:") {
+                        let Some(commit_id) = state.history_view.selected_commit.clone() else {
+                            return iced::Task::none();
+                        };
+                        return update(
+                            state,
+                            Message::HistoryMessage(HistoryMessage::ViewCommitFileDiff(
+                                commit_id,
+                                path.to_string(),
+                            )),
+                        );
+                    }
+                    state.history_view.toggle_commit_file_tree_node(node_id);
+                }
+                crate::widgets::tree_widget::TreeMessage::ToggleNode(node_id) => {
+                    state.history_view.toggle_commit_file_tree_node(node_id);
+                }
+                crate::widgets::tree_widget::TreeMessage::NodeContextMenu(_, _) => {}
+            },
             HistoryMessage::TrackContextMenuCursor(position) => {
                 state.history_view.track_context_menu_cursor(position);
             }
@@ -2366,9 +2482,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 state.history_view.context_menu_commit = None;
                 if let Ok(repo) = require_repository(state) {
                     state.branch_popup.load_branches(&repo);
-                    state
-                        .branch_popup
-                        .prepare_create_from_selected(commit_id);
+                    state.branch_popup.prepare_create_from_selected(commit_id);
                     state.open_auxiliary_view(AuxiliaryView::Branches);
                 }
             }
@@ -2390,9 +2504,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     // Check for merge commit
                     match git_core::commit::get_commit(&repo, &commit_id) {
                         Ok(info) if info.parent_ids.len() > 1 => {
-                            state.set_error(
-                                "merge 提交暂不支持直接 Cherry-pick".to_string(),
-                            );
+                            state.set_error("merge 提交暂不支持直接 Cherry-pick".to_string());
                             return iced::Task::none();
                         }
                         Err(e) => {
@@ -2406,15 +2518,10 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         Ok(()) => {
                             state.show_toast(
                                 crate::state::FeedbackLevel::Success,
-                                format!(
-                                    "已摘取提交 {}",
-                                    short_commit_id(&commit_id)
-                                ),
+                                format!("已摘取提交 {}", short_commit_id(&commit_id)),
                                 None,
                             );
-                            if let Err(e) =
-                                refresh_repository_after_action(state, &repo, true)
-                            {
+                            if let Err(e) = refresh_repository_after_action(state, &repo, true) {
                                 state.set_error(format!("刷新仓库状态失败: {e}"));
                             }
                         }
@@ -2447,9 +2554,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                                 format!("已还原提交 {}", short_commit_id(&commit_id)),
                                 None,
                             );
-                            if let Err(e) =
-                                refresh_repository_after_action(state, &repo, true)
-                            {
+                            if let Err(e) = refresh_repository_after_action(state, &repo, true) {
                                 state.set_error(format!("刷新仓库状态失败: {e}"));
                             }
                         }
@@ -3740,10 +3845,11 @@ fn update_editor_diff_model(state: &mut AppState) {
     match git_core::diff::build_editor_diff_model(repo, path, is_staged) {
         Ok(Some(model)) => {
             state.editor_diff = Some(model.clone());
-            state.split_diff_editor = Some(widgets::diff_editor::SplitDiffEditorState::with_font_size(
-                model,
-                state.git_settings.editor_font_size_f32(),
-            ));
+            state.split_diff_editor =
+                Some(widgets::diff_editor::SplitDiffEditorState::with_font_size(
+                    model,
+                    state.git_settings.editor_font_size_f32(),
+                ));
             if state.selected_hunk_index.is_none() {
                 state.selected_hunk_index = Some(0);
             }
@@ -3785,6 +3891,89 @@ fn build_staged_diff(
     Ok(diff)
 }
 
+struct HistoryCommitFileDiffData {
+    diff: git_core::diff::Diff,
+    editor_diff: Option<git_core::diff::EditorDiffModel>,
+}
+
+fn load_history_commit_file_diff(
+    repo: &Repository,
+    commit_id: &str,
+    file_path: &str,
+) -> Result<HistoryCommitFileDiffData, String> {
+    let commit = git_core::commit::get_commit(repo, commit_id)
+        .map_err(|error| format!("读取提交详情失败: {error}"))?;
+
+    let diff = if commit.parent_ids.is_empty() {
+        git_core::diff::diff_commit_against_parent(repo, commit_id)
+            .map_err(|error| format!("加载根提交差异失败: {error}"))?
+    } else {
+        git_core::diff::diff_refs(repo, &format!("{commit_id}^"), commit_id)
+            .or_else(|_| git_core::diff::diff_commit_against_parent(repo, commit_id))
+            .map_err(|error| format!("加载提交差异失败: {error}"))?
+    };
+
+    let files = diff
+        .files
+        .into_iter()
+        .filter(|file| {
+            file.new_path.as_deref() == Some(file_path) || file.old_path.as_deref() == Some(file_path)
+        })
+        .collect::<Vec<_>>();
+
+    if files.is_empty() {
+        return Err(format!("没有找到 {file_path} 在该提交中的差异"));
+    }
+
+    let total_additions = files.iter().map(|file| file.additions).sum();
+    let total_deletions = files.iter().map(|file| file.deletions).sum();
+    let diff = git_core::diff::Diff {
+        files,
+        total_additions,
+        total_deletions,
+    };
+    let editor_diff = if let Some(file_diff) = diff.files.first() {
+        let old_bytes = match (file_diff.old_path.as_deref(), commit.parent_ids.first()) {
+            (Some(path), Some(parent_id)) => {
+                git_core::diff::read_file_bytes_at_commit(repo, parent_id, Path::new(path))
+                    .map_err(|error| format!("读取历史旧版本文件失败: {error}"))?
+                    .unwrap_or_default()
+            }
+            _ => Vec::new(),
+        };
+        let new_bytes = if let Some(path) = file_diff.new_path.as_deref() {
+            git_core::diff::read_file_bytes_at_commit(repo, commit_id, Path::new(path))
+                .map_err(|error| format!("读取历史新版本文件失败: {error}"))?
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        git_core::diff::build_editor_diff_model_from_file_contents(
+            file_diff,
+            &old_bytes,
+            &new_bytes,
+        )
+    } else {
+        None
+    };
+
+    Ok(HistoryCommitFileDiffData {
+        diff,
+        editor_diff,
+    })
+}
+
+fn show_history_commit_file_diff(
+    state: &mut AppState,
+    commit_id: String,
+    file_path: String,
+    diff: git_core::diff::Diff,
+    editor_diff: Option<git_core::diff::EditorDiffModel>,
+) {
+    state.open_history_commit_diff_popup(commit_id, file_path, diff, editor_diff);
+}
+
 fn refresh_repository_after_action(
     state: &mut AppState,
     repo: &Repository,
@@ -3792,8 +3981,13 @@ fn refresh_repository_after_action(
 ) -> Result<(), String> {
     let _ = repo;
     state.refresh_current_repository(prefer_conflicts)?;
-    refresh_open_auxiliary_view(state);
+    refresh_workspace_views(state);
     Ok(())
+}
+
+fn refresh_workspace_views(state: &mut AppState) {
+    update_editor_diff_model(state);
+    refresh_open_auxiliary_view(state);
 }
 
 fn refresh_open_auxiliary_view(state: &mut AppState) {
@@ -4298,10 +4492,67 @@ fn navigate_hunk(state: &mut AppState, delta: isize) -> Task<Message> {
         return Task::none();
     }
 
-    state
-        .navigate_hunk(delta)
-        .map(|offset| scroll_to(Id::new("diff-scroll"), AbsoluteOffset { x: 0.0, y: offset }))
-        .unwrap_or_else(Task::none)
+    let Some(diff) = state.current_diff.as_ref() else {
+        return Task::none();
+    };
+    let total_hunks: usize = diff.files.iter().map(|file| file.hunks.len()).sum();
+    if total_hunks == 0 {
+        return Task::none();
+    }
+
+    let current = state.selected_hunk_index.unwrap_or(0) as isize;
+    let next = (current + delta).clamp(0, (total_hunks - 1) as isize) as usize;
+    state.selected_hunk_index = Some(next);
+
+    if let Some(editor) = state.unified_diff_editor.as_mut() {
+        return editor.scroll_to_hunk(next).map(Message::UnifiedDiffEditorEvent);
+    }
+
+    scroll_to(Id::new("diff-scroll"), AbsoluteOffset {
+        x: 0.0,
+        y: state::compute_hunk_offset(diff, next),
+    })
+}
+
+fn navigate_history_commit_diff_popup_hunk(state: &mut AppState, delta: isize) -> Task<Message> {
+    let Some(popup) = state.history_commit_diff_popup.as_mut() else {
+        return Task::none();
+    };
+
+    if popup.diff_presentation == DiffPresentation::Split {
+        let Some(model) = popup.editor_diff.as_ref() else {
+            return Task::none();
+        };
+        let total_hunks = model.hunks.len();
+        if total_hunks == 0 {
+            return Task::none();
+        }
+
+        let current = popup.selected_hunk_index.unwrap_or(0) as isize;
+        let next = (current + delta).clamp(0, (total_hunks - 1) as isize) as usize;
+        popup.selected_hunk_index = Some(next);
+
+        if let Some(editor) = popup.split_diff_editor.as_mut() {
+            return editor.scroll_to_hunk(next).map(Message::SplitDiffEditorEvent);
+        }
+
+        return Task::none();
+    }
+
+    let total_hunks: usize = popup.diff.files.iter().map(|file| file.hunks.len()).sum();
+    if total_hunks == 0 {
+        return Task::none();
+    }
+
+    let current = popup.selected_hunk_index.unwrap_or(0) as isize;
+    let next = (current + delta).clamp(0, (total_hunks - 1) as isize) as usize;
+    popup.selected_hunk_index = Some(next);
+
+    if let Some(editor) = popup.unified_diff_editor.as_mut() {
+        return editor.scroll_to_hunk(next).map(Message::UnifiedDiffEditorEvent);
+    }
+
+    Task::none()
 }
 
 fn report_async_failure(
@@ -4496,9 +4747,8 @@ fn view(state: &AppState) -> Element<'_, Message> {
         Message::DismissToast,
         Message::ShowSettings,
     );
-    let main_view = main_window.view();
+    let mut layered = main_window.view();
 
-    // Overlay: project dropdown
     if state.show_project_dropdown {
         let mut project_list = Column::new().spacing(0).width(Length::Fill);
 
@@ -4601,13 +4851,12 @@ fn view(state: &AppState) -> Element<'_, Message> {
         )
         .on_press(Message::ToggleProjectDropdown);
 
-        return iced::widget::stack([main_view, backdrop.into(), overlay.into()])
+        layered = iced::widget::stack([layered, backdrop.into(), overlay.into()])
             .width(Length::Fill)
             .height(Length::Fill)
             .into();
     }
 
-    // Overlay: IDEA-style floating branch dropdown
     if state.show_branch_dropdown {
         let dropdown = Container::new(
             branch_popup::view(&state.branch_popup).map(Message::BranchPopupMessage),
@@ -4650,15 +4899,12 @@ fn view(state: &AppState) -> Element<'_, Message> {
         )
         .on_press(Message::ShowBranches); // toggle off
 
-        let layered = iced::widget::stack([main_view, backdrop.into(), overlay.into()])
+        layered = iced::widget::stack([layered, backdrop.into(), overlay.into()])
             .width(Length::Fill)
             .height(Length::Fill)
             .into();
-
-        return wrap_with_pending_commit_action_dialog(state, layered);
     }
 
-    // Update available banner overlay (bottom-right)
     if let Some(ref update) = state.available_update {
         let banner = Container::new(
             Row::new()
@@ -4705,11 +4951,11 @@ fn view(state: &AppState) -> Element<'_, Message> {
             .align_y(Alignment::End)
             .padding([32, 16]);
 
-        let layered = iced::widget::stack([main_view, positioned.into()]).into();
-        return wrap_with_pending_commit_action_dialog(state, layered);
+        layered = iced::widget::stack([layered, positioned.into()]).into();
     }
 
-    wrap_with_pending_commit_action_dialog(state, main_view)
+    let layered = wrap_with_history_commit_diff_popup(state, i18n, layered);
+    wrap_with_pending_commit_action_dialog(state, layered)
 }
 
 fn wrap_with_pending_commit_action_dialog<'a>(
@@ -4735,9 +4981,7 @@ fn wrap_with_pending_commit_action_dialog<'a>(
                     .center_x(Length::Fill)
                     .center_y(Length::Fill)
                     .style(|_: &Theme| iced::widget::container::Style {
-                        background: Some(Background::Color(Color::from_rgba(
-                            0.0, 0.0, 0.0, 0.5,
-                        ))),
+                        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5,))),
                         ..Default::default()
                     }),
             )
@@ -4745,6 +4989,93 @@ fn wrap_with_pending_commit_action_dialog<'a>(
                 branch_popup::BranchPopupMessage::CancelPendingCommitAction,
             )),
         )
+    ]
+    .into()
+}
+
+fn wrap_with_history_commit_diff_popup<'a>(
+    state: &'a AppState,
+    i18n: &'a i18n::I18n,
+    base: Element<'a, Message>,
+) -> Element<'a, Message> {
+    let Some(popup) = state.history_commit_diff_popup.as_ref() else {
+        return base;
+    };
+
+    let surface = history_diff_popup_surface(popup);
+    let commit_label = popup.commit_id.chars().take(7).collect::<String>();
+    let title_bar = Container::new(
+        Row::new()
+            .spacing(theme::spacing::SM)
+            .align_y(Alignment::Center)
+            .push(
+                Column::new()
+                    .spacing(2)
+                    .width(Length::Fill)
+                    .push(Text::new("提交文件差异").size(13))
+                    .push(
+                        Text::new(&popup.file_path)
+                            .size(10)
+                            .color(theme::darcula::TEXT_SECONDARY),
+                    ),
+            )
+            .push(widgets::compact_chip::<Message>(
+                format!("提交 {commit_label}"),
+                BadgeTone::Neutral,
+            ))
+            .push(button::compact_ghost(
+                "关闭",
+                Some(Message::CloseHistoryCommitDiffPopup),
+            )),
+    )
+    .padding(theme::density::SECONDARY_BAR_PADDING)
+    .style(theme::frame_style(theme::Surface::Toolbar));
+
+    let popup_card = Container::new(
+        Column::new()
+            .spacing(0)
+            .height(Length::Fill)
+            .push(title_bar)
+            .push(iced::widget::rule::horizontal(1))
+            .push(build_read_only_diff_header(&surface))
+            .push(
+                Container::new(build_read_only_diff_content(
+                    &surface,
+                    i18n,
+                    DiffSurfaceHunkActions {
+                        stage: None,
+                        unstage: None,
+                    },
+                ))
+                .height(Length::Fill),
+            ),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .max_width(980.0)
+    .max_height(680.0)
+    .style(theme::panel_style(theme::Surface::Panel));
+
+    stack![
+        base,
+        opaque(
+            mouse_area(
+                Container::new(Space::new())
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(|_: &Theme| iced::widget::container::Style {
+                        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
+                        ..Default::default()
+                    }),
+            )
+            .on_press(Message::CloseHistoryCommitDiffPopup),
+        ),
+        Container::new(popup_card)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .padding([32, 40]),
     ]
     .into()
 }
@@ -4759,9 +5090,7 @@ fn build_body<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Mess
         .filter(|view| !is_docked_auxiliary_view(*view))
     {
         return match auxiliary {
-            AuxiliaryView::Branches => {
-                branch_popup::view(&state.branch_popup).map(Message::BranchPopupMessage)
-            }
+            AuxiliaryView::Branches => build_changes_body(state, i18n),
             AuxiliaryView::Remotes => {
                 remote_dialog::view(&state.remote_dialog).map(Message::RemoteDialogMessage)
             }
@@ -5107,28 +5436,113 @@ fn change_context_menu_origin(anchor: Point) -> Point {
     Point::new(x, y)
 }
 
+#[derive(Clone, Copy)]
+struct DiffSurfaceHunkActions {
+    stage: Option<fn(String, usize) -> Message>,
+    unstage: Option<fn(String, usize) -> Message>,
+}
+
+struct ReadOnlyDiffSurface<'a> {
+    full_file_preview_binary: bool,
+    full_file_preview: Option<&'a git_core::diff::FileDiff>,
+    show_diff: bool,
+    diff: Option<&'a git_core::diff::Diff>,
+    diff_presentation: DiffPresentation,
+    selected_path: Option<&'a str>,
+    selected_hunk_index: Option<usize>,
+    editor_diff: Option<&'a git_core::diff::EditorDiffModel>,
+    split_diff_editor: Option<&'a widgets::diff_editor::SplitDiffEditorState>,
+    unified_diff_editor: Option<&'a widgets::diff_editor::UnifiedDiffEditorState>,
+    supports_split_diff: bool,
+}
+
 fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
-    let file_name = state
+    let (surface, _) = workspace_diff_surface(state);
+    build_read_only_diff_header(&surface)
+}
+
+fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Message> {
+    let (surface, hunk_actions) = workspace_diff_surface(state);
+    build_read_only_diff_content(&surface, i18n, hunk_actions)
+}
+
+fn workspace_diff_surface<'a>(state: &'a AppState) -> (ReadOnlyDiffSurface<'a>, DiffSurfaceHunkActions) {
+    let selected_is_staged = state
         .selected_change_path
         .as_ref()
+        .map(|path| state.staged_changes.iter().any(|change| &change.path == path))
+        .unwrap_or(false);
+    let hunk_actions = if selected_is_staged {
+        DiffSurfaceHunkActions {
+            stage: None,
+            unstage: Some(Message::UnstageHunk),
+        }
+    } else {
+        DiffSurfaceHunkActions {
+            stage: Some(Message::StageHunk),
+            unstage: None,
+        }
+    };
+
+    (
+        ReadOnlyDiffSurface {
+            full_file_preview_binary: state.full_file_preview_binary,
+            full_file_preview: state.full_file_preview.as_ref(),
+            show_diff: state.show_diff,
+            diff: state.current_diff.as_ref(),
+            diff_presentation: state.diff_presentation,
+            selected_path: state.selected_change_path.as_deref(),
+            selected_hunk_index: state.selected_hunk_index,
+            editor_diff: state.editor_diff.as_ref(),
+            split_diff_editor: state.split_diff_editor.as_ref(),
+            unified_diff_editor: state.unified_diff_editor.as_ref(),
+            supports_split_diff: !matches!(
+                state.diff_source,
+                state::DiffSource::HistoryCommit { .. }
+            ),
+        },
+        hunk_actions,
+    )
+}
+
+fn history_diff_popup_surface<'a>(
+    popup: &'a state::HistoryCommitDiffPopupState,
+) -> ReadOnlyDiffSurface<'a> {
+    ReadOnlyDiffSurface {
+        full_file_preview_binary: false,
+        full_file_preview: None,
+        show_diff: true,
+        diff: Some(&popup.diff),
+        diff_presentation: popup.diff_presentation,
+        selected_path: Some(popup.file_path.as_str()),
+        selected_hunk_index: popup.selected_hunk_index,
+        editor_diff: popup.editor_diff.as_ref(),
+        split_diff_editor: popup.split_diff_editor.as_ref(),
+        unified_diff_editor: popup.unified_diff_editor.as_ref(),
+        supports_split_diff: popup.supports_split_diff(),
+    }
+}
+
+fn build_read_only_diff_header<'a>(surface: &ReadOnlyDiffSurface<'a>) -> Element<'a, Message> {
+    let file_name = surface
+        .selected_path
         .and_then(|path| std::path::Path::new(path).file_name()?.to_str())
         .unwrap_or("差异");
 
-    let path_hint = state.selected_change_path.as_ref().and_then(|path| {
+    let path_hint = surface.selected_path.and_then(|path| {
         std::path::Path::new(path)
             .parent()
             .and_then(|p| p.to_str())
             .filter(|p| !p.is_empty())
     });
 
-    let summary = state
-        .current_diff
-        .as_ref()
+    let summary = surface
+        .diff
         .and_then(|diff| diff.files.first().map(|f| (f.additions, f.deletions)));
 
-    let file_position = state.current_diff.as_ref().and_then(|diff| {
+    let file_position = surface.diff.and_then(|diff| {
         (diff.files.len() > 1).then(|| {
-            state.selected_change_path.as_ref().and_then(|selected| {
+            surface.selected_path.and_then(|selected| {
                 diff.files
                     .iter()
                     .position(|f| f.new_path.as_deref().or(f.old_path.as_deref()) == Some(selected))
@@ -5161,21 +5575,17 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
             .push(Space::new().width(Length::Fill))
             .push(button::tab(
                 "统一",
-                state.diff_presentation == DiffPresentation::Unified,
-                state
-                    .current_diff
-                    .is_some()
+                surface.diff_presentation == DiffPresentation::Unified,
+                (surface.diff.is_some() && surface.supports_split_diff)
                     .then_some(Message::ToggleDiffPresentation),
             ))
             .push(button::tab(
                 "分栏",
-                state.diff_presentation == DiffPresentation::Split,
-                state
-                    .current_diff
-                    .is_some()
+                surface.diff_presentation == DiffPresentation::Split,
+                (surface.diff.is_some() && surface.supports_split_diff)
                     .then_some(Message::ToggleDiffPresentation),
             ))
-            .push_maybe(state.current_diff.as_ref().and_then(|diff| {
+            .push_maybe(surface.diff.and_then(|diff| {
                 let total_hunks: usize = diff.files.iter().map(|f| f.hunks.len()).sum();
                 (total_hunks > 1).then(|| {
                     let nav: Element<'_, Message> = Row::new()
@@ -5192,57 +5602,48 @@ fn build_diff_header<'a>(state: &'a AppState) -> Element<'a, Message> {
     .into()
 }
 
-fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<'a, Message> {
-    if state.full_file_preview_binary {
+fn build_read_only_diff_content<'a>(
+    surface: &ReadOnlyDiffSurface<'a>,
+    i18n: &'a i18n::I18n,
+    hunk_actions: DiffSurfaceHunkActions,
+) -> Element<'a, Message> {
+    if surface.full_file_preview_binary {
         return widgets::panel_empty_state_compact(
             i18n.binary_file_no_preview,
-            state.selected_change_path.as_deref().unwrap_or(""),
+            surface.selected_path.unwrap_or(""),
         );
     }
 
-    if let Some(preview_diff) = &state.full_file_preview {
+    if let Some(preview_diff) = surface.full_file_preview {
         return widgets::diff_viewer::file_preview(preview_diff);
     }
 
-    if !state.show_diff || state.current_diff.is_none() {
+    if !surface.show_diff || surface.diff.is_none() {
         return widgets::panel_empty_state_compact(i18n.diff_empty, i18n.diff_empty_detail);
     }
 
-    let diff = state.current_diff.as_ref().expect("diff checked");
+    let diff = surface.diff.expect("diff checked");
     if diff.files.is_empty() {
         return widgets::panel_empty_state_compact(i18n.no_changes, i18n.diff_empty_detail);
     }
 
-    let selected_is_staged = state
-        .selected_change_path
-        .as_ref()
-        .map(|path| {
-            state
-                .staged_changes
-                .iter()
-                .any(|change| &change.path == path)
-        })
-        .unwrap_or(false);
-
-    match state.diff_presentation {
+    match surface.diff_presentation {
         DiffPresentation::Unified => {
-            if let Some(editor) = state.unified_diff_editor.as_ref() {
+            if let Some(editor) = surface.unified_diff_editor {
                 editor.view().map(Message::UnifiedDiffEditorEvent)
             } else {
-                // Fallback to old text-based viewer
                 let mut viewer = widgets::diff_viewer::DiffViewer::new(diff);
-                if selected_is_staged {
-                    viewer = viewer.with_unstage_hunk_handler(Message::UnstageHunk);
-                } else {
-                    viewer = viewer.with_stage_hunk_handler(Message::StageHunk);
+                if let Some(handler) = hunk_actions.stage {
+                    viewer = viewer.with_stage_hunk_handler(handler);
+                }
+                if let Some(handler) = hunk_actions.unstage {
+                    viewer = viewer.with_unstage_hunk_handler(handler);
                 }
                 viewer.view()
             }
         }
         DiffPresentation::Split => {
-            let (Some(model), Some(editor)) =
-                (state.editor_diff.as_ref(), state.split_diff_editor.as_ref())
-            else {
+            let (Some(model), Some(editor)) = (surface.editor_diff, surface.split_diff_editor) else {
                 return widgets::panel_empty_state_compact(
                     "当前文件无法切换到分栏编辑器",
                     "二进制、超大文件或无文本差异的文件继续使用空状态分支。",
@@ -5252,18 +5653,10 @@ fn build_diff_content<'a>(state: &'a AppState, i18n: &'a i18n::I18n) -> Element<
             widgets::split_diff_viewer::view(
                 model,
                 editor,
-                state.selected_hunk_index,
+                surface.selected_hunk_index,
                 Message::SplitDiffEditorEvent,
-                if selected_is_staged {
-                    None
-                } else {
-                    Some(Message::StageHunk)
-                },
-                if selected_is_staged {
-                    Some(Message::UnstageHunk)
-                } else {
-                    None
-                },
+                hunk_actions.stage,
+                hunk_actions.unstage,
             )
         }
     }
@@ -5620,16 +6013,8 @@ fn build_conflict_action_panel<'a>(
                         Row::new()
                             .spacing(theme::spacing::XS)
                             .align_y(Alignment::Center)
-                            .push(
-                                Text::new("U")
-                                    .size(10)
-                                    .color(theme::darcula::DANGER),
-                            )
-                            .push(
-                                Text::new(file_name)
-                                    .size(14)
-                                    .color(theme::darcula::DANGER),
-                            ),
+                            .push(Text::new("U").size(10).color(theme::darcula::DANGER))
+                            .push(Text::new(file_name).size(14).color(theme::darcula::DANGER)),
                     )
                     .push(
                         Text::new(parent_path)
@@ -5682,11 +6067,8 @@ fn build_conflict_action_panel<'a>(
                 Column::new()
                     .spacing(theme::spacing::XS)
                     .push(
-                        button::primary(
-                            "合并...",
-                            Some(Message::OpenConflictMerge(index)),
-                        )
-                        .width(Length::Fill),
+                        button::primary("合并...", Some(Message::OpenConflictMerge(index)))
+                            .width(Length::Fill),
                     )
                     .push(
                         Row::new()
@@ -5708,12 +6090,10 @@ fn build_conflict_action_panel<'a>(
                     ),
             )
             .push(
-                Text::new(
-                    "配置文件可直接接受；业务代码建议进入合并逐块确认。",
-                )
-                .size(10)
-                .color(theme::darcula::TEXT_SECONDARY)
-                .wrapping(text::Wrapping::WordOrGlyph),
+                Text::new("配置文件可直接接受；业务代码建议进入合并逐块确认。")
+                    .size(10)
+                    .color(theme::darcula::TEXT_SECONDARY)
+                    .wrapping(text::Wrapping::WordOrGlyph),
             ),
     )
     .padding([12, 12])
@@ -5777,7 +6157,6 @@ fn build_conflict_stat_card<'a>(
     .style(theme::panel_style(theme::Surface::Raised))
     .into()
 }
-
 
 fn summarize_conflict(conflict: &ThreeWayDiff) -> ConflictListSummary {
     let mut summary = ConflictListSummary {
@@ -5892,6 +6271,7 @@ pub enum Message {
     InitRepository,
     Refresh,
     AutoRefreshTick(Instant),
+    RepositoryWatchEvent(RepositoryWatchEvent),
     AutoRemoteCheckFinished(AutoRemoteCheckResult),
     ToastTick(Instant),
     CloseRepository,
@@ -5909,6 +6289,7 @@ pub enum Message {
     Push,
     ToggleToolbarRemoteMenu(ToolbarRemoteAction),
     CloseToolbarRemoteMenu,
+    CloseHistoryCommitDiffPopup,
     CloseAuxiliary,
     ToolbarRemoteActionSelected {
         action: ToolbarRemoteAction,
@@ -5979,6 +6360,53 @@ pub enum Message {
 mod tests {
     use super::*;
     use crate::state::ViewMode;
+    use git_core::diff::{Diff, DiffHunk, DiffLine, DiffLineOrigin, FileDiff};
+
+    fn sample_history_file_diff(path: &str) -> Diff {
+        Diff {
+            files: vec![FileDiff {
+                old_path: Some(path.to_string()),
+                new_path: Some(path.to_string()),
+                hunks: vec![DiffHunk {
+                    header: "@@ -1 +1 @@".to_string(),
+                    lines: vec![
+                        DiffLine {
+                            content: "old line\n".to_string(),
+                            origin: DiffLineOrigin::Deletion,
+                            old_lineno: Some(1),
+                            new_lineno: None,
+                            inline_changes: Vec::new(),
+                        },
+                        DiffLine {
+                            content: "new line\n".to_string(),
+                            origin: DiffLineOrigin::Addition,
+                            old_lineno: None,
+                            new_lineno: Some(1),
+                            inline_changes: Vec::new(),
+                        },
+                    ],
+                    old_start: 1,
+                    old_lines: 1,
+                    new_start: 1,
+                    new_lines: 1,
+                }],
+                additions: 1,
+                deletions: 1,
+            }],
+            total_additions: 1,
+            total_deletions: 1,
+        }
+    }
+
+    fn sample_history_editor_diff(path: &str) -> git_core::diff::EditorDiffModel {
+        let diff = sample_history_file_diff(path);
+        git_core::diff::build_editor_diff_model_from_file_contents(
+            diff.files.first().expect("file diff"),
+            b"old line\n",
+            b"new line\n",
+        )
+        .expect("editor diff")
+    }
 
     #[test]
     fn open_commit_dialog_navigates_to_changes_tab() {
@@ -5991,5 +6419,87 @@ mod tests {
         open_commit_dialog(&mut state).expect("should open commit dialog");
         assert_eq!(state.shell.git_tool_window_tab, GitToolWindowTab::Changes);
         assert_eq!(state.view_mode, ViewMode::Repository);
+    }
+
+    #[test]
+    fn show_history_commit_file_diff_keeps_log_context() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo =
+            git_core::Repository::init(temp_dir.path()).expect("repository should initialize");
+        let mut state = AppState::new();
+        state.set_repository(repo);
+        state.switch_git_tool_window_tab(GitToolWindowTab::Log);
+        state.selected_change_path = Some("workspace-file.rs".to_string());
+
+        show_history_commit_file_diff(
+            &mut state,
+            "abc123".to_string(),
+            "src/main.rs".to_string(),
+            sample_history_file_diff("src/main.rs"),
+            None,
+        );
+
+        assert_eq!(state.shell.git_tool_window_tab, GitToolWindowTab::Log);
+        assert_eq!(state.selected_change_path.as_deref(), Some("workspace-file.rs"));
+        assert!(state.current_diff.is_none());
+        assert_eq!(
+            state.history_view.selected_commit_file_path.as_deref(),
+            Some("src/main.rs")
+        );
+        assert!(state.history_commit_diff_popup.is_some());
+    }
+
+    #[test]
+    fn closing_history_commit_diff_popup_preserves_history_selection() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo =
+            git_core::Repository::init(temp_dir.path()).expect("repository should initialize");
+        let mut state = AppState::new();
+        state.set_repository(repo);
+        state.switch_git_tool_window_tab(GitToolWindowTab::Log);
+        state.history_view.selected_commit = Some("abc123".to_string());
+
+        show_history_commit_file_diff(
+            &mut state,
+            "abc123".to_string(),
+            "src/main.rs".to_string(),
+            sample_history_file_diff("src/main.rs"),
+            None,
+        );
+        let _ = update(&mut state, Message::CloseHistoryCommitDiffPopup);
+
+        assert_eq!(state.shell.git_tool_window_tab, GitToolWindowTab::Log);
+        assert_eq!(state.history_view.selected_commit.as_deref(), Some("abc123"));
+        assert_eq!(
+            state.history_view.selected_commit_file_path.as_deref(),
+            Some("src/main.rs")
+        );
+        assert!(state.history_commit_diff_popup.is_none());
+    }
+
+    #[test]
+    fn toggling_presentation_with_history_popup_keeps_log_context() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let repo =
+            git_core::Repository::init(temp_dir.path()).expect("repository should initialize");
+        let mut state = AppState::new();
+        state.set_repository(repo);
+        state.switch_git_tool_window_tab(GitToolWindowTab::Log);
+
+        show_history_commit_file_diff(
+            &mut state,
+            "abc123".to_string(),
+            "src/main.rs".to_string(),
+            sample_history_file_diff("src/main.rs"),
+            Some(sample_history_editor_diff("src/main.rs")),
+        );
+        let _ = update(&mut state, Message::ToggleDiffPresentation);
+
+        let popup = state
+            .history_commit_diff_popup
+            .as_ref()
+            .expect("history diff popup");
+        assert_eq!(state.shell.git_tool_window_tab, GitToolWindowTab::Log);
+        assert_eq!(popup.diff_presentation, DiffPresentation::Split);
     }
 }

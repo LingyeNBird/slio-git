@@ -63,7 +63,8 @@ fn test_e2e_interactive_rebase_squash_and_drop() {
     // Create 4 commits: A → B → C → D
     tr.add_and_commit("file.txt", "A\n", "commit A").unwrap();
     tr.add_and_commit("file.txt", "A\nB\n", "commit B").unwrap();
-    tr.add_and_commit("file.txt", "A\nB\nC\n", "commit C").unwrap();
+    tr.add_and_commit("file.txt", "A\nB\nC\n", "commit C")
+        .unwrap();
     tr.add_and_commit("file.txt", "A\nB\nC\nD\n", "commit D")
         .unwrap();
 
@@ -224,16 +225,10 @@ fn test_e2e_multi_branch_diverge_merge_graph() {
 
     // Merge branch-a into master
     run_git(p, &["checkout", "master"]);
-    run_git(
-        p,
-        &["merge", "branch-a", "--no-ff", "-m", "merge branch-a"],
-    );
+    run_git(p, &["merge", "branch-a", "--no-ff", "-m", "merge branch-a"]);
 
     // Merge branch-b into master
-    run_git(
-        p,
-        &["merge", "branch-b", "--no-ff", "-m", "merge branch-b"],
-    );
+    run_git(p, &["merge", "branch-b", "--no-ff", "-m", "merge branch-b"]);
 
     let repo = Repository::discover(p).unwrap();
     let history = get_history(&repo, Some(20)).unwrap();
@@ -278,8 +273,7 @@ fn test_e2e_partial_stage_commit_verify_remainder() {
 
     tr.add_and_commit("a.txt", "original A\n", "initial commit")
         .unwrap();
-    tr.add_and_commit("b.txt", "original B\n", "add B")
-        .unwrap();
+    tr.add_and_commit("b.txt", "original B\n", "add B").unwrap();
 
     // Modify both files
     tr.write_file("a.txt", "modified A\n").unwrap();
@@ -296,10 +290,7 @@ fn test_e2e_partial_stage_commit_verify_remainder() {
 
     // Verify a.txt is staged, b.txt is not
     let diff_staged = diff_index_to_head(&repo, Path::new("a.txt")).unwrap();
-    assert!(
-        !diff_staged.files.is_empty(),
-        "a.txt should be staged"
-    );
+    assert!(!diff_staged.files.is_empty(), "a.txt should be staged");
 
     // Commit only the staged file
     create_commit(&repo, "partial: only A changed", "", "").unwrap();
@@ -568,12 +559,8 @@ fn test_e2e_repo_state_transitions() {
 
     // Set up merge conflict → Merging state
     run_git(p, &["checkout", "-b", "conflict-branch"]);
-    tr.add_and_commit(
-        "file.txt",
-        "conflict branch content\n",
-        "conflict branch",
-    )
-    .unwrap();
+    tr.add_and_commit("file.txt", "conflict branch content\n", "conflict branch")
+        .unwrap();
     run_git(p, &["checkout", "master"]);
     tr.add_and_commit("file.txt", "master content\n", "master update")
         .unwrap();

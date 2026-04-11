@@ -117,9 +117,8 @@ pub fn action_row<'a, Message: Clone + 'a>(
         .spacing(theme::spacing::XS)
         .align_y(Alignment::Center);
 
-    if let Some(icon) = icon {
-        row = row.push(icon_badge(icon, tone, enabled));
-    }
+    // Skip icon badges — keep menu items compact and left-aligned
+    let _ = icon;
 
     row = row.push(
         Text::new(title.into())
@@ -294,38 +293,6 @@ fn action_button_style(
             ..Default::default()
         }
     }
-}
-
-fn icon_badge<'a, Message: 'a>(
-    icon: &'static str,
-    tone: MenuTone,
-    enabled: bool,
-) -> Element<'a, Message> {
-    let badge_tone = if enabled {
-        match tone {
-            MenuTone::Neutral => BadgeTone::Neutral,
-            MenuTone::Accent => BadgeTone::Accent,
-            MenuTone::Danger => BadgeTone::Danger,
-        }
-    } else {
-        BadgeTone::Neutral
-    };
-
-    Container::new(
-        Text::new(icon)
-            .size(if icon.len() > 1 { 8 } else { 10 })
-            .color(if enabled {
-                theme::darcula::TEXT_PRIMARY
-            } else {
-                theme::darcula::TEXT_DISABLED
-            }),
-    )
-    .width(Length::Fixed(24.0))
-    .height(Length::Fixed(18.0))
-    .center_x(Length::Fill)
-    .center_y(Length::Fill)
-    .style(theme::badge_style(badge_tone))
-    .into()
 }
 
 fn group_title_color(tone: MenuTone) -> Color {

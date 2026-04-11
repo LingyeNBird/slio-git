@@ -60,19 +60,21 @@ pub mod worktree;
 pub use branch::Branch;
 pub use commit::{
     amend_commit, create_commit, create_signature, get_commit, get_default_signature,
-    load_recent_messages, save_recent_message, validate_commit_ref, CommitInfo,
+    get_commit_changed_files, load_recent_messages, save_recent_message, validate_commit_ref,
+    CommitChangeStatus, CommitChangedFile, CommitInfo,
 };
 pub use commit_actions::{
     abort_in_progress_commit_action, cherry_pick_commit, continue_in_progress_commit_action,
     drop_commit_from_history, edit_commit_message, export_commit_patch, fixup_commit_to_previous,
     get_in_progress_commit_action, push_current_branch_to_commit, reset_current_branch_to_commit,
     resolve_push_current_branch_target, revert_commit, squash_commit_to_previous,
-    uncommit_to_commit, InProgressCommitAction, InProgressCommitActionKind, ResetMode,
-    PushCurrentBranchTarget, RewriteExecution,
+    uncommit_to_commit, InProgressCommitAction, InProgressCommitActionKind,
+    PushCurrentBranchTarget, ResetMode, RewriteExecution,
 };
 pub use diff::{
-    auto_merge_conflict, build_full_file_diff, diff_file_to_index, diff_index_to_head,
-    diff_ref_to_workdir, diff_refs, file_is_binary, get_conflict_diff, resolve_conflict,
+    auto_merge_conflict, build_full_file_diff, compute_inline_changes, diff_commits,
+    diff_file_to_index, diff_index_to_head, diff_ref_to_workdir, diff_refs,
+    diff_workdir_to_index, file_is_binary, get_conflict_diff, resolve_conflict,
     resolve_conflict_hunk, AutoMergeResult, ConflictHunk, ConflictHunkType, ConflictLine,
     ConflictLineType, ConflictResolution, Diff, DiffHunk, DiffLine, DiffLineOrigin, FileDiff,
     FullFilePreview, InlineChangeSpan, MergeChunk, MergeChunkType, MergeEditorModel, ThreeWayDiff,
@@ -83,8 +85,8 @@ pub use history::{
     get_history_for_ref, search_history, HistoryEntry,
 };
 pub use index::{
-    get_file_hunks, stage_hunk, unstage_hunk, Change, ChangeStatus, Hunk, HunkLine, Index,
-    IndexEntry,
+    discard_file, get_file_hunks, get_status, stage_file, stage_hunk, unstage_file, unstage_hunk,
+    Change, ChangeStatus, Hunk, HunkLine, Index, IndexEntry,
 };
 pub use rebase::{
     get_current_rebase_step, get_rebase_status, get_rebase_todo, has_rebase_conflicts,

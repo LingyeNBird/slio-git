@@ -57,6 +57,19 @@ impl TestRepo {
         fs::write(&path, content)
     }
 
+    /// Get the name of the current (default) branch
+    pub fn default_branch(&self) -> String {
+        let output = std::process::Command::new("git")
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+            .current_dir(self.path())
+            .output()
+            .expect("failed to get default branch");
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .trim()
+            .to_string()
+    }
+
     /// Add a file and create a commit
     pub fn add_and_commit(
         &self,

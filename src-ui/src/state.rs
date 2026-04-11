@@ -11,7 +11,7 @@ use crate::views::{
     tag_dialog::TagDialogState,
 };
 use crate::widgets::conflict_resolver::ConflictResolver;
-use crate::widgets::diff_editor::SplitDiffEditorState;
+use crate::widgets::diff_editor::{SplitDiffEditorState, UnifiedDiffEditorState};
 use git_core::diff::{AutoMergeResult, Diff, EditorDiffModel, ThreeWayDiff};
 use git_core::index::Change;
 use git_core::remote::RemoteInfo;
@@ -112,9 +112,64 @@ pub enum DiffPresentation {
     Split,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiffSource {
+    Workspace,
+    HistoryCommit { commit_id: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoryCommitDiffPopupState {
+    pub commit_id: String,
+    pub file_path: String,
+    pub diff: Diff,
+    pub diff_presentation: DiffPresentation,
+    pub selected_hunk_index: Option<usize>,
+    pub editor_diff: Option<EditorDiffModel>,
+    pub split_diff_editor: Option<SplitDiffEditorState>,
+    pub unified_diff_editor: Option<UnifiedDiffEditorState>,
+}
+
+impl HistoryCommitDiffPopupState {
+    pub fn new(
+        commit_id: String,
+        file_path: String,
+        diff: Diff,
+        editor_diff: Option<EditorDiffModel>,
+        font_size: f32,
+    ) -> Self {
+        let split_diff_editor = editor_diff
+            .clone()
+            .map(|model| SplitDiffEditorState::with_font_size(model, font_size));
+        let unified_diff_editor = (!diff.files.is_empty())
+            .then(|| UnifiedDiffEditorState::from_diff(&diff, font_size));
+        let selected_hunk_index = diff
+            .files
+            .iter()
+            .map(|file| file.hunks.len())
+            .sum::<usize>()
+            .checked_sub(1)
+            .map(|_| 0);
+
+        Self {
+            commit_id,
+            file_path,
+            diff,
+            diff_presentation: DiffPresentation::Unified,
+            selected_hunk_index,
+            editor_diff,
+            split_diff_editor,
+            unified_diff_editor,
+        }
+    }
+
+    pub fn supports_split_diff(&self) -> bool {
+        self.editor_diff.is_some() && self.split_diff_editor.is_some()
+    }
+}
+
 const MAX_PROJECT_HISTORY: usize = 8;
 const WORKSPACE_MEMORY_FILE: &str = "workspace-memory-v1.txt";
-const AUTO_WORKSPACE_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 const AUTO_REMOTE_CHECK_INTERVAL: Duration = Duration::from_secs(90);
 const TOAST_NOTIFICATION_DURATION: Duration = Duration::from_secs(4);
 
@@ -476,6 +531,7 @@ pub struct AppState {
     pub staged_changes: Vec<Change>,
     pub unstaged_changes: Vec<Change>,
     pub untracked_files: Vec<Change>,
+    pub conflicts_present: bool,
     pub conflict_files: Vec<ThreeWayDiff>,
     pub selected_conflict_index: Option<usize>,
     pub conflict_merge_index: Option<usize>,
@@ -484,6 +540,7 @@ pub struct AppState {
     pub show_diff: bool,
     pub current_diff: Option<Diff>,
     pub diff_presentation: DiffPresentation,
+    pub diff_source: DiffSource,
     pub selected_change_path: Option<String>,
     pub selected_hunk_index: Option<usize>,
     pub change_context_menu_path: Option<String>,
@@ -494,6 +551,7 @@ pub struct AppState {
     /// Top-level pending commit action confirmation (reset/push/cherry-pick/revert)
     pub pending_commit_action: Option<CommitActionConfirmation>,
     pub history_view: HistoryState,
+    pub history_commit_diff_popup: Option<HistoryCommitDiffPopupState>,
     pub remote_dialog: RemoteDialogState,
     pub tag_dialog: TagDialogState,
     pub stash_panel: StashPanelState,
@@ -562,6 +620,7 @@ pub enum PullStrategy {
 
 #[derive(Debug, Clone, Default)]
 struct AutoRefreshState {
+    workspace_refresh_pending: bool,
     last_workspace_refresh_at: Option<Instant>,
     last_remote_check_at: Option<Instant>,
     remote_check_in_flight_for: Option<PathBuf>,
@@ -598,6 +657,7 @@ impl AppState {
             staged_changes: Vec::new(),
             unstaged_changes: Vec::new(),
             untracked_files: Vec::new(),
+            conflicts_present: false,
             conflict_files: Vec::new(),
             selected_conflict_index: None,
             conflict_merge_index: None,
@@ -606,6 +666,7 @@ impl AppState {
             show_diff: false,
             current_diff: None,
             diff_presentation: DiffPresentation::Unified,
+            diff_source: DiffSource::Workspace,
             selected_change_path: None,
             selected_hunk_index: None,
             change_context_menu_path: None,
@@ -615,6 +676,7 @@ impl AppState {
             branch_popup: BranchPopupState::default(),
             pending_commit_action: None,
             history_view: HistoryState::default(),
+            history_commit_diff_popup: None,
             remote_dialog: RemoteDialogState::default(),
             tag_dialog: TagDialogState::default(),
             stash_panel: StashPanelState::default(),
@@ -781,9 +843,11 @@ impl AppState {
         }
         self.show_diff = false;
         self.current_diff = None;
+        self.diff_source = DiffSource::Workspace;
         self.editor_diff = None;
         self.split_diff_editor = None;
         self.unified_diff_editor = None;
+        self.history_commit_diff_popup = None;
         self.selected_hunk_index = None;
         self.change_context_menu_path = None;
         self.change_context_menu_cursor = Point::new(0.0, 0.0);
@@ -859,9 +923,11 @@ impl AppState {
         self.conflict_resolver = None;
         self.show_diff = false;
         self.current_diff = None;
+        self.diff_source = DiffSource::Workspace;
         self.editor_diff = None;
         self.split_diff_editor = None;
         self.unified_diff_editor = None;
+        self.history_commit_diff_popup = None;
         self.diff_presentation = DiffPresentation::Unified;
         self.selected_change_path = None;
         self.toolbar_remote_menu = None;
@@ -877,6 +943,16 @@ impl AppState {
 
     pub fn open_auxiliary_view(&mut self, view: AuxiliaryView) {
         self.close_toolbar_remote_menu();
+        self.close_history_commit_diff_popup();
+        if view == AuxiliaryView::Branches {
+            self.auxiliary_view = None;
+            self.show_branch_dropdown = true;
+            self.view_mode = ViewMode::Repository;
+            self.sync_shell_state();
+            return;
+        }
+
+        self.show_branch_dropdown = false;
         self.auxiliary_view = Some(view);
         self.view_mode = ViewMode::Repository;
         self.sync_shell_state();
@@ -884,13 +960,17 @@ impl AppState {
 
     pub fn close_auxiliary_view(&mut self) {
         self.close_toolbar_remote_menu();
+        self.close_history_commit_diff_popup();
         self.auxiliary_view = None;
+        self.show_branch_dropdown = false;
         self.sync_shell_state();
     }
 
     pub fn switch_git_tool_window_tab(&mut self, tab: GitToolWindowTab) {
         self.close_toolbar_remote_menu();
+        self.close_history_commit_diff_popup();
         self.auxiliary_view = None;
+        self.show_branch_dropdown = false;
         self.shell.git_tool_window_tab = tab;
         self.sync_shell_state();
     }
@@ -1253,23 +1333,29 @@ impl AppState {
                         .filter(|change| change.status == git_core::index::ChangeStatus::Untracked)
                         .cloned()
                         .collect();
+                    self.conflicts_present = changes
+                        .iter()
+                        .any(|change| change.status == git_core::index::ChangeStatus::Conflict);
 
                     if let Some(path) = self.selected_change_path.clone() {
-                        let still_exists = changes.iter().any(|change| change.path == path);
-                        if still_exists {
-                            if let Err(error) = self.load_diff_for_file(&path) {
-                                self.set_error(error);
+                        if self.diff_source == DiffSource::Workspace {
+                            let still_exists = changes.iter().any(|change| change.path == path);
+                            if still_exists {
+                                if let Err(error) = self.load_diff_for_file(&path) {
+                                    self.set_error(error);
+                                }
+                            } else {
+                                self.selected_change_path = None;
+                                self.show_diff = false;
+                                self.current_diff = None;
+                                self.diff_source = DiffSource::Workspace;
+                                self.editor_diff = None;
+                                self.split_diff_editor = None;
+                                self.unified_diff_editor = None;
+                                self.selected_hunk_index = None;
+                                self.change_context_menu_path = None;
+                                self.change_context_menu_anchor = None;
                             }
-                        } else {
-                            self.selected_change_path = None;
-                            self.show_diff = false;
-                            self.current_diff = None;
-                            self.editor_diff = None;
-                            self.split_diff_editor = None;
-        self.unified_diff_editor = None;
-                            self.selected_hunk_index = None;
-                            self.change_context_menu_path = None;
-                            self.change_context_menu_anchor = None;
                         }
                     }
 
@@ -1294,28 +1380,11 @@ impl AppState {
     }
 
     fn sync_commit_dialog_state(&mut self) {
-        let Some(repo) = self.current_repository.as_ref() else {
+        if self.current_repository.is_none() {
             return;
-        };
-
-        let mut diff = git_core::diff::Diff {
-            files: Vec::new(),
-            total_additions: 0,
-            total_deletions: 0,
-        };
-
-        for change in &self.staged_changes {
-            if let Ok(file_diff) = git_core::diff::diff_index_to_head(repo, Path::new(&change.path))
-                .or_else(|_| git_core::diff::diff_file_to_index(repo, Path::new(&change.path)))
-            {
-                diff.total_additions += file_diff.total_additions;
-                diff.total_deletions += file_diff.total_deletions;
-                diff.files.extend(file_diff.files);
-            }
         }
 
         self.commit_dialog.staged_files = self.staged_changes.clone();
-        self.commit_dialog.diff = diff;
         self.commit_dialog
             .selected_files
             .retain(|path| self.staged_changes.iter().any(|c| &c.path == path));
@@ -1380,11 +1449,7 @@ impl AppState {
     }
 
     pub fn has_conflicts(&self) -> bool {
-        if let Some(repo) = &self.current_repository {
-            git_core::index::has_conflicts(repo)
-        } else {
-            false
-        }
+        self.conflicts_present
     }
 
     pub fn load_conflicts(&mut self) -> Result<(), String> {
@@ -1410,6 +1475,7 @@ impl AppState {
             }
 
             if !self.conflict_files.is_empty() {
+                self.conflicts_present = true;
                 self.selected_conflict_index = previous_selected_path
                     .as_ref()
                     .and_then(|path| {
@@ -1425,6 +1491,7 @@ impl AppState {
                 });
                 self.sync_selected_conflict_resolver();
             } else {
+                self.conflicts_present = false;
                 self.selected_conflict_index = None;
                 self.conflict_merge_index = None;
                 self.conflict_resolver = None;
@@ -1606,8 +1673,30 @@ impl AppState {
         };
     }
 
+    pub fn open_history_commit_diff_popup(
+        &mut self,
+        commit_id: String,
+        file_path: String,
+        diff: Diff,
+        editor_diff: Option<EditorDiffModel>,
+    ) {
+        self.history_view.selected_commit_file_path = Some(file_path.clone());
+        self.history_commit_diff_popup = Some(HistoryCommitDiffPopupState::new(
+            commit_id,
+            file_path,
+            diff,
+            editor_diff,
+            self.git_settings.editor_font_size_f32(),
+        ));
+    }
+
+    pub fn close_history_commit_diff_popup(&mut self) {
+        self.history_commit_diff_popup = None;
+    }
+
     pub fn select_change(&mut self, path: String) -> Result<(), String> {
         self.selected_change_path = Some(path.clone());
+        self.diff_source = DiffSource::Workspace;
         self.shell.active_section = ShellSection::Changes;
         self.view_mode = ViewMode::Repository;
         self.full_file_preview = None;
@@ -1659,6 +1748,7 @@ impl AppState {
             };
 
             self.current_diff = Some(diff);
+            self.diff_source = DiffSource::Workspace;
             self.selected_hunk_index = Some(0);
             self.show_diff = true;
             Ok(())
@@ -1694,7 +1784,7 @@ impl AppState {
     }
 }
 
-fn compute_hunk_offset(diff: &git_core::diff::Diff, hunk_index: usize) -> f32 {
+pub(crate) fn compute_hunk_offset(diff: &git_core::diff::Diff, hunk_index: usize) -> f32 {
     const FILE_HEADER_APPROX: f32 = 32.0;
     const FILE_SPACING: f32 = 4.0;
     const HUNK_DIVIDER_HEIGHT: f32 = 18.0;
@@ -1861,12 +1951,14 @@ impl AppState {
 
     fn reset_auxiliary_state(&mut self) {
         self.auxiliary_view = None;
+        self.show_branch_dropdown = false;
         self.toolbar_remote_menu = None;
         self.toast_notification = None;
         self.commit_dialog = CommitDialogState::default();
         self.branch_popup = BranchPopupState::default();
         self.pending_commit_action = None;
         self.history_view = HistoryState::default();
+        self.history_commit_diff_popup = None;
         self.remote_dialog = RemoteDialogState::default();
         self.tag_dialog = TagDialogState::default();
         self.stash_panel = StashPanelState::default();
@@ -1988,13 +2080,11 @@ impl AppState {
     }
 
     pub fn should_auto_refresh_workspace(&self, now: Instant) -> bool {
+        let _ = now;
         self.current_repository.is_some()
             && !self.is_loading
             && !self.auto_refresh_suspended()
-            && self
-                .auto_refresh
-                .last_workspace_refresh_at
-                .is_none_or(|last| now.duration_since(last) >= AUTO_WORKSPACE_REFRESH_INTERVAL)
+            && self.auto_refresh.workspace_refresh_pending
     }
 
     pub fn should_auto_check_remote(&self, now: Instant) -> bool {
@@ -2015,7 +2105,12 @@ impl AppState {
     }
 
     pub fn mark_workspace_refreshed(&mut self, now: Instant) {
+        self.auto_refresh.workspace_refresh_pending = false;
         self.auto_refresh.last_workspace_refresh_at = Some(now);
+    }
+
+    pub fn mark_workspace_refresh_pending(&mut self) {
+        self.auto_refresh.workspace_refresh_pending = true;
     }
 
     pub fn begin_auto_remote_check(&mut self, repo_path: &Path, now: Instant) {
@@ -2085,9 +2180,46 @@ pub fn is_docked_auxiliary_view(_view: AuxiliaryView) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{AppState, PersistedWorkspaceMemory, ProjectEntry, RecoveryAction, ShellSection};
+    use git_core::diff::{Diff, DiffHunk, DiffLine, DiffLineOrigin, FileDiff};
     use std::path::PathBuf;
     use std::time::{Duration, Instant};
     use tempfile::tempdir;
+
+    fn sample_history_file_diff(path: &str) -> Diff {
+        Diff {
+            files: vec![FileDiff {
+                old_path: Some(path.to_string()),
+                new_path: Some(path.to_string()),
+                hunks: vec![DiffHunk {
+                    header: "@@ -1 +1 @@".to_string(),
+                    lines: vec![
+                        DiffLine {
+                            content: "old line\n".to_string(),
+                            origin: DiffLineOrigin::Deletion,
+                            old_lineno: Some(1),
+                            new_lineno: None,
+                            inline_changes: Vec::new(),
+                        },
+                        DiffLine {
+                            content: "new line\n".to_string(),
+                            origin: DiffLineOrigin::Addition,
+                            old_lineno: None,
+                            new_lineno: Some(1),
+                            inline_changes: Vec::new(),
+                        },
+                    ],
+                    old_start: 1,
+                    old_lines: 1,
+                    new_start: 1,
+                    new_lines: 1,
+                }],
+                additions: 1,
+                deletions: 1,
+            }],
+            total_additions: 1,
+            total_deletions: 1,
+        }
+    }
 
     #[test]
     fn remember_project_moves_active_project_to_front() {
@@ -2154,7 +2286,7 @@ mod tests {
         assert!(!state.should_auto_refresh_workspace(now));
         assert!(!state.should_auto_check_remote(now));
 
-        state.auto_refresh.last_workspace_refresh_at = Some(now - Duration::from_secs(3));
+        state.auto_refresh.workspace_refresh_pending = true;
         state.auto_refresh.last_remote_check_at = Some(now - Duration::from_secs(91));
         state.current_repository =
             Some(git_core::Repository::init(&repo_path).expect("repository should initialize"));
@@ -2254,6 +2386,21 @@ mod tests {
             state.shell.git_tool_window_tab,
             super::GitToolWindowTab::Log
         );
+    }
+
+    #[test]
+    fn opening_branches_auxiliary_uses_dropdown_instead_of_legacy_view() {
+        let temp_dir = tempdir().expect("temp dir");
+        let repo =
+            git_core::Repository::init(temp_dir.path()).expect("repository should initialize");
+        let mut state = AppState::new();
+        state.set_repository(repo);
+
+        state.open_auxiliary_view(super::AuxiliaryView::Branches);
+
+        assert!(state.auxiliary_view.is_none());
+        assert!(state.show_branch_dropdown);
+        assert_eq!(state.view_mode, super::ViewMode::Repository);
     }
 
     #[test]
@@ -2361,5 +2508,20 @@ mod tests {
         assert!(tab.path_filter.is_none());
         assert!(tab.selected_commit.is_none());
         assert_eq!(tab.scroll_offset, 0.0);
+    }
+
+    #[test]
+    fn opening_auxiliary_view_closes_history_commit_diff_popup() {
+        let mut state = AppState::new();
+        state.open_history_commit_diff_popup(
+            "abc123".to_string(),
+            "src/main.rs".to_string(),
+            sample_history_file_diff("src/main.rs"),
+            None,
+        );
+
+        state.open_auxiliary_view(super::AuxiliaryView::Settings);
+
+        assert!(state.history_commit_diff_popup.is_none());
     }
 }

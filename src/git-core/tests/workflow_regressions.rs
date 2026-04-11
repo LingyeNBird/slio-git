@@ -6,7 +6,7 @@ use git_core::{
     get_history_for_ref, get_in_progress_commit_action, list_branch_scoped_remotes,
     push_current_branch_to_commit, rebase_start, reset_current_branch_to_commit, resolve_conflict,
     resolve_push_current_branch_target, revert_commit, ConflictResolution,
-    InProgressCommitActionKind, Repository, SyncStatus,
+    InProgressCommitActionKind, Repository, ResetMode, SyncStatus,
 };
 use std::fs;
 use std::path::Path;
@@ -515,7 +515,7 @@ fn reset_current_branch_to_commit_rewinds_head_to_selected_ancestor() {
     git(repo.path(), &["commit", "-m", "second update"]).expect("failed to commit second update");
 
     let repository = Repository::open(repo.path()).expect("failed to reopen repository");
-    reset_current_branch_to_commit(&repository, &reset_target)
+    reset_current_branch_to_commit(&repository, &reset_target, ResetMode::Hard)
         .expect("failed to reset current branch");
 
     let head_after_reset =

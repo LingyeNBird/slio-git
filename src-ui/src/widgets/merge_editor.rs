@@ -281,9 +281,7 @@ impl MergeEditorState {
                 }
                 iced::Task::none()
             }
-            MergeEditorEvent::Editor { pane, message } => {
-                self.handle_editor_event(pane, message)
-            }
+            MergeEditorEvent::Editor { pane, message } => self.handle_editor_event(pane, message),
             MergeEditorEvent::BackToList | MergeEditorEvent::Apply => iced::Task::none(),
         }
     }
@@ -455,24 +453,21 @@ impl MergeEditorState {
             );
             if (target_editor.viewport_scroll() - target_scroll).abs() > 0.5 {
                 self.suppress_sync[pane_index(target_pane)] = true;
-                tasks.push(self.editor(target_pane).scroll_to_offset(None, Some(target_scroll)).map(
-                    move |m| MergeEditorEvent::Editor {
-                        pane: target_pane,
-                        message: m,
-                    },
-                ));
+                tasks.push(
+                    self.editor(target_pane)
+                        .scroll_to_offset(None, Some(target_scroll))
+                        .map(move |m| MergeEditorEvent::Editor {
+                            pane: target_pane,
+                            message: m,
+                        }),
+                );
             }
         }
 
         iced::Task::batch(tasks)
     }
 
-    fn map_anchor(
-        &self,
-        from: MergePane,
-        to: MergePane,
-        anchor: f32,
-    ) -> Option<f32> {
+    fn map_anchor(&self, from: MergePane, to: MergePane, anchor: f32) -> Option<f32> {
         let links = match (from, to) {
             (MergePane::Left, MergePane::Center) | (MergePane::Center, MergePane::Left) => {
                 &self.left_links
@@ -517,8 +512,14 @@ impl MergeEditorState {
                     "返回列表",
                     Some(MergeEditorEvent::BackToList),
                 ))
-                .push(button::compact_ghost("上一处", Some(MergeEditorEvent::PrevChunk)))
-                .push(button::compact_ghost("下一处", Some(MergeEditorEvent::NextChunk)))
+                .push(button::compact_ghost(
+                    "上一处",
+                    Some(MergeEditorEvent::PrevChunk),
+                ))
+                .push(button::compact_ghost(
+                    "下一处",
+                    Some(MergeEditorEvent::NextChunk),
+                ))
                 .push(Space::new().width(Length::Fill))
                 .push(button::compact_ghost(
                     "自动合并",
@@ -576,7 +577,10 @@ impl MergeEditorState {
             .spacing(0)
             .width(Length::Fill)
             .height(Length::Fill)
-            .push(self.pane_view(MergePane::Left).width(Length::FillPortion(5)))
+            .push(
+                self.pane_view(MergePane::Left)
+                    .width(Length::FillPortion(5)),
+            )
             .push(self.link_map_view(LinkMapSide::Left))
             .push(diff_core::center_divider())
             .push(
@@ -665,10 +669,9 @@ impl MergeEditorState {
         .width(Length::Fill)
         .height(Length::Fill);
 
-        let editor_view = editor.view().map(move |m| MergeEditorEvent::Editor {
-            pane,
-            message: m,
-        });
+        let editor_view = editor
+            .view()
+            .map(move |m| MergeEditorEvent::Editor { pane, message: m });
 
         Container::new(Stack::new().push(background).push(editor_view))
             .width(Length::Fill)
@@ -778,7 +781,10 @@ impl<Message> canvas::Program<Message> for MergeDecorationCanvas {
     ) -> Vec<canvas::Geometry> {
         let key = (
             (self.viewport_scroll * 0.5).round() as i32,
-            self.active_range.as_ref().map(|r| r.start as i32).unwrap_or(-1),
+            self.active_range
+                .as_ref()
+                .map(|r| r.start as i32)
+                .unwrap_or(-1),
             bounds.width as i32,
         );
         if state.key.get() != Some(key) {
@@ -1007,11 +1013,11 @@ impl<Message> canvas::Program<Message> for MergeOverviewCanvas {
             let total = self.total_lines.max(1) as f32;
             for block in self.blocks.iter() {
                 let y = block.range.start as f32 / total * drawable_height;
-                let height =
-                    (((block.range.end.max(block.range.start + 1) - block.range.start) as f32
-                        / total)
-                        * drawable_height)
-                        .max(MIN_OVERVIEW_BLOCK_HEIGHT);
+                let height = (((block.range.end.max(block.range.start + 1) - block.range.start)
+                    as f32
+                    / total)
+                    * drawable_height)
+                    .max(MIN_OVERVIEW_BLOCK_HEIGHT);
                 let color = merge_overview_fill(block.chunk_type, block.resolved);
 
                 frame.fill_rectangle(
@@ -1029,10 +1035,7 @@ impl<Message> canvas::Program<Message> for MergeOverviewCanvas {
                 Point::new(0.5, viewport_y),
                 Size::new(bounds.width - 1.0, viewport_height),
             );
-            frame.fill(
-                &vp_rect,
-                theme::darcula::TEXT_PRIMARY.scale_alpha(0.08),
-            );
+            frame.fill(&vp_rect, theme::darcula::TEXT_PRIMARY.scale_alpha(0.08));
             frame.stroke(
                 &vp_rect,
                 canvas::Stroke::default()
@@ -1049,7 +1052,10 @@ impl<Message> canvas::Program<Message> for MergeOverviewCanvas {
 // Builder functions
 // ═══════════════════════════════════════
 
-fn assemble_center_text(model: &MergeEditorModel, resolutions: &[Option<ChunkResolution>]) -> String {
+fn assemble_center_text(
+    model: &MergeEditorModel,
+    resolutions: &[Option<ChunkResolution>],
+) -> String {
     let mut lines: Vec<String> = Vec::new();
 
     for (i, chunk) in model.chunks.iter().enumerate() {

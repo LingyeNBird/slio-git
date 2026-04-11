@@ -25,7 +25,7 @@ fn stage_file_adds_to_index() {
     git_core::stage_file(&r, Path::new("new_file.txt")).unwrap();
 
     // Verify it's staged
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
     let staged = changes
         .iter()
         .find(|c| c.path == "new_file.txt" && c.staged);
@@ -44,7 +44,7 @@ fn unstage_file_removes_from_index() {
     git_core::stage_file(&r, Path::new("staged.txt")).unwrap();
 
     // Verify it's staged
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
     let staged = changes.iter().find(|c| c.path == "staged.txt" && c.staged);
     assert!(staged.is_some(), "file should be staged initially");
 
@@ -52,7 +52,7 @@ fn unstage_file_removes_from_index() {
     git_core::unstage_file(&r, Path::new("staged.txt")).unwrap();
 
     // Verify it's unstaged (untracked)
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
     let unstaged = changes.iter().find(|c| c.path == "staged.txt" && !c.staged);
     assert!(unstaged.is_some(), "file should be unstaged");
 }
@@ -69,7 +69,7 @@ fn stage_modified_file_updates_index() {
     let r = Repository::discover(repo.path()).unwrap();
 
     // Verify unstaged change exists
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
     let unstaged = changes.iter().find(|c| c.path == "file.txt" && !c.staged);
     assert!(unstaged.is_some(), "should have unstaged changes");
 
@@ -77,7 +77,7 @@ fn stage_modified_file_updates_index() {
     git_core::stage_file(&r, Path::new("file.txt")).unwrap();
 
     // Verify it's staged
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
     let staged = changes.iter().find(|c| c.path == "file.txt" && c.staged);
     assert!(staged.is_some(), "modified file should be staged");
 }
@@ -94,17 +94,17 @@ fn discard_file_changes_restores_original() {
     let r = Repository::discover(repo.path()).unwrap();
 
     // Verify unstaged change exists
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
     assert!(
         changes.iter().any(|c| c.path == "file.txt"),
         "should have changes"
     );
 
     // Discard changes
-    git_core::discard_file_changes(&r, Path::new("file.txt")).unwrap();
+    git_core::discard_file(&r, Path::new("file.txt")).unwrap();
 
     // Verify no changes and file restored
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
     assert!(
         !changes.iter().any(|c| c.path == "file.txt"),
         "should have no changes"
@@ -125,7 +125,7 @@ fn get_changes_detects_untracked_files() {
         .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
 
     let untracked = changes.iter().find(|c| c.path == "untracked.txt");
     assert!(untracked.is_some(), "should detect untracked file");
@@ -145,7 +145,7 @@ fn get_changes_detects_deleted_files() {
     std::fs::remove_file(repo.path().join("file.txt")).unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
-    let changes = git_core::get_changes(&r).unwrap();
+    let changes = git_core::get_status(&r).unwrap();
 
     let deleted = changes.iter().find(|c| c.path == "file.txt");
     assert!(deleted.is_some(), "should detect deleted file");
@@ -188,7 +188,7 @@ fn diff_index_to_head_detects_staged_changes() {
     let r = Repository::discover(repo.path()).unwrap();
     git_core::stage_file(&r, Path::new("file.txt")).unwrap();
 
-    let diff = git_core::diff_index_to_head(&r).unwrap();
+    let diff = git_core::diff_index_to_head(&r, Path::new("file.txt")).unwrap();
 
     assert!(!diff.files.is_empty(), "should have staged diff");
 }
@@ -243,6 +243,8 @@ fn diff_refs_shows_changes_between_branches() {
     repo.add_and_commit("file.txt", "main content", "main commit")
         .unwrap();
 
+    let default_branch = repo.default_branch();
+
     // Create and switch to feature branch
     std::process::Command::new("git")
         .args(["checkout", "-b", "feature"])
@@ -254,7 +256,7 @@ fn diff_refs_shows_changes_between_branches() {
         .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
-    let diff = git_core::diff_refs(&r, "main", "feature").unwrap();
+    let diff = git_core::diff_refs(&r, &default_branch, "feature").unwrap();
 
     assert!(!diff.files.is_empty(), "should have diff between branches");
 }
@@ -270,13 +272,19 @@ fn compute_inline_changes_detects_character_diffs() {
     let r = Repository::discover(repo.path()).unwrap();
     let diff = git_core::diff_workdir_to_index(&r).unwrap();
 
-    // Compute inline changes for the first hunk
+    // Compute inline changes for a deletion/addition pair
     if let Some(file) = diff.files.first() {
         if let Some(hunk) = file.hunks.first() {
-            if let Some(line) = hunk.lines.first() {
-                let spans = git_core::compute_inline_changes(line);
+            let deletions: Vec<_> = hunk.lines.iter()
+                .filter(|l| l.origin == git_core::DiffLineOrigin::Deletion)
+                .collect();
+            let additions: Vec<_> = hunk.lines.iter()
+                .filter(|l| l.origin == git_core::DiffLineOrigin::Addition)
+                .collect();
+            if let (Some(del), Some(add)) = (deletions.first(), additions.first()) {
+                let (old_spans, new_spans) = git_core::compute_inline_changes(&del.content, &add.content);
                 // Should have some spans marked as changed
-                assert!(!spans.is_empty(), "should have inline change spans");
+                assert!(!old_spans.is_empty() || !new_spans.is_empty(), "should have inline change spans");
             }
         }
     }
@@ -336,13 +344,14 @@ fn validate_commit_ref_accepts_short_hash() {
 #[test]
 fn validate_commit_ref_accepts_branch_name() {
     let repo = TestRepo::new().unwrap();
-    repo.add_and_commit("file.txt", "content", "main commit")
+    repo.add_and_commit("file.txt", "content", "branch commit")
         .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
+    let branch = repo.default_branch();
 
-    let (hash, summary) = git_core::validate_commit_ref(&r, "main").unwrap();
-    assert_eq!(summary, "main commit");
+    let (hash, summary) = git_core::validate_commit_ref(&r, &branch).unwrap();
+    assert_eq!(summary, "branch commit");
     assert!(!hash.is_empty());
 }
 
@@ -359,7 +368,7 @@ fn get_commit_returns_full_info() {
     let commit = git_core::get_commit(&r, commit_id).unwrap();
 
     assert_eq!(commit.id, *commit_id);
-    assert_eq!(commit.message, "test commit");
+    assert_eq!(commit.message.trim(), "test commit");
     assert_eq!(commit.author_name, "Codex Test");
     assert_eq!(commit.author_email, "codex@example.com");
 }
@@ -395,6 +404,8 @@ fn compute_graph_handles_merge_commits() {
     repo.add_and_commit("file.txt", "main 2", "main commit 2")
         .unwrap();
 
+    let default_branch = repo.default_branch();
+
     // Create feature branch
     std::process::Command::new("git")
         .args(["checkout", "-b", "feature"])
@@ -404,9 +415,9 @@ fn compute_graph_handles_merge_commits() {
     repo.add_and_commit("feature.txt", "feature content", "feature commit")
         .unwrap();
 
-    // Merge feature into main
+    // Merge feature into default branch
     std::process::Command::new("git")
-        .args(["checkout", "main"])
+        .args(["checkout", &default_branch])
         .current_dir(repo.path())
         .output()
         .unwrap();
@@ -439,6 +450,8 @@ fn compute_graph_assigns_increasing_lanes_for_branches() {
     repo.add_and_commit("file.txt", "main 1", "main commit 1")
         .unwrap();
 
+    let default_branch = repo.default_branch();
+
     // Create feature branch
     std::process::Command::new("git")
         .args(["checkout", "-b", "feature"])
@@ -448,13 +461,20 @@ fn compute_graph_assigns_increasing_lanes_for_branches() {
     repo.add_and_commit("feature.txt", "feature", "feature commit")
         .unwrap();
 
-    // Go back to main and commit
+    // Go back to default branch and commit
     std::process::Command::new("git")
-        .args(["checkout", "main"])
+        .args(["checkout", &default_branch])
         .current_dir(repo.path())
         .output()
         .unwrap();
     repo.add_and_commit("file.txt", "main 2", "main commit 2")
+        .unwrap();
+
+    // Merge feature so all commits are reachable from HEAD
+    std::process::Command::new("git")
+        .args(["merge", "--no-ff", "feature", "-m", "merge feature"])
+        .current_dir(repo.path())
+        .output()
         .unwrap();
 
     let r = Repository::discover(repo.path()).unwrap();
@@ -495,10 +515,12 @@ fn compute_ref_labels_includes_all_ref_types() {
     let labels = git_core::compute_ref_labels(&r).unwrap();
 
     let has_local_branch = labels
-        .iter()
+        .values()
+        .flatten()
         .any(|l| matches!(l.ref_type, git_core::RefType::LocalBranch));
     let has_tag = labels
-        .iter()
+        .values()
+        .flatten()
         .any(|l| matches!(l.ref_type, git_core::RefType::Tag));
 
     assert!(has_local_branch, "should have local branch labels");
@@ -612,7 +634,7 @@ fn submodule_summary_returns_none_for_unchanged_submodule() {
         .current_dir(&submodule_path)
         .output()
         .unwrap();
-    std::process::Command::Command::new("git")
+    std::process::Command::new("git")
         .args(["commit", "-m", "initial"])
         .current_dir(&submodule_path)
         .output()

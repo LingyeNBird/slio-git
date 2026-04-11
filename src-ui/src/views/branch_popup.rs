@@ -98,13 +98,19 @@ pub enum PendingCommitActionKind {
 
 #[derive(Debug, Clone)]
 pub enum PendingCommitAction {
-    CherryPick { commit_id: String },
-    Revert { commit_id: String },
+    CherryPick {
+        commit_id: String,
+    },
+    Revert {
+        commit_id: String,
+    },
     ResetCurrentBranch {
         commit_id: String,
         reset_mode: git_core::ResetMode,
     },
-    PushCurrentBranchToCommit { target: PushCurrentBranchTarget },
+    PushCurrentBranchToCommit {
+        target: PushCurrentBranchTarget,
+    },
 }
 
 impl PendingCommitAction {
@@ -841,7 +847,11 @@ impl BranchPopupState {
         }
     }
 
-    pub fn prepare_cherry_pick_commit(&mut self, repo: &Repository, commit_id: String) -> Option<CommitActionConfirmation> {
+    pub fn prepare_cherry_pick_commit(
+        &mut self,
+        repo: &Repository,
+        commit_id: String,
+    ) -> Option<CommitActionConfirmation> {
         let current_branch = match repo.current_branch() {
             Ok(Some(branch)) => branch,
             Ok(None) => {
@@ -890,7 +900,11 @@ impl BranchPopupState {
         })
     }
 
-    pub fn prepare_revert_commit(&mut self, repo: &Repository, commit_id: String) -> Option<CommitActionConfirmation> {
+    pub fn prepare_revert_commit(
+        &mut self,
+        repo: &Repository,
+        commit_id: String,
+    ) -> Option<CommitActionConfirmation> {
         let current_branch = match repo.current_branch() {
             Ok(Some(branch)) => branch,
             Ok(None) => {
@@ -939,7 +953,11 @@ impl BranchPopupState {
         })
     }
 
-    pub fn prepare_reset_current_branch_to_commit(&mut self, repo: &Repository, commit_id: String) -> Option<CommitActionConfirmation> {
+    pub fn prepare_reset_current_branch_to_commit(
+        &mut self,
+        repo: &Repository,
+        commit_id: String,
+    ) -> Option<CommitActionConfirmation> {
         let current_branch = match repo.current_branch() {
             Ok(Some(branch)) => branch,
             Ok(None) => {
@@ -974,7 +992,11 @@ impl BranchPopupState {
         })
     }
 
-    pub fn prepare_push_current_branch_to_commit(&mut self, repo: &Repository, commit_id: String) -> Option<CommitActionConfirmation> {
+    pub fn prepare_push_current_branch_to_commit(
+        &mut self,
+        repo: &Repository,
+        commit_id: String,
+    ) -> Option<CommitActionConfirmation> {
         match git_core::resolve_push_current_branch_target(repo, &commit_id) {
             Ok(target) => {
                 let mut impact_items = vec![
@@ -1506,21 +1528,13 @@ pub fn view(state: &BranchPopupState) -> Element<'_, BranchPopupMessage> {
         let selected_branch_ref = state.selected_branch_ref();
         if let Some(selected_branch) = selected_branch_ref {
             let overlay = build_commit_context_menu_overlay(state, selected_branch);
-            return stack![
-                base,
-                overlay
-            ]
-            .into();
+            return stack![base, overlay].into();
         }
     }
 
     if state.context_menu_branch.is_some() {
         let overlay = build_branch_context_menu_overlay(state, current_branch);
-        return stack![
-            base,
-            overlay
-        ]
-        .into();
+        return stack![base, overlay].into();
     }
 
     // IDEA-style: Smart checkout confirmation dialog overlay
@@ -2232,12 +2246,7 @@ fn build_selected_branch_panel<'a>(
     selected_branch: Option<&'a Branch>,
 ) -> Element<'a, BranchPopupMessage> {
     let Some(selected_branch) = selected_branch else {
-        return widgets::panel_empty_state(
-            "分支操作",
-            "先从左侧选择一个分支",
-            "",
-            None,
-        );
+        return widgets::panel_empty_state("分支操作", "先从左侧选择一个分支", "", None);
     };
 
     let content = Column::new()
@@ -2387,23 +2396,13 @@ fn build_selected_commit_detail_panel<'a>(
     selected_branch: &'a Branch,
 ) -> Element<'a, BranchPopupMessage> {
     let Some(info) = state.selected_branch_commit_info.as_ref() else {
-        return widgets::panel_empty_state(
-            "提交详情",
-            "还没有选中提交",
-            "",
-            None,
-        );
+        return widgets::panel_empty_state("提交详情", "还没有选中提交", "", None);
     };
-
 
     Container::new(
         Column::new()
             .spacing(theme::spacing::SM)
-            .push(widgets::section_header(
-                "提交详情",
-                "当前选中提交",
-                "",
-            ))
+            .push(widgets::section_header("提交详情", "当前选中提交", ""))
             .push(
                 Row::new()
                     .spacing(theme::spacing::XS)
@@ -2449,13 +2448,11 @@ fn build_selected_commit_detail_panel<'a>(
                 )
                 .height(Length::Fixed(120.0)),
             )
-            .push(
-                button::secondary(
-                    "提交动作 ···",
-                    (!state.is_loading)
-                        .then_some(BranchPopupMessage::OpenCommitContextMenu(info.id.clone())),
-                ),
-            ),
+            .push(button::secondary(
+                "提交动作 ···",
+                (!state.is_loading)
+                    .then_some(BranchPopupMessage::OpenCommitContextMenu(info.id.clone())),
+            )),
     )
     .padding([8, 10])
     .style(theme::panel_style(Surface::Panel))
@@ -2504,9 +2501,21 @@ pub fn build_pending_commit_action_dialog<'a>(
                             .size(theme::typography::BODY_SIZE)
                             .color(theme::darcula::TEXT_SECONDARY),
                     )
-                    .push(reset_mode_button("Soft", git_core::ResetMode::Soft, current))
-                    .push(reset_mode_button("Mixed", git_core::ResetMode::Mixed, current))
-                    .push(reset_mode_button("Hard", git_core::ResetMode::Hard, current))
+                    .push(reset_mode_button(
+                        "Soft",
+                        git_core::ResetMode::Soft,
+                        current,
+                    ))
+                    .push(reset_mode_button(
+                        "Mixed",
+                        git_core::ResetMode::Mixed,
+                        current,
+                    ))
+                    .push(reset_mode_button(
+                        "Hard",
+                        git_core::ResetMode::Hard,
+                        current,
+                    ))
                     .into(),
             )
         } else {
@@ -2535,13 +2544,11 @@ pub fn build_pending_commit_action_dialog<'a>(
                     .spacing(theme::spacing::SM)
                     .push(button::warning(
                         "继续执行",
-                        (!is_loading)
-                            .then_some(BranchPopupMessage::ConfirmPendingCommitAction),
+                        (!is_loading).then_some(BranchPopupMessage::ConfirmPendingCommitAction),
                     ))
                     .push(button::ghost(
                         "取消",
-                        (!is_loading)
-                            .then_some(BranchPopupMessage::CancelPendingCommitAction),
+                        (!is_loading).then_some(BranchPopupMessage::CancelPendingCommitAction),
                     )),
             ),
     )

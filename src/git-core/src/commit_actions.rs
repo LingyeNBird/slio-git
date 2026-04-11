@@ -657,7 +657,10 @@ pub fn reset_current_branch_to_commit(
     commit_id: &str,
     mode: ResetMode,
 ) -> Result<(), GitError> {
-    info!("Resetting current branch to '{}' (mode: {:?})", commit_id, mode);
+    info!(
+        "Resetting current branch to '{}' (mode: {:?})",
+        commit_id, mode
+    );
 
     // Only hard reset requires clean worktree
     if mode == ResetMode::Hard {

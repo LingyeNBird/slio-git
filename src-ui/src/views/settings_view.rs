@@ -1,8 +1,8 @@
 //! Git settings view — matches IDEA's Version Control > Git settings panel.
 
 use crate::theme::{self, Surface};
-use crate::widgets::{button, scrollable, text_input};
 use crate::widgets;
+use crate::widgets::{button, scrollable, text_input};
 use iced::widget::{Column, Container, Row, Space, Text};
 use iced::{Alignment, Element, Length};
 

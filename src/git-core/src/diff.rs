@@ -155,6 +155,48 @@ pub fn diff_refs(repo: &Repository, old_ref: &str, new_ref: &str) -> Result<Diff
     extract_diff_info(&diff)
 }
 
+/// Get diff for a commit compared with its first parent.
+pub fn diff_commit_against_parent(repo: &Repository, commit_id: &str) -> Result<Diff, GitError> {
+    let repo_lock = repo.inner.read().unwrap();
+
+    let commit_oid = git2::Oid::from_str(commit_id).map_err(|_| GitError::CommitNotFound {
+        id: commit_id.to_string(),
+    })?;
+    let commit = repo_lock
+        .find_commit(commit_oid)
+        .map_err(|_| GitError::CommitNotFound {
+            id: commit_id.to_string(),
+        })?;
+
+    let commit_tree = commit.tree().map_err(|e| GitError::OperationFailed {
+        operation: "diff_commit_against_parent".to_string(),
+        details: e.to_string(),
+    })?;
+
+    let parent_tree = if commit.parent_count() == 0 {
+        None
+    } else {
+        Some(
+            commit
+                .parent(0)
+                .and_then(|parent| parent.tree())
+                .map_err(|e| GitError::OperationFailed {
+                    operation: "diff_commit_against_parent".to_string(),
+                    details: e.to_string(),
+                })?,
+        )
+    };
+
+    let diff = repo_lock
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), None)
+        .map_err(|e| GitError::OperationFailed {
+            operation: "diff_commit_against_parent".to_string(),
+            details: e.to_string(),
+        })?;
+
+    extract_diff_info(&diff)
+}
+
 /// Get diff between a ref and the current working tree, including staged changes.
 pub fn diff_ref_to_workdir(repo: &Repository, ref_spec: &str) -> Result<Diff, GitError> {
     let repo_lock = repo.inner.read().unwrap();
@@ -1294,24 +1336,11 @@ pub fn build_editor_diff_model(
         return Ok(None);
     }
 
-    let left_text = String::from_utf8_lossy(&old_bytes).to_string();
-    let right_text = String::from_utf8_lossy(&new_bytes).to_string();
-    let line_map = build_editor_line_map(&left_text, &right_text);
-    let hunks = file_diff
-        .hunks
-        .iter()
-        .enumerate()
-        .map(|(id, hunk)| build_editor_hunk(id, hunk))
-        .collect();
-
-    Ok(Some(EditorDiffModel {
-        left_text,
-        right_text,
-        hunks,
-        line_map,
-        old_path: file_diff.old_path.clone(),
-        new_path: file_diff.new_path.clone(),
-    }))
+    Ok(build_editor_diff_model_from_file_contents(
+        file_diff,
+        &old_bytes,
+        &new_bytes,
+    ))
 }
 
 fn text_bytes_should_fallback(bytes: &[u8]) -> bool {
@@ -1350,6 +1379,68 @@ fn read_index_bytes(repo: &Repository, file_path: &Path) -> Option<Vec<u8>> {
 fn read_workdir_bytes(repo: &Repository, file_path: &Path) -> Option<Vec<u8>> {
     let abs_path = workdir_file_path(repo, file_path);
     std::fs::read(abs_path).ok()
+}
+
+pub fn read_file_bytes_at_commit(
+    repo: &Repository,
+    commit_id: &str,
+    file_path: &Path,
+) -> Result<Option<Vec<u8>>, GitError> {
+    let repo_lock = repo.inner.read().unwrap();
+    let oid = git2::Oid::from_str(commit_id).map_err(|_| GitError::CommitNotFound {
+        id: commit_id.to_string(),
+    })?;
+    let commit = repo_lock
+        .find_commit(oid)
+        .map_err(|_| GitError::CommitNotFound {
+            id: commit_id.to_string(),
+        })?;
+    let tree = commit.tree().map_err(|e| GitError::OperationFailed {
+        operation: "read_file_bytes_at_commit".to_string(),
+        details: e.to_string(),
+    })?;
+    let Ok(entry) = tree.get_path(file_path) else {
+        return Ok(None);
+    };
+    let blob = repo_lock
+        .find_blob(entry.id())
+        .map_err(|e| GitError::OperationFailed {
+            operation: "read_file_bytes_at_commit".to_string(),
+            details: e.to_string(),
+        })?;
+    Ok(Some(blob.content().to_vec()))
+}
+
+pub fn build_editor_diff_model_from_file_contents(
+    file_diff: &FileDiff,
+    old_bytes: &[u8],
+    new_bytes: &[u8],
+) -> Option<EditorDiffModel> {
+    if file_diff.hunks.is_empty()
+        || text_bytes_should_fallback(old_bytes)
+        || text_bytes_should_fallback(new_bytes)
+    {
+        return None;
+    }
+
+    let left_text = String::from_utf8_lossy(old_bytes).to_string();
+    let right_text = String::from_utf8_lossy(new_bytes).to_string();
+    let line_map = build_editor_line_map(&left_text, &right_text);
+    let hunks = file_diff
+        .hunks
+        .iter()
+        .enumerate()
+        .map(|(id, hunk)| build_editor_hunk(id, hunk))
+        .collect();
+
+    Some(EditorDiffModel {
+        left_text,
+        right_text,
+        hunks,
+        line_map,
+        old_path: file_diff.old_path.clone(),
+        new_path: file_diff.new_path.clone(),
+    })
 }
 
 fn build_editor_line_map(old_text: &str, new_text: &str) -> Vec<EditorLineMapEntry> {
@@ -1979,7 +2070,10 @@ impl ThreeWayDiff {
         let ours_lines: Vec<&str> = self.ours_content.lines().collect();
         let theirs_lines: Vec<&str> = self.theirs_content.lines().collect();
         let base_lines: Vec<&str> = self.base_content.lines().collect();
-        let max_lines = ours_lines.len().max(theirs_lines.len()).max(base_lines.len());
+        let max_lines = ours_lines
+            .len()
+            .max(theirs_lines.len())
+            .max(base_lines.len());
 
         let mut chunks: Vec<MergeChunk> = Vec::new();
         let mut chunk_id = 0usize;

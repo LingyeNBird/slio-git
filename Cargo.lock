@@ -4470,6 +4470,7 @@ dependencies = [
  "iced",
  "iced-code-editor",
  "log",
+ "notify",
  "num_cpus",
  "once_cell",
  "open",

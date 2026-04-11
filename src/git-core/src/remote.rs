@@ -302,12 +302,13 @@ pub fn push(
             remote: remote_name.to_string(),
             details: e.to_string(),
         })?;
-        let mut remote = repo_lock
-            .find_remote(remote_name)
-            .map_err(|e| GitError::RemoteFailed {
-                remote: remote_name.to_string(),
-                details: e.to_string(),
-            })?;
+        let mut remote =
+            repo_lock
+                .find_remote(remote_name)
+                .map_err(|e| GitError::RemoteFailed {
+                    remote: remote_name.to_string(),
+                    details: e.to_string(),
+                })?;
 
         let mut callbacks = build_remote_callbacks(config, credentials);
         callbacks.push_update_reference(|refname, msg| {

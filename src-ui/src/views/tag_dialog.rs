@@ -269,13 +269,11 @@ fn build_tag_form(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
             &state.tag_name,
             TagDialogMessage::SetTagName,
         ))
-        .push(
-            widgets::compact_checkbox(
-                state.is_force,
-                "强制覆盖已有标签",
-                TagDialogMessage::SetForceTag,
-            ),
-        )
+        .push(widgets::compact_checkbox(
+            state.is_force,
+            "强制覆盖已有标签",
+            TagDialogMessage::SetForceTag,
+        ))
         .push(
             Row::new()
                 .spacing(theme::spacing::XS)
@@ -314,13 +312,11 @@ fn build_tag_form(state: &TagDialogState) -> Element<'_, TagDialogMessage> {
             &state.message,
             TagDialogMessage::SetMessage,
         ))
-        .push(
-            widgets::compact_checkbox(
-                state.is_lightweight,
-                "创建轻量标签",
-                TagDialogMessage::SetLightweight,
-            ),
-        );
+        .push(widgets::compact_checkbox(
+            state.is_lightweight,
+            "创建轻量标签",
+            TagDialogMessage::SetLightweight,
+        ));
 
     Container::new(form)
         .padding([12, 12])

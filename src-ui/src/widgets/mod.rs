@@ -7,12 +7,12 @@ pub mod commit_panel;
 pub mod conflict_resolver;
 pub mod diff_core;
 pub mod diff_editor;
-pub mod merge_editor;
 pub mod diff_file_header;
 pub mod diff_viewer;
 pub mod file_picker;
 pub mod log_tabs;
 pub mod menu;
+pub mod merge_editor;
 pub mod progress_bar;
 pub mod scrollable;
 pub mod split_diff_viewer;
@@ -98,10 +98,10 @@ pub fn info_chip<'a, Message: 'a>(
             .font(theme::app_font())
             .line_height(text::LineHeight::Relative(1.0)),
     )
-        .padding([3, 8])
-        .center_y(Length::Fixed(theme::density::CHIP_HEIGHT))
-        .style(theme::badge_style(tone))
-        .into()
+    .padding([3, 8])
+    .center_y(Length::Fixed(theme::density::CHIP_HEIGHT))
+    .style(theme::badge_style(tone))
+    .into()
 }
 
 /// IDEA-style info chip with optional icon prefix
@@ -145,10 +145,10 @@ pub fn compact_chip<'a, Message: 'a>(
             .font(theme::app_font())
             .line_height(text::LineHeight::Relative(1.0)),
     )
-        .padding(theme::density::COMPACT_CHIP_PADDING)
-        .center_y(Length::Fixed(theme::density::CHIP_HEIGHT))
-        .style(theme::badge_style(tone))
-        .into()
+    .padding(theme::density::COMPACT_CHIP_PADDING)
+    .center_y(Length::Fixed(theme::density::CHIP_HEIGHT))
+    .style(theme::badge_style(tone))
+    .into()
 }
 
 pub fn compact_checkbox<'a, Message: Clone + 'a>(
