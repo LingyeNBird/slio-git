@@ -1,6 +1,35 @@
 //! Internationalization support.
 
-/// Chinese localization.
+/// Locale identifiers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Locale {
+    #[serde(rename = "zh-CN")]
+    ZhCn,
+    #[serde(rename = "en")]
+    En,
+}
+
+/// Returns the appropriate locale instance for the given language preference.
+/// `None` means auto-detect from system locale.
+pub fn locale(lang: Option<&str>) -> &'static I18n {
+    match lang {
+        Some("zh-CN" | "zh") => &ZH_CN,
+        Some("en") => &EN,
+        Some(_) => &EN, // unknown locale falls back to English
+        None => detect_system_locale(),
+    }
+}
+
+fn detect_system_locale() -> &'static I18n {
+    if let Some(sys) = sys_locale::get_locale() {
+        if sys.starts_with("zh") {
+            return &ZH_CN;
+        }
+    }
+    &EN
+}
+
+/// UI string table.
 pub struct I18n {
     pub app_name: &'static str,
     pub app_tagline: &'static str,
@@ -431,4 +460,143 @@ pub static ZH_CN: I18n = I18n {
     binary_file_no_preview: "二进制文件，无法预览",
     file_too_large_truncated: "文件过大，仅显示前 5000 行",
     delete_local_and_remote: "删除本地和远程",
+};
+
+pub static EN: I18n = I18n {
+    app_name: "Git Workspace",
+    app_tagline: "Focus on changes and diffs",
+    welcome: "Open a repository to start",
+    open_repo_hint: "Select a local Git directory to enter the changes view.",
+    open_repository: "Open Repository",
+    open_folder: "Open Folder",
+    init_repository: "Create Git Repository...",
+    refresh: "Refresh",
+    close: "Close",
+    dismiss: "Dismiss",
+    overview: "Overview",
+    changes: "Changes",
+    conflicts: "Conflicts",
+    repository: "Repository",
+    current_branch: "Current Branch",
+    no_repository: "No repository opened",
+    no_repository_sidebar_title: "Select a repository to enter the workspace",
+    no_repository_sidebar_detail:
+        "Opening an existing repository enters the changes workspace; you can also initialize a new Git repository.",
+    repo_health: "Repository Status",
+    primary_actions: "Actions",
+    primary_workspace: "Workspace",
+    next_step: "Suggestion",
+    selected_file: "Current File",
+    branch_actions: "Branches & Actions",
+    branch_search_placeholder: "Search branches",
+    recent_branches: "Recent Branches",
+    secondary_actions: "More",
+    staged_changes: "Staged",
+    unstaged_changes: "Unstaged",
+    untracked_files: "Untracked",
+    no_changes: "No changes",
+    clean_workspace: "Nothing to commit, working tree clean",
+    clean_workspace_detail: "No pending changes to process.",
+    stage_file: "Stage",
+    unstage_file: "Unstage",
+    stage_all: "Stage All",
+    unstage_all: "Unstage All",
+    diff: "Diff Viewer",
+    diff_empty: "No file selected",
+    diff_empty_detail: "Select a file from the list on the left to view its diff.",
+    repository_overview_title: "Current Repository",
+    repository_overview_detail: "Check branch, sync status and pending changes.",
+    welcome_card_title: "Open existing repository",
+    welcome_card_detail: "Open the repository you are currently working on.",
+    init_card_detail: "Initialize a new Git repository in this directory.",
+    changes_card_detail: "Select files on the left, view diffs on the right.",
+    conflict_card_detail: "Resolve conflicts first when they exist.",
+    commit: "Commit",
+    pull: "Pull",
+    push: "Push",
+    stash: "Stash",
+    error: "Error",
+    operation_failed: "Operation failed",
+    loading: "Loading",
+    unsupported_action: "This action is not yet fully implemented.",
+
+    log: "Log",
+    all_branches: "All",
+    local_branches: "Local Branches",
+    remote_branches: "Remote Branches",
+    flat_view: "Flat View",
+    tree_view: "Tree View",
+    stage_hunk: "Stage Hunk",
+    unstage_hunk: "Unstage Hunk",
+    amend: "Amend",
+    commit_and_push: "Commit and Push",
+    recent_messages: "Recent Messages",
+    show_diff: "Show Diff",
+    discard_changes: "Rollback",
+    show_history: "Show History",
+    annotate: "Annotate",
+    copy_path: "Copy Path",
+    open_in_editor: "Open in Editor",
+    cherry_pick: "Cherry-Pick",
+    revert: "Revert Commit",
+    create_branch: "New Branch...",
+    create_tag: "New Tag...",
+    reset_to_here: "Reset Current Branch to Here...",
+    copy_hash: "Copy Revision Number",
+    checkout: "Checkout",
+    new_branch_from: "New Branch from...",
+    merge_into_current: "Merge into Current",
+    rebase_onto: "Rebase Current onto...",
+    compare_with_current: "Compare with Current",
+    rename: "Rename...",
+    delete: "Delete",
+    force_push: "Force Push",
+    pull_and_retry: "Pull and Retry",
+    merge_strategy: "Merge",
+    rebase_strategy: "Rebase",
+    include_untracked: "Include Untracked Files",
+    apply_stash: "Apply Stash",
+    pop_stash: "Pop Stash",
+    drop_stash: "Drop Stash",
+    push_tag: "Push Tag",
+    delete_tag: "Delete Tag",
+    worktrees: "Worktrees",
+    add_worktree: "Add Worktree",
+    remove_worktree: "Remove Worktree",
+    fetch: "Fetch",
+    cancel: "Cancel",
+    verified: "Verified",
+    unverified: "Unverified",
+    detached_head: "Detached HEAD",
+    confirm_discard: "Are you sure you want to discard these changes? This cannot be undone.",
+    confirm_delete_branch: "Are you sure you want to delete this branch?",
+    not_fully_merged_warning: "This branch is not fully merged. Deleting it may lose commits.",
+
+    uncommit: "Undo Commit...",
+    reword_commit: "Edit Commit Message...",
+    fixup_to_commit: "Fixup...",
+    squash_into_commit: "Squash Into...",
+    drop_commit: "Drop Commit",
+    squash_commits: "Squash Commits...",
+    interactive_rebase: "Interactively Rebase from Here...",
+    push_up_to_commit: "Push All up to Here...",
+    history_rewrite_group: "History Rewrite",
+    commit_actions_group: "Commit Actions",
+    ref_actions_group: "Ref Actions",
+    reset_group: "Reset",
+    copy_group: "Copy",
+    track_branch: "Track Branch",
+    pull_branch: "Pull",
+    push_branch: "Push",
+    keep_index: "Keep Index",
+    unstash_as_branch: "Unstash as Branch...",
+    clear_all_stashes: "Clear All",
+    validate_ref: "Validate",
+    force_overwrite: "Force overwrite existing tag",
+    move_up: "Move Up",
+    move_down: "Move Down",
+    reset_entries: "Reset",
+    binary_file_no_preview: "Binary file, no preview available",
+    file_too_large_truncated: "File too large, showing first 5000 lines only",
+    delete_local_and_remote: "Delete local and remote",
 };

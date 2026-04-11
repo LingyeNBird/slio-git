@@ -30,6 +30,8 @@ pub enum SettingsMessage {
     SetLlmApiKey(String),
     SetLlmModel(String),
     ToggleLlmEnabled,
+    // Language
+    SetLanguage(Option<String>),
     // Actions
     Close,
     SaveAndClose,
@@ -92,6 +94,8 @@ pub struct GitSettings {
     pub llm_api_url: String,
     pub llm_api_key: String,
     pub llm_model: String,
+    // Language: None = auto-detect, Some("zh-CN"), Some("en")
+    pub language: Option<String>,
 }
 
 impl Default for GitSettings {
@@ -113,6 +117,7 @@ impl Default for GitSettings {
             llm_api_url: "https://api.deepseek.com/v1/chat/completions".to_string(),
             llm_api_key: String::new(),
             llm_model: "deepseek-chat".to_string(),
+            language: None,
         }
     }
 }
@@ -148,6 +153,7 @@ impl GitSettings {
             SettingsMessage::SetLlmApiUrl(val) => self.llm_api_url = val.clone(),
             SettingsMessage::SetLlmApiKey(val) => self.llm_api_key = val.clone(),
             SettingsMessage::SetLlmModel(val) => self.llm_model = val.clone(),
+            SettingsMessage::SetLanguage(val) => self.language = val.clone(),
             SettingsMessage::Close | SettingsMessage::SaveAndClose => {}
         }
     }
@@ -211,6 +217,13 @@ impl GitSettings {
                 "llm_api_url" => s.llm_api_url = value.to_string(),
                 "llm_api_key" => s.llm_api_key = value.to_string(),
                 "llm_model" => s.llm_model = value.to_string(),
+                "language" => {
+                    s.language = if value == "auto" || value.is_empty() {
+                        None
+                    } else {
+                        Some(value.to_string())
+                    };
+                }
                 _ => {}
             }
         }
@@ -255,7 +268,8 @@ impl GitSettings {
              llm_enabled\t{}\n\
              llm_api_url\t{}\n\
              llm_api_key\t{}\n\
-             llm_model\t{}\n",
+             llm_model\t{}\n\
+             language\t{}\n",
             self.auto_update_on_push_reject,
             self.protected_branches,
             self.preview_push_on_commit,
@@ -270,6 +284,7 @@ impl GitSettings {
             self.llm_api_url,
             self.llm_api_key,
             self.llm_model,
+            self.language.as_deref().unwrap_or("auto"),
         )
     }
 
@@ -390,6 +405,41 @@ pub fn view(settings: &GitSettings) -> Element<'_, SettingsMessage> {
                             .size(11)
                             .color(theme::darcula::TEXT_DISABLED),
                     ),
+            ),
+    )
+    .padding([8, 14]);
+
+    // ── 语言 / Language ──
+    let lang_auto = settings.language.is_none();
+    let lang_zh = settings.language.as_deref() == Some("zh-CN");
+    let lang_en = settings.language.as_deref() == Some("en");
+
+    let language_section = Container::new(
+        Column::new()
+            .spacing(4)
+            .push(
+                Text::new("语言 / Language")
+                    .size(10)
+                    .color(theme::darcula::TEXT_DISABLED),
+            )
+            .push(
+                Row::new()
+                    .spacing(12)
+                    .push(radio_button(
+                        "Auto (System)",
+                        lang_auto,
+                        SettingsMessage::SetLanguage(None),
+                    ))
+                    .push(radio_button(
+                        "中文",
+                        lang_zh,
+                        SettingsMessage::SetLanguage(Some("zh-CN".to_string())),
+                    ))
+                    .push(radio_button(
+                        "English",
+                        lang_en,
+                        SettingsMessage::SetLanguage(Some("en".to_string())),
+                    )),
             ),
     )
     .padding([8, 14]);
@@ -587,6 +637,8 @@ pub fn view(settings: &GitSettings) -> Element<'_, SettingsMessage> {
         .push(large_file_row)
         .push(iced::widget::rule::horizontal(1))
         .push(editor_section)
+        .push(iced::widget::rule::horizontal(1))
+        .push(language_section)
         .push(iced::widget::rule::horizontal(1))
         .push(push_section)
         .push(protected_row)

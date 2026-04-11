@@ -4723,7 +4723,7 @@ fn remote_panel_hint(repo: &Repository, action_label: &str) -> String {
 }
 
 fn view(state: &AppState) -> Element<'_, Message> {
-    let i18n = &i18n::ZH_CN;
+    let i18n = i18n::locale(state.git_settings.language.as_deref());
     let body = build_body(state, i18n);
     let bottom_tool_window = build_docked_tool_window(state);
 
