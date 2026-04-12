@@ -31,11 +31,12 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;backdrop-filter:blur(20px);-
 .nav-links{display:flex;align-items:center;gap:24px}
 .nav-links a{color:var(--text-dim);font-size:.875rem;font-weight:500;transition:color .2s}
 .nav-links a:hover{color:var(--text)}
+.nav-links a.btn-download,.nav-links a.btn-download:visited{color:#fff!important}
+.nav-links a.btn-download:hover{color:#fff!important;filter:brightness(1.15);transform:translateY(-1px)}
 .lang-toggle{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-pill);padding:4px;display:flex;gap:2px;cursor:pointer}
 .lang-btn{padding:4px 12px;border-radius:var(--radius-pill);font-size:.75rem;font-weight:600;border:none;cursor:pointer;transition:all .2s;background:transparent;color:var(--text-dim)}
 .lang-btn.active{background:var(--accent);color:#fff}
-.btn-download{display:inline-flex;align-items:center;background:var(--accent);color:#fff;padding:8px 20px;border-radius:var(--radius-pill);font-size:.875rem;font-weight:600;transition:all .2s;border:none;cursor:pointer;text-decoration:none}
-a.btn-download,a.btn-download:visited,a.btn-download:hover{color:#fff!important;background:var(--accent)}
+.btn-download{display:inline-flex;align-items:center;background:var(--accent);color:#fff!important;padding:8px 20px;border-radius:var(--radius-pill);font-size:.875rem;font-weight:600;transition:all .2s;border:none;cursor:pointer;text-decoration:none}
 .btn-download:hover{filter:brightness(1.15);transform:translateY(-1px)}
 
 /* --- HERO --- */
