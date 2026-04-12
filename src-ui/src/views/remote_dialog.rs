@@ -5,7 +5,7 @@
 use crate::i18n::I18n;
 use crate::theme::{self, BadgeTone, Surface};
 use crate::widgets::{self, button, scrollable, text_input, OptionalPush};
-use git_core::{remote::RemoteInfo, Repository};
+use git_core::{remote::PullOptions, remote::RemoteInfo, Repository};
 use iced::widget::{text, Button, Column, Container, Row, Text};
 use iced::{Alignment, Element, Length};
 
@@ -157,6 +157,34 @@ impl RemoteDialogState {
         self.current_branch_name.is_some()
     }
 
+    fn default_pull_branch<'a>(&'a self, remote_name: &str) -> Option<&'a str> {
+        let upstream_ref = self.current_upstream_ref.as_deref()?;
+        let (upstream_remote, upstream_branch) = upstream_ref.split_once('/')?;
+        (upstream_remote == remote_name && !upstream_branch.is_empty()).then_some(upstream_branch)
+    }
+
+    fn pull_branch_label(&self, remote_name: &str) -> String {
+        let explicit_branch = self.pull_branch.trim();
+        if !explicit_branch.is_empty() {
+            return explicit_branch.to_string();
+        }
+
+        self.default_pull_branch(remote_name)
+            .or(self.current_branch_name.as_deref())
+            .unwrap_or("main")
+            .to_string()
+    }
+
+    fn pull_options(&self) -> PullOptions<'_> {
+        PullOptions {
+            branch_name: Some(self.pull_branch.trim()).filter(|branch| !branch.is_empty()),
+            rebase: self.pull_rebase,
+            ff_only: self.pull_ff_only,
+            no_ff: self.pull_no_ff,
+            squash: self.pull_squash,
+        }
+    }
+
     fn branch_scope_detail(&self, i18n: &I18n) -> String {
         if let Some(upstream_ref) = self.current_upstream_ref.as_ref() {
             if let Some(remote) = self.preferred_remote.as_ref() {
@@ -212,8 +240,8 @@ impl RemoteDialogState {
             return;
         };
 
-        let branch_name = match repo.current_branch() {
-            Ok(Some(branch)) => branch,
+        match repo.current_branch() {
+            Ok(Some(_)) => {}
             Ok(None) => {
                 self.error = Some("Detached HEAD, cannot pull.".to_string());
                 self.success_message = None;
@@ -224,24 +252,25 @@ impl RemoteDialogState {
                 self.success_message = None;
                 return;
             }
-        };
+        }
 
         self.is_loading = true;
         self.error = None;
         self.success_message = None;
         let credentials = self.credentials();
 
-        match git_core::remote::pull(
+        match git_core::remote::pull_with_options(
             repo,
             &remote_name,
-            &branch_name,
+            self.pull_options(),
             credentials
                 .as_ref()
                 .map(|(username, password)| (username.as_str(), password.as_str())),
         ) {
             Ok(()) => {
                 self.is_loading = false;
-                self.success_message = Some(format!("Pulled {remote_name}/{branch_name}"));
+                let branch_label = self.pull_branch_label(&remote_name);
+                self.success_message = Some(format!("Pulled {remote_name}/{branch_label}"));
             }
             Err(error) => {
                 self.error = Some(format!("Failed to pull from remote: {error}"));
@@ -631,9 +660,11 @@ fn build_pull_panel<'a>(state: &'a RemoteDialogState, i18n: &'a I18n) -> Element
         .as_deref()
         .or(state.preferred_remote.as_deref())
         .unwrap_or("origin");
-    let branch = state.current_branch_name.as_deref().unwrap_or("main");
+    let fallback_branch = state.current_branch_name.as_deref().unwrap_or("main");
     let pull_target = if state.pull_branch.is_empty() {
-        branch
+        state
+            .default_pull_branch(remote_name)
+            .unwrap_or(fallback_branch)
     } else {
         &state.pull_branch
     };
@@ -643,7 +674,7 @@ fn build_pull_panel<'a>(state: &'a RemoteDialogState, i18n: &'a I18n) -> Element
         Row::new()
             .align_y(Alignment::Center)
             .push(
-                Text::new(i18n.rd_pull_to_fmt.replace("{}", branch))
+                Text::new(i18n.rd_pull_to_fmt.replace("{}", pull_target))
                     .size(14)
                     .color(theme::darcula::TEXT_PRIMARY),
             )

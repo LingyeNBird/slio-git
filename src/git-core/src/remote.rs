@@ -15,6 +15,15 @@ pub struct RemoteInfo {
     pub url: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PullOptions<'a> {
+    pub branch_name: Option<&'a str>,
+    pub rebase: bool,
+    pub ff_only: bool,
+    pub no_ff: bool,
+    pub squash: bool,
+}
+
 fn remote_url_uses_ssh(url: &str) -> bool {
     if url.starts_with("ssh://") {
         return true;
@@ -175,6 +184,66 @@ fn run_git_remote_command(
     }
 
     Ok(())
+}
+
+fn configured_upstream_branch(repo: &Repository, remote_name: &str) -> Option<String> {
+    let upstream_ref = repo.current_upstream_ref()?;
+    let (upstream_remote, upstream_branch) = upstream_ref.split_once('/')?;
+    (upstream_remote == remote_name && !upstream_branch.is_empty())
+        .then(|| upstream_branch.to_string())
+}
+
+fn current_branch(repo: &Repository, operation: &str) -> Result<String, GitError> {
+    repo.current_branch()
+        .map_err(|error| GitError::OperationFailed {
+            operation: operation.to_string(),
+            details: error.to_string(),
+        })?
+        .ok_or_else(|| GitError::OperationFailed {
+            operation: operation.to_string(),
+            details: "Detached HEAD, cannot pull.".to_string(),
+        })
+}
+
+fn build_pull_args(
+    repo: &Repository,
+    remote_name: &str,
+    options: PullOptions<'_>,
+) -> Result<Vec<String>, GitError> {
+    let mut args = vec!["pull".to_string()];
+
+    if options.rebase {
+        args.push("--rebase".to_string());
+    }
+    if options.ff_only {
+        args.push("--ff-only".to_string());
+    }
+    if options.no_ff {
+        args.push("--no-ff".to_string());
+    }
+    if options.squash {
+        args.push("--squash".to_string());
+    }
+
+    let explicit_branch = options.branch_name.map(str::trim).filter(|branch| !branch.is_empty());
+    if let Some(branch_name) = explicit_branch {
+        args.push(remote_name.to_string());
+        args.push(branch_name.to_string());
+        return Ok(args);
+    }
+
+    if repo.current_upstream_remote().as_deref() == Some(remote_name) {
+        return Ok(args);
+    }
+
+    let branch_name = match configured_upstream_branch(repo, remote_name) {
+        Some(branch_name) => branch_name,
+        None => current_branch(repo, "pull")?,
+    };
+
+    args.push(remote_name.to_string());
+    args.push(branch_name);
+    Ok(args)
 }
 
 /// List all remotes
@@ -374,41 +443,52 @@ pub fn force_push(repo: &Repository, remote_name: &str, branch_name: &str) -> Re
     Ok(())
 }
 
-/// Pull from a remote (fetch + merge)
+/// Pull from a remote.
 pub fn pull(
     repo: &Repository,
     remote_name: &str,
     branch_name: &str,
     credentials: Option<(&str, &str)>,
 ) -> Result<(), GitError> {
+    pull_with_options(
+        repo,
+        remote_name,
+        PullOptions {
+            branch_name: Some(branch_name),
+            ..PullOptions::default()
+        },
+        credentials,
+    )
+}
+
+/// Pull from a remote using system Git semantics.
+pub fn pull_with_options(
+    repo: &Repository,
+    remote_name: &str,
+    options: PullOptions<'_>,
+    _credentials: Option<(&str, &str)>,
+) -> Result<(), GitError> {
     info!(
-        "Pulling from remote '{}' branch '{}'",
-        remote_name, branch_name
+        "Pulling from remote '{}' with options {:?}",
+        remote_name, options
     );
 
     let repo_path = repo.command_cwd();
-
-    // First fetch from the remote
-    fetch(repo, remote_name, credentials)?;
-
-    // Then merge the remote branch into the current branch
-    let refspec = format!("{}/{}", remote_name, branch_name);
-
-    // Use git merge to merge the fetched branch
+    let args = build_pull_args(repo, remote_name, options)?;
     let output = git_command()
-        .args(["merge", &refspec])
+        .args(&args)
         .current_dir(&repo_path)
         .output()
         .map_err(|e| GitError::OperationFailed {
             operation: "pull".to_string(),
-            details: format!("Failed to execute git merge: {}", e),
+            details: format!("Failed to execute git pull: {}", e),
         })?;
 
     if !output.status.success() {
         return Err(GitError::OperationFailed {
             operation: "pull".to_string(),
             details: format!(
-                "git merge failed: {}",
+                "git pull failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             ),
         });
@@ -420,9 +500,12 @@ pub fn pull(
 
 #[cfg(test)]
 mod tests {
-    use super::{remote_url_uses_ssh, resolve_auth_username};
+    use super::{build_pull_args, remote_url_uses_ssh, resolve_auth_username, PullOptions};
+    use crate::repository::Repository;
     use git2::Config;
     use std::fs;
+    use std::path::Path;
+    use std::process::Command;
     use tempfile::{tempdir, TempDir};
 
     fn config_with_username(username: &str) -> (TempDir, Config) {
@@ -436,6 +519,34 @@ mod tests {
 
         let config = Config::open(&config_path).unwrap();
         (temp_dir, config)
+    }
+
+    fn git(cwd: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .output()
+            .expect("run git command");
+        assert!(
+            output.status.success(),
+            "git {:?} failed:\nstdout: {}\nstderr: {}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn create_committed_repo() -> (TempDir, String) {
+        let repo_dir = tempdir().unwrap();
+        git(repo_dir.path(), &["init"]);
+        git(repo_dir.path(), &["config", "user.email", "tests@example.com"]);
+        git(repo_dir.path(), &["config", "user.name", "Test User"]);
+        fs::write(repo_dir.path().join("tracked.txt"), "base\n").unwrap();
+        git(repo_dir.path(), &["add", "tracked.txt"]);
+        git(repo_dir.path(), &["commit", "-m", "base"]);
+        let branch_name = git(repo_dir.path(), &["rev-parse", "--abbrev-ref", "HEAD"]);
+        (repo_dir, branch_name)
     }
 
     #[test]
@@ -459,6 +570,57 @@ mod tests {
         let username = resolve_auth_username(&config, "https://example.com/repo.git", None, None);
 
         assert_eq!(username.as_deref(), Some("saved-user"));
+    }
+
+    #[test]
+    fn build_pull_args_uses_configured_upstream_when_branch_is_empty() {
+        let (repo_dir, branch_name) = create_committed_repo();
+        let remote_dir = tempdir().unwrap();
+        git(remote_dir.path(), &["init", "--bare"]);
+        git(
+            repo_dir.path(),
+            &["remote", "add", "origin", &remote_dir.path().display().to_string()],
+        );
+        git(repo_dir.path(), &["push", "-u", "origin", &branch_name]);
+
+        let repo = Repository::open(repo_dir.path()).unwrap();
+        let args = build_pull_args(&repo, "origin", PullOptions::default()).unwrap();
+
+        assert_eq!(args, vec!["pull"]);
+    }
+
+    #[test]
+    fn build_pull_args_falls_back_to_current_branch_without_upstream() {
+        let (repo_dir, branch_name) = create_committed_repo();
+        let remote_dir = tempdir().unwrap();
+        git(remote_dir.path(), &["init", "--bare"]);
+        git(
+            repo_dir.path(),
+            &["remote", "add", "origin", &remote_dir.path().display().to_string()],
+        );
+
+        let repo = Repository::open(repo_dir.path()).unwrap();
+        let args = build_pull_args(&repo, "origin", PullOptions::default()).unwrap();
+
+        assert_eq!(args, vec!["pull", "origin", &branch_name]);
+    }
+
+    #[test]
+    fn build_pull_args_passes_explicit_branch_and_strategy_flags() {
+        let (repo_dir, _) = create_committed_repo();
+        let repo = Repository::open(repo_dir.path()).unwrap();
+        let args = build_pull_args(
+            &repo,
+            "origin",
+            PullOptions {
+                branch_name: Some("release/main"),
+                rebase: true,
+                ..PullOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(args, vec!["pull", "--rebase", "origin", "release/main"]);
     }
 
     #[test]

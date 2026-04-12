@@ -96,7 +96,8 @@ pub use rebase::{
     start_interactive_rebase, InteractiveRebasePlan, RebaseResult, RebaseStatus, RebaseTodoEntry,
 };
 pub use remote::{
-    fetch, force_push, list_branch_scoped_remotes, list_remotes, pull, push, RemoteInfo,
+    fetch, force_push, list_branch_scoped_remotes, list_remotes, pull, pull_with_options, push,
+    PullOptions, RemoteInfo,
 };
 pub use repository::{Repository, RepositoryManager, SyncStatus};
 pub use stash::{

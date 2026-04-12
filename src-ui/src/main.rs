@@ -3384,22 +3384,35 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
                         .clone()
                         .or_else(|| state.remote_dialog.preferred_remote.clone())
                         .unwrap_or_else(|| "origin".to_string());
-                    let branch = state
-                        .remote_dialog
-                        .current_branch_name
-                        .clone()
-                        .unwrap_or_else(|| "main".to_string());
+                    let branch = state.remote_dialog.pull_branch.trim().to_string();
+                    let pull_options = git_core::PullOptions {
+                        branch_name: (!branch.is_empty()).then_some(branch.as_str()),
+                        rebase: state.remote_dialog.pull_rebase,
+                        ff_only: state.remote_dialog.pull_ff_only,
+                        no_ff: state.remote_dialog.pull_no_ff,
+                        squash: state.remote_dialog.pull_squash,
+                    };
+                    let branch_label = if branch.is_empty() {
+                        state
+                            .remote_dialog
+                            .current_upstream_ref
+                            .clone()
+                            .or_else(|| state.remote_dialog.current_branch_name.clone())
+                            .unwrap_or_else(|| "main".to_string())
+                    } else {
+                        branch.clone()
+                    };
 
                     state.remote_dialog.is_loading = true;
                     state.remote_dialog.error = None;
 
-                    let result = git_core::pull(&repo, &remote, &branch, None);
+                    let result = git_core::pull_with_options(&repo, &remote, pull_options, None);
 
                     state.remote_dialog.is_loading = false;
                     match result {
                         Ok(()) => {
                             state.remote_dialog.success_message =
-                                Some(i18n.pulled_fmt.replace("{}", &remote).replacen("{}", &branch, 1).replacen("{}", &branch, 1));
+                                Some(i18n.pulled_fmt.replace("{}", &remote).replacen("{}", &branch_label, 1).replacen("{}", &branch_label, 1));
                             let _ = refresh_repository_after_action(state, &repo, false, i18n);
                         }
                         Err(e) => {
